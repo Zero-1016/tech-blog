@@ -44,9 +44,7 @@ export default function Home() {
       const list =
         group.kind === "single"
           ? [group.post]
-          : [...group.items].sort(
-              (a, b) => (a.seriesOrder ?? 0) - (b.seriesOrder ?? 0),
-            );
+          : [...group.items].sort((a, b) => (a.seriesOrder ?? 0) - (b.seriesOrder ?? 0));
       return list.map((p) => ({
         slug: p.slug,
         title: p.title,

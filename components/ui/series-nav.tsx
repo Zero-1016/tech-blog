@@ -8,9 +8,7 @@ interface SeriesNavProps {
 }
 
 export function SeriesNav({ series, posts, currentSlug }: SeriesNavProps) {
-  const sorted = [...posts].sort(
-    (a, b) => (a.seriesOrder ?? 0) - (b.seriesOrder ?? 0)
-  );
+  const sorted = [...posts].sort((a, b) => (a.seriesOrder ?? 0) - (b.seriesOrder ?? 0));
   const currentIdx = sorted.findIndex((p) => p.slug === currentSlug);
   const prev = currentIdx > 0 ? sorted[currentIdx - 1] : null;
   const next = currentIdx < sorted.length - 1 ? sorted[currentIdx + 1] : null;
@@ -39,20 +37,14 @@ export function SeriesNav({ series, posts, currentSlug }: SeriesNavProps) {
       </ol>
       <div className="flex justify-between gap-4">
         {prev ? (
-          <Link
-            href={`/posts/${prev.slug}`}
-            className="text-sm text-secondary hover:text-accent"
-          >
+          <Link href={`/posts/${prev.slug}`} className="text-sm text-secondary hover:text-accent">
             &larr; 이전
           </Link>
         ) : (
           <span />
         )}
         {next ? (
-          <Link
-            href={`/posts/${next.slug}`}
-            className="text-sm text-secondary hover:text-accent"
-          >
+          <Link href={`/posts/${next.slug}`} className="text-sm text-secondary hover:text-accent">
             다음 &rarr;
           </Link>
         ) : (

@@ -36,9 +36,7 @@ export default async function TagPage({ params }: Props) {
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
       <header className="mb-10">
-        <p className="text-xs font-medium uppercase tracking-wider text-secondary">
-          태그
-        </p>
+        <p className="text-xs font-medium uppercase tracking-wider text-secondary">태그</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">#{decoded}</h1>
         <p className="mt-2 text-secondary">{filtered.length}개의 글</p>
       </header>
@@ -50,16 +48,9 @@ export default async function TagPage({ params }: Props) {
             className="group -mx-3 rounded-xl px-3 py-4 transition-colors hover:bg-card-hover"
           >
             <article>
-              <h2 className="font-semibold tracking-tight group-hover:text-accent">
-                {post.title}
-              </h2>
-              <p className="mt-1 text-sm text-secondary line-clamp-2">
-                {post.description}
-              </p>
-              <time
-                dateTime={post.date}
-                className="mt-1 block text-xs text-secondary"
-              >
+              <h2 className="font-semibold tracking-tight group-hover:text-accent">{post.title}</h2>
+              <p className="mt-1 text-sm text-secondary line-clamp-2">{post.description}</p>
+              <time dateTime={post.date} className="mt-1 block text-xs text-secondary">
                 {formatDate(post.date)}
               </time>
             </article>

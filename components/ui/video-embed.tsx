@@ -9,9 +9,7 @@ interface VideoEmbedProps {
 }
 
 function getYouTubeId(url: string) {
-  const match = url.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=))([^?&]+)/
-  );
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=))([^?&]+)/);
   return match?.[1];
 }
 
@@ -20,33 +18,16 @@ export function VideoEmbed({ src, title = "Video" }: VideoEmbedProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   const ytId = getYouTubeId(src);
-  const thumbnail = ytId
-    ? `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`
-    : undefined;
+  const thumbnail = ytId ? `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg` : undefined;
   const embedSrc = ytId ? `https://www.youtube.com/embed/${ytId}` : src;
 
   return (
     <div ref={ref} className="my-6 overflow-hidden rounded-lg border border-border">
       {!loaded && thumbnail ? (
-        <button
-          onClick={() => setLoaded(true)}
-          className="relative block w-full cursor-pointer"
-        >
-          <Image
-            src={thumbnail}
-            alt={title}
-            width={1280}
-            height={720}
-            className="w-full"
-          />
+        <button onClick={() => setLoaded(true)} className="relative block w-full cursor-pointer">
+          <Image src={thumbnail} alt={title} width={1280} height={720} className="w-full" />
           <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-            <svg
-              width="64"
-              height="64"
-              viewBox="0 0 24 24"
-              fill="white"
-              className="drop-shadow-lg"
-            >
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="white" className="drop-shadow-lg">
               <path d="M8 5v14l11-7z" />
             </svg>
           </div>

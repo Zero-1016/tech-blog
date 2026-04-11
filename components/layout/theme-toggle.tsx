@@ -3,9 +3,10 @@
 import { useSyncExternalStore, useCallback } from "react";
 
 function getSnapshot() {
-  return localStorage.getItem("theme") === "dark" ||
-    (!localStorage.getItem("theme") &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  return (
+    localStorage.getItem("theme") === "dark" ||
+    (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches)
+  );
 }
 
 function getServerSnapshot() {
@@ -45,21 +46,10 @@ export function ThemeToggle() {
       aria-label="Toggle theme"
       data-theme={dark ? "dark" : "light"}
     >
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        className="theme-icon overflow-visible"
-      >
+      <svg width="20" height="20" viewBox="0 0 24 24" className="theme-icon overflow-visible">
         <mask id="theme-toggle-mask">
           <rect x="0" y="0" width="24" height="24" fill="white" />
-          <circle
-            className="theme-icon__mask-circle"
-            cx="24"
-            cy="10"
-            r="6"
-            fill="black"
-          />
+          <circle className="theme-icon__mask-circle" cx="24" cy="10" r="6" fill="black" />
         </mask>
         <circle
           className="theme-icon__core"
@@ -69,12 +59,7 @@ export function ThemeToggle() {
           fill="currentColor"
           mask="url(#theme-toggle-mask)"
         />
-        <g
-          className="theme-icon__rays"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        >
+        <g className="theme-icon__rays" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <line x1="12" y1="1" x2="12" y2="3" />
           <line x1="12" y1="21" x2="12" y2="23" />
           <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />

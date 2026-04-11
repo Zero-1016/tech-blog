@@ -12,7 +12,10 @@ interface MobileTocProps {
   items: TocEntry[];
 }
 
-function flattenToc(entries: TocEntry[], depth = 2): { title: string; url: string; depth: number }[] {
+function flattenToc(
+  entries: TocEntry[],
+  depth = 2
+): { title: string; url: string; depth: number }[] {
   const result: { title: string; url: string; depth: number }[] = [];
   for (const entry of entries) {
     result.push({ title: entry.title, url: entry.url, depth });

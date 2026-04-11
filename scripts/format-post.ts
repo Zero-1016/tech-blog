@@ -149,11 +149,7 @@ function addBlankLinesBetweenCssRules(css: string): string {
   return css.replace(/^\}\n(?=[^\s}])/gm, "}\n\n");
 }
 
-async function formatCodeBlock(
-  raw: string,
-  parser: Parser,
-  context: string
-): Promise<string> {
+async function formatCodeBlock(raw: string, parser: Parser, context: string): Promise<string> {
   if (parser === "none") return raw;
 
   try {
@@ -172,9 +168,7 @@ async function formatCodeBlock(
     return addBlankLineAfterImports(trimmed, parser);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.warn(
-      `   ⚠️  ${context} prettier 실패 (parser=${parser}): ${msg.split("\n")[0]}`
-    );
+    console.warn(`   ⚠️  ${context} prettier 실패 (parser=${parser}): ${msg.split("\n")[0]}`);
     return raw;
   }
 }
@@ -208,8 +202,7 @@ async function formatCodePlaygrounds(
     const template = extractTemplateProp(source.slice(openStart, headerEnd));
 
     const lineStart = source.lastIndexOf("\n", openStart) + 1;
-    const lineIndent =
-      source.slice(lineStart, openStart).match(/^(\s*)/)?.[1] ?? "";
+    const lineIndent = source.slice(lineStart, openStart).match(/^(\s*)/)?.[1] ?? "";
 
     // Walk props within this tag. Each iteration processes the nearest
     // `code={\`` or `css={\`` until `/>` appears first (tag close).
@@ -248,8 +241,7 @@ async function formatCodePlaygrounds(
       output += source.slice(cursor, codeStart);
 
       const rawCode = source.slice(codeStart, codeEnd);
-      const parser: Parser =
-        propName === "css" ? "css" : pickParser(template, rawCode);
+      const parser: Parser = propName === "css" ? "css" : pickParser(template, rawCode);
       const line = source.slice(0, nextProp).split("\n").length;
       const unescaped = rawCode.replace(/\\`/g, "`").replace(/\\\$\{/g, "${");
       const dedented = dedentToMinimum(unescaped);
@@ -313,8 +305,7 @@ async function formatAnimatedStepCodes(
       const { fStart, fEnd, prefix, raw } = fields[f];
 
       const lineStart = newBlock.lastIndexOf("\n", fStart) + 1;
-      const lineIndent =
-        newBlock.slice(lineStart, fStart).match(/^(\s*)/)?.[1] ?? "";
+      const lineIndent = newBlock.slice(lineStart, fStart).match(/^(\s*)/)?.[1] ?? "";
 
       const parser = pickParser(undefined, raw);
       const absoluteLine = source.slice(0, start + fStart).split("\n").length;
@@ -333,13 +324,7 @@ async function formatAnimatedStepCodes(
 
       if (reindented !== raw) changed = true;
 
-      newBlock =
-        newBlock.slice(0, fStart) +
-        prefix +
-        "`" +
-        reindented +
-        "`" +
-        newBlock.slice(fEnd);
+      newBlock = newBlock.slice(0, fStart) + prefix + "`" + reindented + "`" + newBlock.slice(fEnd);
     }
 
     if (newBlock !== block) {
@@ -380,8 +365,7 @@ function walkMdx(dir: string): string[] {
 
 async function main() {
   const args = process.argv.slice(2);
-  const targets =
-    args.length > 0 ? args : walkMdx(resolve(process.cwd(), "content/posts"));
+  const targets = args.length > 0 ? args : walkMdx(resolve(process.cwd(), "content/posts"));
 
   if (targets.length === 0) {
     console.log("대상 MDX 파일이 없습니다.");

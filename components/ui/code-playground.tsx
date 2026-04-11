@@ -211,9 +211,7 @@ export function CodePlayground({
             showTabs={Boolean(css)}
             style={{ minHeight: "260px" }}
           />
-          {shouldShowPreview && (
-            <SandpackPreview style={{ minHeight: "260px" }} />
-          )}
+          {shouldShowPreview && <SandpackPreview style={{ minHeight: "260px" }} />}
         </SandpackLayout>
       </SandpackProvider>
     </div>

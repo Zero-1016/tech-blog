@@ -21,9 +21,7 @@ function getPost(slug: string) {
 }
 
 export function generateStaticParams() {
-  return posts
-    .filter((p) => p.published)
-    .map((p) => ({ slug: p.slug }));
+  return posts.filter((p) => p.published).map((p) => ({ slug: p.slug }));
 }
 
 export async function generateMetadata({ params }: Props) {
@@ -61,9 +59,7 @@ export default async function PostPage({ params }: Props) {
         <div className="xl:flex xl:gap-16">
           <article className="mx-auto min-w-0 max-w-3xl flex-1 xl:mx-0">
             <PostHeader>
-              <h1 className="text-3xl font-bold tracking-tight leading-tight">
-                {post.title}
-              </h1>
+              <h1 className="text-3xl font-bold tracking-tight leading-tight">{post.title}</h1>
               <p className="mt-3 text-lg text-secondary">{post.description}</p>
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-secondary">
                 <time dateTime={post.date}>{formatDate(post.date)}</time>
@@ -111,8 +107,7 @@ export default async function PostPage({ params }: Props) {
                   (p) =>
                     p.published &&
                     p.slug !== post.slug &&
-                    (p.series === post.series ||
-                      p.tags.some((t) => post.tags.includes(t)))
+                    (p.series === post.series || p.tags.some((t) => post.tags.includes(t)))
                 )
                 .slice(0, 4)
                 .map((p) => ({
