@@ -1,4 +1,5 @@
 import { defineConfig, defineCollection, s } from "velite";
+import rehypePrettyCode from "rehype-pretty-code";
 
 const posts = defineCollection({
   name: "Post",
@@ -12,12 +13,11 @@ const posts = defineCollection({
     seriesOrder: s.number().optional(),
     published: s.boolean().default(true),
     slug: s.path().transform((p) => {
-      // posts/hello-world → hello-world
-      // posts/rsc/rsc-intro → rsc-intro (flatten to filename only)
       const parts = p.split("/");
       return parts[parts.length - 1];
     }),
     toc: s.toc(),
+    metadata: s.metadata(),
     body: s.mdx(),
   }),
 });
@@ -32,4 +32,18 @@ export default defineConfig({
     clean: true,
   },
   collections: { posts },
+  mdx: {
+    rehypePlugins: [
+      [
+        rehypePrettyCode as never,
+        {
+          theme: {
+            dark: "github-dark",
+            light: "github-light",
+          },
+          keepBackground: false,
+        },
+      ],
+    ],
+  },
 });

@@ -19,35 +19,35 @@ export default function Home() {
       <section>
         <div className="flex flex-col gap-1">
           {published.map((post) => (
-            <Link
+            <article
               key={post.slug}
-              href={`/posts/${post.slug}`}
-              className="group -mx-3 rounded-xl px-3 py-4 transition-colors hover:bg-card-hover"
+              className="-mx-3 rounded-xl px-3 py-4 transition-colors hover:bg-card-hover"
             >
-              <article>
-                <h2 className="text-lg font-semibold tracking-tight group-hover:text-accent">
+              <Link href={`/posts/${post.slug}`}>
+                <h2 className="text-lg font-semibold tracking-tight hover:text-accent">
                   {post.title}
                 </h2>
                 <p className="mt-1 text-sm text-secondary line-clamp-2">
                   {post.description}
                 </p>
-                <div className="mt-2 flex items-center gap-3 text-xs text-secondary">
-                  <time dateTime={post.date}>{formatDate(post.date)}</time>
-                  {post.tags.length > 0 && (
-                    <div className="flex gap-1.5">
-                      {post.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-md bg-code-bg px-1.5 py-0.5"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </article>
-            </Link>
+              </Link>
+              <div className="mt-2 flex items-center gap-3 text-xs text-secondary">
+                <time dateTime={post.date}>{formatDate(post.date)}</time>
+                {post.tags.length > 0 && (
+                  <div className="flex gap-1.5">
+                    {post.tags.map((tag) => (
+                      <Link
+                        key={tag}
+                        href={`/tags/${tag}`}
+                        className="rounded-md bg-code-bg px-1.5 py-0.5 transition-colors hover:bg-accent/10 hover:text-accent"
+                      >
+                        {tag}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </article>
           ))}
         </div>
 

@@ -16,6 +16,9 @@
 # velite
 .velite
 
+# gstack skills (local install)
+.claude/skills/
+
 # next.js
 /.next/
 /out/

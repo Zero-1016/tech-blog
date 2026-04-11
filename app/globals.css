@@ -117,6 +117,56 @@ body {
   font-size: inherit;
 }
 
+/* rehype-pretty-code */
+.prose [data-rehype-pretty-code-figure] pre {
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+}
+
+.prose [data-rehype-pretty-code-figure] code {
+  background: none;
+  padding: 0;
+  font-size: 0.875rem;
+  counter-reset: line;
+}
+
+.prose [data-rehype-pretty-code-figure] [data-line] {
+  padding: 0 0.25rem;
+}
+
+.prose [data-rehype-pretty-code-figure] [data-highlighted-line] {
+  background: rgba(59, 130, 246, 0.1);
+  border-left: 2px solid var(--color-accent);
+  padding-left: calc(0.25rem - 2px);
+}
+
+.prose [data-rehype-pretty-code-title] {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  background: var(--color-code-bg);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-radius: 0.5rem 0.5rem 0 0;
+  padding: 0.5rem 1.25rem;
+}
+
+.prose [data-rehype-pretty-code-title] + pre {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* inline code should not be affected by pretty-code */
+.prose :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--color-code-bg);
+  padding: 0.15em 0.4em;
+  border-radius: 0.25rem;
+}
+
 .prose hr {
   border-color: var(--color-border);
   margin: 2rem 0;
