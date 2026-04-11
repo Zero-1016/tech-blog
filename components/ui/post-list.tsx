@@ -32,7 +32,7 @@ export function PostList({ posts }: { posts: PostItem[] }) {
         >
           <Link
             href={`/posts/${post.slug}`}
-            className="group block overflow-hidden rounded-xl border border-border transition-all hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5"
+            className="group block overflow-hidden rounded-xl border border-border bg-background transition-all hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 dark:bg-[#111113]"
           >
             {post.cover && (
               <div className="aspect-[2/1] overflow-hidden bg-code-bg">
