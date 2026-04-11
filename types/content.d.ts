@@ -11,6 +11,7 @@ declare module "#site/content" {
     slug: string;
     toc: { title: string; url: string; items: { title: string; url: string; items: never[] }[] }[];
     metadata: { wordCount: number; readingTime: number };
+    charCount: number;
     body: string;
   }
 

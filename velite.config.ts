@@ -19,6 +19,11 @@ const posts = defineCollection({
     }),
     toc: s.toc(),
     metadata: s.metadata(),
+    charCount: s
+      .custom<string | undefined>(
+        (i) => i === undefined || typeof i === "string",
+      )
+      .transform((_, { meta }) => (meta.plain ?? "").replace(/\s/g, "").length),
     body: s.mdx(),
   }),
 });

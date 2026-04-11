@@ -59,7 +59,7 @@ export default async function PostPage({ params }: Props) {
       <ScrollProgress />
       <div className="relative mx-auto max-w-5xl px-6 py-16">
         <div className="xl:flex xl:gap-16">
-          <article className="min-w-0 max-w-3xl flex-1">
+          <article className="mx-auto min-w-0 max-w-3xl flex-1 xl:mx-0">
             <PostHeader>
               <h1 className="text-3xl font-bold tracking-tight leading-tight">
                 {post.title}
@@ -68,7 +68,7 @@ export default async function PostPage({ params }: Props) {
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-secondary">
                 <time dateTime={post.date}>{formatDate(post.date)}</time>
                 <span>·</span>
-                <span>{readingTime(post.metadata.wordCount)}</span>
+                <span>{readingTime(post.charCount)}</span>
                 {post.tags.length > 0 && (
                   <>
                     <span>·</span>
