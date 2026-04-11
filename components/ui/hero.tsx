@@ -1,11 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useI18n } from "@/lib/i18n/context";
 
 export function Hero() {
-  const { t } = useI18n();
-
   return (
     <section className="relative overflow-hidden border-b border-border">
       {/* gradient bg */}
@@ -20,7 +17,7 @@ export function Hero() {
           transition={{ duration: 0.6 }}
         >
           <span className="inline-block rounded-full border border-accent/20 bg-accent/10 px-3 py-1 text-xs font-medium text-accent">
-            {t.hero.badge}
+            AI-Powered
           </span>
         </motion.div>
 
@@ -31,7 +28,7 @@ export function Hero() {
           className="mt-6 text-4xl font-extrabold tracking-tight sm:text-5xl"
           style={{ whiteSpace: "pre-line" }}
         >
-          {t.hero.heading}
+          {"궁금한 건 AI에게,\n글은 자동으로."}
         </motion.h1>
 
         <motion.p
@@ -40,7 +37,8 @@ export function Hero() {
           transition={{ duration: 0.6, delay: 0.2 }}
           className="mt-5 max-w-xl text-lg leading-relaxed text-secondary"
         >
-          {t.hero.sub}
+          주제를 던지면 인터랙티브 기술 글이 생성됩니다. 코드 플레이그라운드, 단계별 시각화, 시리즈
+          자동 기획까지.
         </motion.p>
 
         <motion.div
@@ -53,8 +51,15 @@ export function Hero() {
             href="#posts"
             className="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
           >
-            {t.hero.cta}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            글 둘러보기
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M7 17l9.2-9.2M17 17V7.8H7.8" />
             </svg>
           </a>

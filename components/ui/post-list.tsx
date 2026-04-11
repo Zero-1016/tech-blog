@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { formatDate } from "@/lib/utils";
+import { readingTime } from "@/lib/reading-time";
 
 interface PostItem {
   slug: string;
@@ -12,6 +13,7 @@ interface PostItem {
   date: string;
   tags: string[];
   cover?: string;
+  charCount: number;
 }
 
 export function PostList({ posts }: { posts: PostItem[] }) {
@@ -54,18 +56,15 @@ export function PostList({ posts }: { posts: PostItem[] }) {
               >
                 {post.title}
               </h2>
-              <p className="mt-1.5 text-sm text-secondary line-clamp-2">
-                {post.description}
-              </p>
+              <p className="mt-1.5 text-sm text-secondary line-clamp-2">{post.description}</p>
               <div className="mt-3 flex items-center gap-3 text-xs text-secondary">
                 <time dateTime={post.date}>{formatDate(post.date)}</time>
+                <span aria-hidden>·</span>
+                <span>{readingTime(post.charCount)}</span>
                 {post.tags.length > 0 && (
                   <div className="flex gap-1.5">
                     {post.tags.slice(0, 3).map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-md bg-code-bg px-1.5 py-0.5"
-                      >
+                      <span key={tag} className="rounded-md bg-code-bg px-1.5 py-0.5">
                         {tag}
                       </span>
                     ))}

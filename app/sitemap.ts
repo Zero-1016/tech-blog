@@ -11,8 +11,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: new Date(post.date),
     }));
 
-  return [
-    { url: BASE_URL, lastModified: new Date() },
-    ...postEntries,
-  ];
+  return [{ url: BASE_URL, lastModified: new Date() }, ...postEntries];
 }

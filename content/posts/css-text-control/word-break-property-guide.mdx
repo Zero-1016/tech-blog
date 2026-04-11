@@ -1,0 +1,414 @@
+---
+title: "word-break 속성 완벽 가이드"
+description: "word-break의 모든 값들과 실제 사용 사례를 통해 단어 단위 줄바꿈을 마스터합니다."
+date: 2026-04-11
+tags: ["CSS","텍스트","제어"]
+series: "CSS 텍스트 제어 완전정복: word-break와 white-space"
+seriesOrder: 2
+published: true
+---
+
+이전 편에서 CSS 텍스트 줄바꿈의 기본 원리를 살펴봤다면, 이제 `word-break` 속성으로 더 정교한 제어를 해볼 차례입니다. 웹 개발을 하다 보면 긴 URL이 레이아웃을 깨뜨리거나, 한글 텍스트가 예상과 다르게 줄바꿈되는 상황을 마주하곤 합니다. 이런 문제들을 `word-break` 속성으로 해결할 수 있습니다.
+
+## word-break의 세 가지 핵심 값
+
+`word-break` 속성은 단어의 경계에서 줄바꿈이 어떻게 일어날지 결정합니다. 각 값의 차이점을 단계별로 살펴보겠습니다.
+
+<AnimatedStep steps={[
+  {
+    title: "normal (기본값)",
+    content: "기본 언어 규칙에 따라 줄바꿈합니다. 영어는 단어 경계에서, 한국어/중국어/일본어(CJK)는 음절 경계에서 자연스럽게 줄바꿈됩니다.",
+    code: `word-break: normal;`
+  },
+  {
+    title: "break-all",
+    content: "언어에 관계없이 글자 단위로 줄바꿈합니다. 긴 URL이나 코드를 강제로 줄바꿈할 때 유용하지만, 가독성이 떨어질 수 있습니다.",
+    code: `word-break: break-all;`
+  },
+  {
+    title: "keep-all",
+    content: "CJK 언어에서도 단어나 구문 단위로 줄바꿈합니다. 한글에서 더 자연스러운 읽기 경험을 제공합니다.",
+    code: `word-break: keep-all;`
+  }
+]} />
+
+## 실제 상황에서 비교해보기
+
+각 값이 실제로 어떻게 작동하는지 다양한 텍스트로 실험해보겠습니다.
+
+<CodePlayground
+  code={`function WordBreakDemo() {
+    const longUrl = "https://example.com/very-long-url-that-might-break-layout";
+    const koreanText =
+      "안녕하세요 여러분! 오늘은 CSS word-break 속성에 대해 알아보겠습니다.";
+    const englishText =
+      "This is a very long sentence that demonstrates word breaking behavior.";
+
+    const samples = [
+      { label: "Normal (기본값)", mode: "normal" },
+      { label: "Break-all", mode: "break-all" },
+      { label: "Keep-all", mode: "keep-all" },
+    ];
+
+    return (
+      <div className="demo">
+        {samples.map(({ label, mode }) => (
+          <div key={mode} className="card">
+            <h4>{label}</h4>
+            <div className={\`box box--\${mode}\`}>
+              <p>
+                <strong>URL:</strong> {longUrl}
+              </p>
+              <p>
+                <strong>한글:</strong> {koreanText}
+              </p>
+              <p>
+                <strong>영어:</strong> {englishText}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }`}
+  css={`.demo {
+    font-family: system-ui;
+    font-size: 14px;
+  }
+
+  .card {
+    width: 250px;
+    border: 1px solid #ddd;
+    margin-bottom: 20px;
+  }
+
+  .box {
+    padding: 10px;
+  }
+
+  .box--normal {
+    word-break: normal;
+    background: #f8f9fa;
+  }
+
+  .box--break-all {
+    word-break: break-all;
+    background: #e3f2fd;
+  }
+
+  .box--keep-all {
+    word-break: keep-all;
+    background: #f3e5f5;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+<Callout variant="tip">
+위 예제에서 각 박스의 너비는 250px로 제한되어 있습니다. 텍스트가 어떻게 다르게 줄바꿈되는지 주목해보세요!
+</Callout>
+
+## 언어별 특성 이해하기
+
+`word-break`는 언어의 특성에 따라 다르게 동작합니다. 이를 이해하면 더 적절한 선택을 할 수 있습니다.
+
+<AnimatedStep steps={[
+  {
+    title: "영어/라틴 문자",
+    content: "스페이스나 하이픈으로 구분된 단어 경계에서 자연스럽게 줄바꿈됩니다. normal과 keep-all은 동일하게 작동합니다."
+  },
+  {
+    title: "한국어/중국어/일본어 (CJK)",
+    content: "표의문자 특성상 글자 간 명확한 경계가 없습니다. normal은 음절 단위로, keep-all은 의미 단위로 줄바꿈을 시도합니다."
+  },
+  {
+    title: "특수 문자열 (URL, 코드)",
+    content: "공백이 없는 긴 문자열은 normal과 keep-all에서 컨테이너를 벗어날 수 있습니다. break-all이 유용합니다."
+  }
+]} />
+
+## 실전 활용 사례들
+
+### 1. 긴 URL 처리
+
+웹사이트에서 긴 URL을 표시할 때 레이아웃이 깨지는 것을 방지하는 방법입니다.
+
+<CodePlayground
+  code={`function UrlBreakingDemo() {
+    const longUrls = [
+      "https://www.example.com/very/long/path/that/might/cause/layout/issues",
+      "https://github.com/facebook/react/blob/main/packages/react-dom/src/client/ReactDOMRoot.js",
+      "https://developer.mozilla.org/en-US/docs/Web/CSS/word-break",
+    ];
+
+    return (
+      <div className="demo">
+        {longUrls.map((url, index) => (
+          <div key={index} className="card">
+            <h4>URL {index + 1}</h4>
+            <div className="url">{url}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }`}
+  css={`.demo {
+    font-family: system-ui;
+    font-size: 14px;
+  }
+
+  .card {
+    width: 300px;
+    border: 1px solid #ddd;
+    margin-bottom: 15px;
+    padding: 10px;
+  }
+
+  .url {
+    word-break: break-all;
+    background: #f0f8ff;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: monospace;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+### 2. 한글 텍스트의 자연스러운 줄바꿈
+
+한글 텍스트에서 `keep-all`을 사용하면 더 자연스러운 읽기 경험을 제공할 수 있습니다.
+
+<CodePlayground
+  code={`function KoreanTextDemo() {
+    const text =
+      "프론트엔드 개발자는 사용자 인터페이스와 사용자 경험을 구현하는 중요한 역할을 담당합니다.";
+
+    return (
+      <div className="row">
+        <div className="col">
+          <h4 className="title title--bad">Normal (기본)</h4>
+          <div className="box box--normal">{text}</div>
+        </div>
+        <div className="col">
+          <h4 className="title title--good">Keep-all (권장)</h4>
+          <div className="box box--keep-all">{text}</div>
+        </div>
+      </div>
+    );
+  }`}
+  css={`.row {
+    font-family: system-ui;
+    font-size: 16px;
+    display: flex;
+    gap: 20px;
+  }
+
+  .col {
+    width: 200px;
+  }
+
+  .title--bad {
+    color: #d32f2f;
+  }
+
+  .title--good {
+    color: #1976d2;
+  }
+
+  .box {
+    border: 1px solid #ddd;
+    padding: 15px;
+    line-height: 1.6;
+  }
+
+  .box--normal {
+    word-break: normal;
+    background: #ffebee;
+  }
+
+  .box--keep-all {
+    word-break: keep-all;
+    background: #e3f2fd;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+<Callout variant="info">
+한글 텍스트에서 `keep-all`을 사용하면 단어나 구문이 중간에 끊어지지 않아 읽기가 더 편해집니다. 특히 긴 문서나 기사에서 권장됩니다.
+</Callout>
+
+### 3. 코드 블록과 데이터 테이블
+
+코드나 데이터를 표시할 때는 상황에 따라 다른 전략이 필요합니다.
+
+<CodePlayground
+  code={`function CodeAndDataDemo() {
+    const codeSnippet =
+      "const veryLongVariableName = 'this-is-a-very-long-string-without-spaces';";
+    const dataItems = [
+      "user.email.verification.token.expired",
+      "authentication.jwt.secret.key.configuration",
+      "database.connection.pool.max.size.limit",
+    ];
+
+    return (
+      <div className="demo">
+        <div className="section">
+          <h4>코드 스니펫 (break-all 적용)</h4>
+          <pre className="code">{codeSnippet}</pre>
+        </div>
+
+        <div>
+          <h4>데이터 키 목록</h4>
+          <ul className="keys">
+            {dataItems.map((item, index) => (
+              <li key={index} className="key">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+  }`}
+  css={`.demo {
+    font-family: system-ui;
+    font-size: 14px;
+  }
+
+  .section {
+    margin-bottom: 25px;
+  }
+
+  .code {
+    word-break: break-all;
+    white-space: pre-wrap;
+    background: #2d3748;
+    color: #e2e8f0;
+    padding: 15px;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 350px;
+    overflow: hidden;
+  }
+
+  .keys {
+    width: 280px;
+    padding: 0;
+    list-style: none;
+  }
+
+  .key {
+    word-break: break-all;
+    background: #f7fafc;
+    padding: 8px;
+    margin-bottom: 5px;
+    border-left: 3px solid #4299e1;
+    font-family: monospace;
+    font-size: 12px;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+## overflow-wrap과의 조합 활용
+
+`word-break`는 `overflow-wrap`(구 `word-wrap`)과 함께 사용하면 더 정교한 제어가 가능합니다.
+
+<AnimatedStep steps={[
+  {
+    title: "word-break vs overflow-wrap",
+    content: "word-break는 단어 내부에서의 줄바꿈을 제어하고, overflow-wrap은 단어가 컨테이너를 넘칠 때의 동작을 제어합니다."
+  },
+  {
+    title: "조합 전략",
+    content: "word-break: keep-all + overflow-wrap: break-word 조합으로 한글은 자연스럽게, 긴 URL은 강제로 줄바꿈할 수 있습니다.",
+    code: `word-break: keep-all;\noverflow-wrap: break-word;`
+  }
+]} />
+
+<CodePlayground
+  code={`function CombinationDemo() {
+    const mixedContent = [
+      "일반적인 한국어 텍스트입니다. 자연스럽게 줄바꿈되어야 합니다.",
+      "https://very-long-url-that-needs-to-be-broken-when-it-overflows-the-container.com",
+      "ThisIsAVeryLongWordWithoutSpacesThatShouldBeHandledProperly",
+      "혼합된 텍스트와 https://example.com/long-url 그리고 더 많은 한국어 텍스트가 있습니다.",
+    ];
+
+    return (
+      <div className="demo">
+        <div className="card">
+          <h4 className="title">최적 조합: keep-all + break-word</h4>
+          <div className="content">
+            {mixedContent.map((text, index) => (
+              <p
+                key={index}
+                className={index % 2 === 0 ? "row row--a" : "row row--b"}
+              >
+                {text}
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }`}
+  css={`.demo {
+    font-family: system-ui;
+    font-size: 14px;
+  }
+
+  .card {
+    width: 300px;
+    border: 2px solid #4caf50;
+    padding: 15px;
+  }
+
+  .title {
+    color: #2e7d32;
+    margin: 0 0 15px 0;
+  }
+
+  .content {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    line-height: 1.6;
+  }
+
+  .row {
+    margin: 0 0 12px 0;
+    padding: 8px;
+  }
+
+  .row--a {
+    background: #e8f5e8;
+  }
+
+  .row--b {
+    background: #f3e5f5;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+## 브라우저 호환성과 주의사항
+
+<Callout variant="warning">
+`keep-all` 값은 상대적으로 최근에 추가된 기능입니다. Internet Explorer에서는 지원하지 않으므로 폴백(fallback)을 준비해두는 것이 안전합니다. 다행히 `word-break: normal`이 기본값으로 동작하므로, 최신 브라우저에서만 `keep-all`이 적용되는 점진적 향상(progressive enhancement) 방식으로 접근하면 됩니다.
+</Callout>
+
+주요 브라우저 현황을 정리하면 이렇습니다. 최신 Chrome, Edge, Safari, Firefox는 `normal`, `break-all`, `keep-all`을 모두 문제없이 지원합니다. 반면 Internet Explorer 11은 `normal`과 `break-all`까지만 알고 `keep-all`은 조용히 `normal`로 퇴화시키죠. 모바일 쪽은 iOS Safari와 Chrome for Android 모두 최근 버전에서 전부 지원합니다.
+
+## 다음 편 미리보기
+
+이번 편에서는 `word-break`의 세 가지 값과 실전 활용법을 살펴봤습니다. 하지만 텍스트 제어는 `word-break` 하나로 끝나지 않아요. 다음 편 **white-space 속성으로 공백과 줄바꿈 제어하기** 에서는 `normal`부터 `break-spaces`까지 여섯 가지 값의 차이, 공백·탭·줄바꿈 문자를 다루는 방법, 코드 블록·시·주소 같은 특수한 텍스트 처리 패턴, 그리고 `word-break`와 함께 쓸 때 주의할 점까지 이어서 다뤄보겠습니다.
+
+<Callout variant="tip">
+실무에서는 `word-break: keep-all`과 `overflow-wrap: break-word`의 조합이 한국어 웹사이트에 가장 무난한 기본값입니다. 프로젝트 전역 스타일에 먼저 적용해두면 대부분의 텍스트 깨짐 문제가 해결됩니다.
+</Callout>
+
+이제 단어 단위 제어는 마스터했습니다. 다음 편에서 공백과 줄바꿈까지 더하면, 텍스트 레이아웃을 자유자재로 다룰 수 있게 될 거예요!

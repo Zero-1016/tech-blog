@@ -1,0 +1,490 @@
+---
+title: "실무에서 활용하는 텍스트 제어 패턴"
+description: "반응형 디자인, 다국어 지원, 접근성을 고려한 실제 프로젝트 사례와 모범 사례를 소개합니다."
+date: 2026-04-11
+tags: ["CSS", "텍스트", "제어"]
+series: "CSS 텍스트 제어 완전정복: word-break와 white-space"
+seriesOrder: 4
+published: true
+---
+
+시리즈의 마지막 편에서는 지금까지 배운 `word-break`와 `white-space` 속성을 실제 프로젝트에서 어떻게 활용하는지 살펴보겠습니다. 단순히 속성을 알고 있는 것과 실무에서 제대로 활용하는 것은 완전히 다른 문제죠.
+
+## 반응형 디자인에서의 텍스트 제어
+
+모바일 퍼스트 시대에서 텍스트는 다양한 화면 크기에 맞춰 적응해야 합니다. 단순히 `word-break: break-all`만 적용하면 될까요?
+
+<CodePlayground 
+  code={`/* 기본적이지만 문제가 있는 접근 */
+  .bad-responsive {
+    word-break: break-all;
+    width: 100%;
+  }
+
+  /* 개선된 반응형 텍스트 제어 */
+  .responsive-text {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    hyphens: auto;
+
+    /* 모바일에서만 더 적극적인 줄바꿈 */
+    @media (max-width: 480px) {
+      word-break: break-word;
+      line-height: 1.6;
+    }
+  }
+
+  /* 컨테이너별 맞춤 설정 */
+  .card-title {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    line-height: 1.3;
+  }
+
+  .card-description {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    line-height: 1.5;
+
+    /* 긴 텍스트는 말줄임표 처리 */
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }`}
+  template="vanilla"
+  showPreview={true}
+/>
+
+<Callout variant="tip">
+  반응형 디자인에서는 화면 크기뿐만 아니라 콘텐츠의 성격도 고려해야 합니다. 제목은 보수적으로,
+  본문은 유연하게 처리하는 것이 좋습니다.
+</Callout>
+
+## 다국어 웹사이트 텍스트 처리
+
+글로벌 서비스를 만들 때 가장 까다로운 부분 중 하나가 바로 다국어 텍스트 처리입니다. 언어마다 텍스트의 특성이 완전히 다르기 때문이죠.
+
+<AnimatedStep
+  steps={[
+    {
+      title: "한국어/일본어/중국어 (CJK)",
+      content: "단어 사이 공백이 없어 word-break가 중요합니다.",
+      code: `.cjk-text {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    line-height: 1.7; /* 한글은 행간이 넓어야 읽기 좋음 */
+  }`,
+    },
+    {
+      title: "영어/독일어 등 서구 언어",
+      content: "단어 단위 줄바꿈이 기본이며, 하이픈 처리가 중요합니다.",
+      code: `.western-text {
+    word-break: normal;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    line-height: 1.5;
+  }`,
+    },
+    {
+      title: "아랍어/히브리어 (RTL)",
+      content: "오른쪽에서 왼쪽으로 읽는 언어는 direction 설정이 필요합니다.",
+      code: `.rtl-text {
+    direction: rtl;
+    text-align: right;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }`,
+    },
+  ]}
+/>
+
+이걸 하나의 시스템으로 엮으면 아래처럼 `lang` 속성 기반으로 텍스트 스타일을 자동 전환할 수 있습니다.
+
+<CodePlayground 
+  code={`/* 언어별 텍스트 스타일 시스템 */
+  :root {
+    --text-line-height-cjk: 1.7;
+    --text-line-height-western: 1.5;
+    --text-line-height-rtl: 1.6;
+  }
+
+  /* 기본 텍스트 스타일 */
+  .multilang-text {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    transition: all 0.2s ease;
+  }
+
+  /* 한국어/중국어/일본어 */
+  .multilang-text[lang^="ko"],
+  .multilang-text[lang^="ja"],
+  .multilang-text[lang^="zh"] {
+    line-height: var(--text-line-height-cjk);
+    word-spacing: -0.05em;
+    letter-spacing: -0.01em;
+  }
+
+  /* 영어/독일어/프랑스어 등 */
+  .multilang-text[lang^="en"],
+  .multilang-text[lang^="de"],
+  .multilang-text[lang^="fr"],
+  .multilang-text[lang^="es"] {
+    line-height: var(--text-line-height-western);
+    hyphens: auto;
+    word-break: normal;
+  }
+
+  /* 아랍어/히브리어 */
+  .multilang-text[lang^="ar"],
+  .multilang-text[lang^="he"] {
+    direction: rtl;
+    text-align: right;
+    line-height: var(--text-line-height-rtl);
+  }
+
+  /* 테스트용 컨테이너 */
+  .demo-container {
+    max-width: 300px;
+    margin: 20px auto;
+    padding: 20px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fafafa;
+  }
+
+  .language-label {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }`}
+template="vanilla"
+showPreview={true}
+/>
+
+## 접근성을 고려한 텍스트 제어
+
+웹 접근성을 고려할 때 텍스트 처리는 매우 중요합니다. 스크린 리더 사용자와 시각적 장애가 있는 사용자를 모두 고려해야 합니다.
+
+<Callout variant="info">
+  WCAG 2.1 가이드라인에 따르면, 텍스트는 최대 200%까지 확대되어도 가로 스크롤 없이 읽을 수 있어야
+  합니다.
+</Callout>
+
+<CodePlayground 
+  code={`/* 접근성을 고려한 텍스트 스타일 */
+  .accessible-text {
+    /* 기본 줄바꿈 설정 */
+    word-break: keep-all;
+    overflow-wrap: break-word;
+
+    /* 충분한 행간으로 가독성 확보 */
+    line-height: 1.6;
+
+    /* 텍스트 확대 시에도 레이아웃 유지 */
+    max-width: 100%;
+
+    /* 고대비 모드 대응 */
+    @media (prefers-contrast: high) {
+      line-height: 1.8;
+      letter-spacing: 0.05em;
+    }
+
+    /* 동작 감소 설정 사용자 대응 */
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
+
+  /* 텍스트 크기 조절 대응 */
+  @media (min-resolution: 2dppx) {
+    .accessible-text {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+  }
+
+  /* 스크린 리더 전용 텍스트 */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* 포커스 시 스크린 리더 텍스트 표시 */
+  .sr-only:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: 0.5rem;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    background: #000;
+    color: #fff;
+  }`}
+template="vanilla"
+showPreview={true}
+/>
+
+## 성능 최적화와 실무 팁
+
+텍스트 렌더링 성능도 고려해야 할 중요한 요소입니다. 특히 대용량 텍스트를 다룰 때는 더욱 그렇습니다.
+
+<AnimatedStep
+  steps={[
+    {
+      title: "CSS 최적화",
+      content: "불필요한 재계산을 방지하기 위해 효율적인 CSS 작성이 중요합니다.",
+      code: `/* ✅ 성능이 좋은 방식 */
+  .text-container {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    contain: layout style;
+  }`,
+    },
+    {
+      title: "가상화 적용",
+      content: "긴 텍스트 목록은 가상 스크롤을 활용하여 성능을 개선합니다.",
+      code: `/* 가상 스크롤용 컨테이너 */
+  .virtual-list-item {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    will-change: transform;
+  }`,
+    },
+    {
+      title: "메모이제이션",
+      content: "텍스트 처리 결과를 캐시하여 불필요한 재계산을 방지합니다.",
+      code: `// React에서의 메모이제이션 예시
+  const MemoizedText = React.memo(({ children, lang }) => {
+    return (
+      <div className="multilang-text" lang={lang}>
+        {children}
+      </div>
+    );
+  });`,
+    },
+  ]}
+/>
+
+## 실무에서 자주 마주치는 문제와 해결책
+
+실제 프로젝트에서 자주 발생하는 텍스트 관련 문제들과 해결 방법을 정리해보겠습니다.
+
+<CodePlayground 
+  code={`/* 문제 1: 긴 URL이나 이메일 주소 처리 */
+  .url-text {
+    word-break: break-all;
+    overflow-wrap: break-word;
+
+    /* URL 중간에 줄바꿈 시 하이픈 제거 */
+    hyphens: none;
+  }
+
+  /* 문제 2: 테이블 셀에서의 텍스트 오버플로우 */
+  .table-cell {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    max-width: 0; /* flex-basis와 함께 사용 시 중요 */
+
+    /* 말줄임표 처리도 함께 고려 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 문제 3: 폼 입력 필드와 레이블 정렬 */
+  .form-label {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    line-height: 1.4;
+
+    /* 입력 필드와 수직 정렬 맞추기 */
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* 문제 4: 말풍선이나 툴팁의 텍스트 처리 */
+  .tooltip-text {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    max-width: 250px;
+    line-height: 1.5;
+
+    /* 한 줄로 표시하고 싶을 때 */
+    white-space: nowrap;
+  }
+
+  /* 문제 5: 코드 블록에서의 줄바꿈 */
+  .code-block {
+    white-space: pre;
+    overflow-x: auto;
+    word-break: normal;
+
+    /* 긴 코드 라인 처리 */
+    @media (max-width: 768px) {
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  }`}
+template="vanilla"
+showPreview={true}
+/>
+
+<Callout variant="warning">
+  `word-break: break-all`은 영어 단어 중간에서도 줄바꿈이 일어나므로 신중하게 사용해야 합니다.
+  대부분의 경우 `overflow-wrap: break-word`가 더 적절합니다.
+</Callout>
+
+## 프로덕션 레디 텍스트 시스템 구축
+
+마지막으로 실제 프로덕션 환경에서 사용할 수 있는 완성도 높은 텍스트 시스템을 만들어보겠습니다.
+
+<CodePlayground 
+  code={`/* 프로덕션용 텍스트 유틸리티 클래스 */
+  :root {
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+
+    --line-height-tight: 1.25;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.75;
+  }
+
+  /* 기본 텍스트 클래스 */
+  .text {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    line-height: var(--line-height-normal);
+  }
+
+  /* 크기별 변형 */
+  .text-xs {
+    font-size: var(--font-size-xs);
+  }
+
+  .text-sm {
+    font-size: var(--font-size-sm);
+  }
+
+  .text-base {
+    font-size: var(--font-size-base);
+  }
+
+  .text-lg {
+    font-size: var(--font-size-lg);
+  }
+
+  .text-xl {
+    font-size: var(--font-size-xl);
+  }
+
+  /* 행간 변형 */
+  .text-tight {
+    line-height: var(--line-height-tight);
+  }
+
+  .text-normal {
+    line-height: var(--line-height-normal);
+  }
+
+  .text-relaxed {
+    line-height: var(--line-height-relaxed);
+  }
+
+  /* 자주 쓰는 조합 */
+  .text-title {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    line-height: var(--line-height-tight);
+    font-weight: 600;
+  }
+
+  .text-body {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    line-height: var(--line-height-relaxed);
+  }
+
+  .text-caption {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    font-size: var(--font-size-sm);
+    color: #6b7280;
+  }
+
+  /* 말줄임 처리 */
+  .text-truncate {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .text-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }`}
+template="vanilla"
+showPreview={true}
+/>
+
+이렇게 유틸리티 클래스로 정리해두면, 컴포넌트마다 중복된 텍스트 스타일을 작성할 필요 없이 조합만으로 UI를 빠르게 구성할 수 있습니다.
+
+## 최종 체크리스트
+
+배포 전에 한 번씩 훑어볼 만한 항목들입니다.
+
+<Callout variant="info">
+**반응형**
+
+☐ 모든 화면 크기에서 텍스트가 적절히 줄바꿈되는가?<br/>
+☐ 긴 URL이나 단어가 레이아웃을 깨뜨리지 않는가?<br/>
+☐ 모바일에서 가로 스크롤이 발생하지 않는가?
+
+**다국어 지원**
+
+☐ 언어별로 적절한 줄바꿈 규칙이 적용되었는가?<br/>
+☐ CJK 언어에서 단어가 부자연스럽게 끊어지지 않는가?<br/>
+☐ `lang` 속성을 올바르게 지정했는가?
+
+**접근성**
+
+☐ 스크린 리더가 텍스트를 올바르게 읽을 수 있는가?<br/>
+☐ 200%까지 확대해도 가로 스크롤이 생기지 않는가?<br/>
+☐ 충분한 행간과 색 대비를 확보했는가?
+
+**성능**
+
+☐ 불필요하게 `break-all`을 남용하지 않았는가?<br/>
+☐ 긴 텍스트 리스트는 가상화를 고려했는가?
+</Callout>
+
+## 마무리하며
+
+CSS 텍스트 제어는 작은 디테일처럼 보이지만, 사용자 경험에 큰 영향을 미칩니다. 특히 다양한 언어와 기기를 지원해야 하는 현대 웹에서는 더욱 중요해졌죠.
+
+이 시리즈를 통해 `word-break`와 `white-space`의 기본 원리부터 실무 활용까지 함께 살펴봤습니다. 이제 여러분의 프로젝트에서 텍스트가 어떤 상황에서도 아름답고 읽기 편하게 표시되길 바랍니다.
+
+<Callout variant="tip">
+  완벽한 텍스트 제어는 한 번에 완성되지 않습니다. 실제 사용자의 피드백을 수집하고, 다양한 언어와
+  기기에서 테스트하며 조금씩 다듬어가는 과정이 필요합니다. 오늘 배운 패턴들을 프로젝트에 하나씩
+  적용해보세요!
+</Callout>
+
+읽어주셔서 감사합니다. 즐거운 코딩 되세요!

@@ -21,16 +21,9 @@ export function RelatedPosts({ posts }: { posts: RelatedPost[] }) {
             href={`/posts/${post.slug}`}
             className="group rounded-xl border border-border p-5 transition-colors hover:border-accent/30 hover:bg-card-hover"
           >
-            <h4 className="font-medium tracking-tight group-hover:text-accent">
-              {post.title}
-            </h4>
-            <p className="mt-1.5 text-sm text-secondary line-clamp-2">
-              {post.description}
-            </p>
-            <time
-              dateTime={post.date}
-              className="mt-2 block text-xs text-secondary"
-            >
+            <h4 className="font-medium tracking-tight group-hover:text-accent">{post.title}</h4>
+            <p className="mt-1.5 text-sm text-secondary line-clamp-2">{post.description}</p>
+            <time dateTime={post.date} className="mt-2 block text-xs text-secondary">
               {formatDate(post.date)}
             </time>
           </Link>

@@ -40,9 +40,7 @@ export default async function SeriesPage({ params }: Props) {
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
       <header className="mb-10">
-        <p className="text-xs font-medium uppercase tracking-wider text-secondary">
-          시리즈
-        </p>
+        <p className="text-xs font-medium uppercase tracking-wider text-secondary">시리즈</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">{slug}</h1>
         <p className="mt-2 text-secondary">{seriesPosts.length}편</p>
       </header>
@@ -61,13 +59,8 @@ export default async function SeriesPage({ params }: Props) {
                 <h2 className="font-semibold tracking-tight group-hover:text-accent">
                   {post.title}
                 </h2>
-                <p className="mt-1 text-sm text-secondary line-clamp-2">
-                  {post.description}
-                </p>
-                <time
-                  dateTime={post.date}
-                  className="mt-1 block text-xs text-secondary"
-                >
+                <p className="mt-1 text-sm text-secondary line-clamp-2">{post.description}</p>
+                <time dateTime={post.date} className="mt-1 block text-xs text-secondary">
                   {formatDate(post.date)}
                 </time>
               </div>

@@ -2,9 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "img.youtube.com" },
-    ],
+    remotePatterns: [{ protocol: "https", hostname: "img.youtube.com" }],
   },
   webpack: (config) => {
     config.plugins.push(new VeliteWebpackPlugin());
@@ -14,7 +12,9 @@ const nextConfig: NextConfig = {
 
 class VeliteWebpackPlugin {
   static started = false;
-  apply(compiler: { hooks: { beforeCompile: { tapPromise: (name: string, fn: () => Promise<void>) => void } } }) {
+  apply(compiler: {
+    hooks: { beforeCompile: { tapPromise: (name: string, fn: () => Promise<void>) => void } };
+  }) {
     compiler.hooks.beforeCompile.tapPromise("VeliteWebpackPlugin", async () => {
       if (VeliteWebpackPlugin.started) return;
       VeliteWebpackPlugin.started = true;

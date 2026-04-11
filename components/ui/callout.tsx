@@ -1,10 +1,26 @@
 import { cn } from "@/lib/utils";
 
 const variants = {
-  tip: { icon: "💡", bg: "bg-blue-50 dark:bg-blue-950/30", border: "border-blue-200 dark:border-blue-800" },
-  warning: { icon: "⚠️", bg: "bg-yellow-50 dark:bg-yellow-950/30", border: "border-yellow-200 dark:border-yellow-800" },
-  info: { icon: "ℹ️", bg: "bg-gray-50 dark:bg-gray-950/30", border: "border-gray-200 dark:border-gray-800" },
-  error: { icon: "🚨", bg: "bg-red-50 dark:bg-red-950/30", border: "border-red-200 dark:border-red-800" },
+  tip: {
+    icon: "💡",
+    bg: "bg-blue-50 dark:bg-blue-950/30",
+    border: "border-blue-200 dark:border-blue-800",
+  },
+  warning: {
+    icon: "⚠️",
+    bg: "bg-yellow-50 dark:bg-yellow-950/30",
+    border: "border-yellow-200 dark:border-yellow-800",
+  },
+  info: {
+    icon: "ℹ️",
+    bg: "bg-gray-50 dark:bg-gray-950/30",
+    border: "border-gray-200 dark:border-gray-800",
+  },
+  error: {
+    icon: "🚨",
+    bg: "bg-red-50 dark:bg-red-950/30",
+    border: "border-red-200 dark:border-red-800",
+  },
 } as const;
 
 interface CalloutProps {

@@ -10,10 +10,12 @@ If GSTACK_MISSING: STOP. Do not proceed. Tell the user:
 
 > gstack is required for all AI-assisted work in this repo.
 > Install it:
+>
 > ```bash
 > git clone --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack
 > cd ~/.claude/skills/gstack && ./setup --team
 > ```
+>
 > Then restart your AI coding tool.
 
 Do not skip skills, ignore gstack errors, or work around missing gstack.
@@ -29,6 +31,7 @@ tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
 The skill has specialized workflows that produce better results than ad-hoc answers.
 
 Key routing rules:
+
 - Product ideas, "is this worth building", brainstorming → invoke office-hours
 - Bugs, errors, "why is this broken", 500 errors → invoke investigate
 - Ship, deploy, push, create PR → invoke ship

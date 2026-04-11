@@ -58,6 +58,6 @@ export async function GET(req: NextRequest) {
         </div>
       )}
     </div>,
-    { width: 1200, height: 630 },
+    { width: 1200, height: 630 }
   );
 }
