@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatDate } from "@/lib/utils";
+import { formatCardDate } from "@/lib/utils";
 
 interface RelatedPost {
   slug: string;
@@ -23,8 +23,11 @@ export function RelatedPosts({ posts }: { posts: RelatedPost[] }) {
           >
             <h4 className="font-medium tracking-tight group-hover:text-accent">{post.title}</h4>
             <p className="mt-1.5 text-sm text-secondary line-clamp-2">{post.description}</p>
-            <time dateTime={post.date} className="mt-2 block text-xs text-secondary">
-              {formatDate(post.date)}
+            <time
+              dateTime={post.date}
+              className="mt-2 block whitespace-nowrap text-xs text-secondary"
+            >
+              {formatCardDate(post.date)}
             </time>
           </Link>
         ))}

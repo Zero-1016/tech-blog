@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { posts } from "#site/content";
-import { formatDate } from "@/lib/utils";
+import { formatCardDate } from "@/lib/utils";
 
 interface Props {
   params: Promise<{ tag: string }>;
@@ -50,8 +50,11 @@ export default async function TagPage({ params }: Props) {
             <article>
               <h2 className="font-semibold tracking-tight group-hover:text-accent">{post.title}</h2>
               <p className="mt-1 text-sm text-secondary line-clamp-2">{post.description}</p>
-              <time dateTime={post.date} className="mt-1 block text-xs text-secondary">
-                {formatDate(post.date)}
+              <time
+                dateTime={post.date}
+                className="mt-1 block whitespace-nowrap text-xs text-secondary"
+              >
+                {formatCardDate(post.date)}
               </time>
             </article>
           </Link>

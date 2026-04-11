@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { posts } from "#site/content";
-import { formatDate } from "@/lib/utils";
+import { formatCardDate } from "@/lib/utils";
 import { readingTime } from "@/lib/reading-time";
 import { MDXContent } from "@/components/mdx/mdx-content";
 import { SeriesNav } from "@/components/ui/series-nav";
@@ -52,6 +52,10 @@ export default async function PostPage({ params }: Props) {
   const post = getPost(slug);
   if (!post) notFound();
 
+  const toc = post.hasReferences
+    ? [...post.toc, { title: "참고 자료", url: "#references", items: [] }]
+    : post.toc;
+
   return (
     <>
       <ScrollProgress />
@@ -62,7 +66,9 @@ export default async function PostPage({ params }: Props) {
               <h1 className="text-3xl font-bold tracking-tight leading-tight">{post.title}</h1>
               <p className="mt-3 text-lg text-secondary">{post.description}</p>
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-secondary">
-                <time dateTime={post.date}>{formatDate(post.date)}</time>
+                <time dateTime={post.date} className="whitespace-nowrap">
+                  {formatCardDate(post.date)}
+                </time>
                 <span>·</span>
                 <span>{readingTime(post.charCount)}</span>
                 {post.tags.length > 0 && (
@@ -83,7 +89,7 @@ export default async function PostPage({ params }: Props) {
                 )}
               </div>
             </PostHeader>
-            {post.toc.length > 0 && <MobileToc items={post.toc} />}
+            {toc.length > 0 && <MobileToc items={toc} />}
             <div className="prose">
               <MDXContent code={post.body} />
             </div>
@@ -118,7 +124,7 @@ export default async function PostPage({ params }: Props) {
                 }))}
             />
           </article>
-          {post.toc.length > 0 && <Toc items={post.toc} />}
+          {toc.length > 0 && <Toc items={toc} />}
         </div>
       </div>
     </>
