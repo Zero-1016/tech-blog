@@ -101,13 +101,13 @@ body {
   color: var(--color-text);
 }
 
-.prose a {
+.prose a:not(.not-prose a, .not-prose) {
   color: var(--color-accent);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.prose a:hover {
+.prose a:not(.not-prose a, .not-prose):hover {
   color: var(--color-accent-hover);
 }
 
