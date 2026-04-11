@@ -11,7 +11,12 @@ const posts = defineCollection({
     series: s.string().optional(),
     seriesOrder: s.number().optional(),
     published: s.boolean().default(true),
-    slug: s.path().transform((p) => p.replace(/^posts\//, "")),
+    slug: s.path().transform((p) => {
+      // posts/hello-world → hello-world
+      // posts/rsc/rsc-intro → rsc-intro (flatten to filename only)
+      const parts = p.split("/");
+      return parts[parts.length - 1];
+    }),
     body: s.mdx(),
   }),
 });
