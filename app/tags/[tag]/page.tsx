@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { posts } from "#site/content";
-import { formatDate } from "@/lib/utils";
+import { formatCardDate } from "@/lib/utils";
+import { siteConfig, SITE_URL } from "@/lib/site";
 
 interface Props {
   params: Promise<{ tag: string }>;
@@ -19,9 +21,39 @@ export function generateStaticParams() {
   return getAllTags().map((tag) => ({ tag }));
 }
 
-export async function generateMetadata({ params }: Props) {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { tag } = await params;
-  return { title: `#${decodeURIComponent(tag)}` };
+  const decoded = decodeURIComponent(tag);
+  const count = posts.filter((p) => p.published && p.tags.includes(decoded)).length;
+
+  if (count === 0) return {};
+
+  const title = `#${decoded}`;
+  const description = `${decoded} 태그가 붙은 ${count}개의 글 — ${siteConfig.name}`;
+  const canonical = `/tags/${encodeURIComponent(decoded)}`;
+  const ogUrl = `/og?title=${encodeURIComponent(title)}&description=${encodeURIComponent(description)}`;
+
+  return {
+    title,
+    description,
+    keywords: [decoded],
+    alternates: { canonical },
+    openGraph: {
+      type: "website",
+      locale: siteConfig.locale,
+      url: `${SITE_URL}${canonical}`,
+      siteName: siteConfig.name,
+      title,
+      description,
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogUrl],
+    },
+  };
 }
 
 export default async function TagPage({ params }: Props) {
@@ -50,8 +82,11 @@ export default async function TagPage({ params }: Props) {
             <article>
               <h2 className="font-semibold tracking-tight group-hover:text-accent">{post.title}</h2>
               <p className="mt-1 text-sm text-secondary line-clamp-2">{post.description}</p>
-              <time dateTime={post.date} className="mt-1 block text-xs text-secondary">
-                {formatDate(post.date)}
+              <time
+                dateTime={post.date}
+                className="mt-1 block whitespace-nowrap text-xs text-secondary"
+              >
+                {formatCardDate(post.date)}
               </time>
             </article>
           </Link>

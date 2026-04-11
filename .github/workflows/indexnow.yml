@@ -1,0 +1,66 @@
+name: IndexNow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "content/posts/**/*.mdx"
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "제출할 URL (공백 구분, 생략시 최근 커밋 diff 사용)"
+        required: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Vercel 배포 대기
+        run: sleep 120
+
+      - name: 변경된 포스트 URL 계산
+        id: changed
+        env:
+          SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          INPUT_URLS: ${{ github.event.inputs.urls }}
+        run: |
+          set -e
+          if [ -n "$INPUT_URLS" ]; then
+            echo "urls=$INPUT_URLS" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          SITE="${SITE_URL%/}"
+          CHANGED=$(git diff --name-only HEAD^ HEAD -- 'content/posts/*.mdx' 'content/posts/**/*.mdx' || true)
+          URLS=""
+          for file in $CHANGED; do
+            [ -z "$file" ] && continue
+            SLUG=$(basename "$file" .mdx)
+            URLS="$URLS $SITE/posts/$SLUG"
+          done
+          echo "urls=$(echo $URLS | xargs)" >> $GITHUB_OUTPUT
+
+      - name: IndexNow 제출
+        if: steps.changed.outputs.urls != ''
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+          INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}
+        run: pnpm tsx scripts/indexnow-ping.ts ${{ steps.changed.outputs.urls }}
+
+      - name: 변경 없음 로그
+        if: steps.changed.outputs.urls == ''
+        run: echo "변경된 포스트 없음 — IndexNow 제출 스킵"

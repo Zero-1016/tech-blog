@@ -22,6 +22,9 @@ const posts = defineCollection({
     charCount: s
       .custom<string | undefined>((i) => i === undefined || typeof i === "string")
       .transform((_, { meta }) => (meta.plain ?? "").replace(/\s/g, "").length),
+    hasReferences: s
+      .custom<string | undefined>((i) => i === undefined || typeof i === "string")
+      .transform((_, { meta }) => (meta.content ?? "").includes("<References")),
     body: s.mdx(),
   }),
 });

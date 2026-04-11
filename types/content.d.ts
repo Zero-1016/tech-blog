@@ -12,6 +12,7 @@ declare module "#site/content" {
     toc: { title: string; url: string; items: { title: string; url: string; items: never[] }[] }[];
     metadata: { wordCount: number; readingTime: number };
     charCount: number;
+    hasReferences: boolean;
     body: string;
   }
 

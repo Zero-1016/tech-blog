@@ -4,6 +4,8 @@ import { Callout } from "@/components/ui/callout";
 import { CodePlayground } from "@/components/ui/code-playground";
 import { AnimatedStep } from "@/components/ui/animated-step";
 import { VideoEmbed } from "@/components/ui/video-embed";
+import { References } from "@/components/ui/references";
+import { Cite } from "@/components/ui/cite";
 import { CodeBlock } from "@/components/mdx/code-block";
 
 function slugify(text: string): string {
@@ -39,4 +41,6 @@ export const mdxComponents: MDXComponents = {
   CodePlayground,
   AnimatedStep,
   VideoEmbed,
+  References,
+  Cite,
 };

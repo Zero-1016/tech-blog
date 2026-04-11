@@ -1,6 +1,7 @@
 import { posts } from "#site/content";
+import { siteConfig, SITE_URL } from "@/lib/site";
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://tech-blog.vercel.app";
+const BASE_URL = SITE_URL;
 
 export function GET() {
   const published = posts
@@ -23,9 +24,9 @@ export function GET() {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Tech Blog</title>
+    <title>${siteConfig.name}</title>
     <link>${BASE_URL}</link>
-    <description>AI가 쓰고, 개발자가 다듬는 테크 블로그</description>
+    <description>${siteConfig.description}</description>
     <language>ko</language>
     <atom:link href="${BASE_URL}/feed.xml" rel="self" type="application/rss+xml" />${items}
   </channel>

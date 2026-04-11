@@ -16,6 +16,12 @@
 # velite
 .velite
 
+# generated at build time
+/public/sitemap.xml
+/public/robots.txt
+# IndexNow key file (filename contains the key, written from env at build)
+/public/*.txt
+
 # claude code (local config)
 .claude/skills/
 
