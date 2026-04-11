@@ -7,6 +7,7 @@
     "prebuild": "tsx scripts/generate-seo.ts",
     "build": "next build --webpack",
     "seo:generate": "tsx scripts/generate-seo.ts",
+    "indexnow": "tsx scripts/indexnow-ping.ts",
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write .",

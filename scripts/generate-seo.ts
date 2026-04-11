@@ -169,6 +169,10 @@ function buildRobots(): string {
   return `User-agent: *\nAllow: /\n\nDisallow: /og\nDisallow: /api\n\nSitemap: ${SITE_URL}/sitemap.xml\nHost: ${SITE_URL}\n`;
 }
 
+function isValidIndexNowKey(key: string): boolean {
+  return /^[a-zA-Z0-9-]{8,128}$/.test(key);
+}
+
 function main() {
   const posts = readPosts();
   const publicDir = resolve(process.cwd(), "public");
@@ -183,6 +187,17 @@ function main() {
   console.log(`✓ sitemap.xml (${posts.length} posts) → ${sitemapPath}`);
   console.log(`✓ robots.txt → ${robotsPath}`);
   console.log(`  site url: ${SITE_URL}`);
+
+  const indexNowKey = process.env.INDEXNOW_KEY;
+  if (indexNowKey) {
+    if (!isValidIndexNowKey(indexNowKey)) {
+      console.warn(`! INDEXNOW_KEY 형식 오류 (8~128자 영숫자/하이픈). 키 파일 생성 건너뜀.`);
+    } else {
+      const keyPath = join(publicDir, `${indexNowKey}.txt`);
+      writeFileSync(keyPath, indexNowKey, "utf-8");
+      console.log(`✓ IndexNow key → ${keyPath}`);
+    }
+  }
 }
 
 main();
