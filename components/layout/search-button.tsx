@@ -27,11 +27,9 @@ export function SearchButton() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
-  const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setMounted(true);
     searchData.then(setItems);
   }, []);
 
@@ -46,7 +44,10 @@ export function SearchButton() {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setOpen((prev) => !prev);
+        setOpen((prev) => {
+          if (!prev) setQuery("");
+          return !prev;
+        });
       }
       if (e.key === "Escape") setOpen(false);
     }
@@ -56,12 +57,12 @@ export function SearchButton() {
 
   useEffect(() => {
     if (open) {
-      inputRef.current?.focus();
-      setQuery("");
+      // focus는 DOM 업데이트 후 실행되므로 requestAnimationFrame 사용
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
 
-  const modal = open && mounted
+  const modal = open && typeof window !== "undefined"
     ? createPortal(
         <>
           <div
@@ -123,7 +124,7 @@ export function SearchButton() {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { setQuery(""); setOpen(true); }}
         className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm text-secondary transition-colors hover:border-accent/50"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

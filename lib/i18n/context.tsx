@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useSyncExternalStore, useCallback, type ReactNode } from "react";
 import { getDictionary, defaultLocale, type Locale, type Dictionary } from "./dictionaries";
 
 interface I18nContextValue {
@@ -15,20 +15,27 @@ const I18nContext = createContext<I18nContextValue>({
   t: getDictionary(defaultLocale),
 });
 
+function getLocaleSnapshot(): Locale {
+  const stored = localStorage.getItem("locale");
+  return stored === "ko" || stored === "en" ? stored : defaultLocale;
+}
+
+function getServerSnapshot(): Locale {
+  return defaultLocale;
+}
+
+function subscribe(callback: () => void) {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(defaultLocale);
+  const locale = useSyncExternalStore(subscribe, getLocaleSnapshot, getServerSnapshot);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("locale") as Locale | null;
-    if (stored === "ko" || stored === "en") {
-      setLocaleState(stored);
-    }
-  }, []);
-
-  function setLocale(l: Locale) {
-    setLocaleState(l);
+  const setLocale = useCallback((l: Locale) => {
     localStorage.setItem("locale", l);
-  }
+    window.dispatchEvent(new StorageEvent("storage"));
+  }, []);
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, t: getDictionary(locale) }}>

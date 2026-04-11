@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n/context";
 
@@ -28,7 +28,7 @@ function flattenToc(entries: TocEntry[], depth = 2): { title: string; url: strin
 export function Toc({ items }: TocProps) {
   const [activeId, setActiveId] = useState("");
   const { t } = useI18n();
-  const flat = flattenToc(items);
+  const flat = useMemo(() => flattenToc(items), [items]);
 
   useEffect(() => {
     const headings = flat
