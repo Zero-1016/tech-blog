@@ -1,19 +1,29 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
-import { CopyButton } from "@/components/ui/copy-button";
+import { useState, type ReactNode } from "react";
 
 export function CodeBlock({ children }: { children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
 
-  function getCode() {
-    return ref.current?.querySelector("code")?.textContent ?? "";
+  async function handleCopy(e: React.MouseEvent<HTMLButtonElement>) {
+    const code = e.currentTarget.closest(".group")?.querySelector("code");
+    if (code) {
+      await navigator.clipboard.writeText(code.textContent ?? "");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
 
   return (
-    <div ref={ref} className="group relative">
+    <div className="group relative">
       {children}
-      <CopyButton code={getCode()} />
+      <button
+        onClick={handleCopy}
+        className="absolute right-2 top-2 rounded-md border border-border bg-background/80 px-2 py-1 text-xs text-secondary opacity-0 backdrop-blur transition-opacity group-hover:opacity-100 hover:text-foreground"
+        aria-label="Copy code"
+      >
+        {copied ? "복사됨!" : "복사"}
+      </button>
     </div>
   );
 }

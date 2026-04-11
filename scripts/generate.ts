@@ -1,6 +1,6 @@
 import { config } from "dotenv";
 import { resolve } from "path";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from "fs";
 import Anthropic from "@anthropic-ai/sdk";
 import { planSeries } from "./series-planner";
 import { buildMDX, assembleMDX, improveMDX } from "./mdx-builder";
@@ -136,7 +136,6 @@ async function handleUpdate(client: Anthropic, slug: string, instruction?: strin
 }
 
 function findMDXFiles(dir: string, slug: string): string[] {
-  const { readdirSync, statSync } = require("fs");
   const results: string[] = [];
   try {
     for (const entry of readdirSync(dir)) {

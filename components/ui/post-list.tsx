@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { formatDate } from "@/lib/utils";
 
@@ -35,12 +36,13 @@ export function PostList({ posts }: { posts: PostItem[] }) {
             className="group block overflow-hidden rounded-xl border border-border bg-background transition-all hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 dark:bg-[#111113]"
           >
             {post.cover && (
-              <div className="aspect-[2/1] overflow-hidden bg-code-bg">
-                <img
+              <div className="relative aspect-[2/1] overflow-hidden bg-code-bg">
+                <Image
                   src={post.cover}
                   alt={post.title}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  loading="lazy"
+                  fill
+                  className="object-cover transition-transform duration-300 group-hover:scale-105"
+                  sizes="(max-width: 768px) 100vw, 672px"
                 />
               </div>
             )}

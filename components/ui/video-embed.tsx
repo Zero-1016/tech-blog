@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Image from "next/image";
 
 interface VideoEmbedProps {
   src: string;
@@ -31,11 +32,12 @@ export function VideoEmbed({ src, title = "Video" }: VideoEmbedProps) {
           onClick={() => setLoaded(true)}
           className="relative block w-full cursor-pointer"
         >
-          <img
+          <Image
             src={thumbnail}
             alt={title}
+            width={1280}
+            height={720}
             className="w-full"
-            loading="lazy"
           />
           <div className="absolute inset-0 flex items-center justify-center bg-black/20">
             <svg
