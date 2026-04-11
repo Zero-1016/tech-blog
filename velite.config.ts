@@ -11,6 +11,7 @@ const posts = defineCollection({
     tags: s.array(s.string()).default([]),
     series: s.string().optional(),
     seriesOrder: s.number().optional(),
+    cover: s.string().optional(),
     published: s.boolean().default(true),
     slug: s.path().transform((p) => {
       const parts = p.split("/");

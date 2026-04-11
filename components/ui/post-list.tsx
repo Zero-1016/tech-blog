@@ -10,6 +10,7 @@ interface PostItem {
   description: string;
   date: string;
   tags: string[];
+  cover?: string;
 }
 
 export function PostList({ posts }: { posts: PostItem[] }) {
@@ -18,41 +19,59 @@ export function PostList({ posts }: { posts: PostItem[] }) {
       initial="hidden"
       animate="visible"
       variants={{ visible: { transition: { staggerChildren: 0.06 } } }}
-      className="flex flex-col gap-1"
+      className="grid gap-4 sm:grid-cols-2"
     >
-      {posts.map((post) => (
+      {posts.map((post, i) => (
         <motion.article
           key={post.slug}
           variants={{
-            hidden: { opacity: 0, y: 10 },
-            visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+            hidden: { opacity: 0, y: 12 },
+            visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
           }}
-          className="-mx-3 rounded-xl px-3 py-4 transition-colors hover:bg-card-hover"
+          className={i === 0 ? "sm:col-span-2" : ""}
         >
-          <Link href={`/posts/${post.slug}`}>
-            <h2 className="text-lg font-semibold tracking-tight hover:text-accent">
-              {post.title}
-            </h2>
-            <p className="mt-1 text-sm text-secondary line-clamp-2">
-              {post.description}
-            </p>
-          </Link>
-          <div className="mt-2 flex items-center gap-3 text-xs text-secondary">
-            <time dateTime={post.date}>{formatDate(post.date)}</time>
-            {post.tags.length > 0 && (
-              <div className="flex gap-1.5">
-                {post.tags.map((tag) => (
-                  <Link
-                    key={tag}
-                    href={`/tags/${tag}`}
-                    className="rounded-md bg-code-bg px-1.5 py-0.5 transition-colors hover:bg-accent/10 hover:text-accent"
-                  >
-                    {tag}
-                  </Link>
-                ))}
+          <Link
+            href={`/posts/${post.slug}`}
+            className="group block overflow-hidden rounded-xl border border-border transition-all hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5"
+          >
+            {post.cover && (
+              <div className="aspect-[2/1] overflow-hidden bg-code-bg">
+                <img
+                  src={post.cover}
+                  alt={post.title}
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  loading="lazy"
+                />
               </div>
             )}
-          </div>
+            <div className="p-5">
+              <h2
+                className={`font-semibold tracking-tight group-hover:text-accent ${
+                  i === 0 ? "text-xl" : "text-base"
+                }`}
+              >
+                {post.title}
+              </h2>
+              <p className="mt-1.5 text-sm text-secondary line-clamp-2">
+                {post.description}
+              </p>
+              <div className="mt-3 flex items-center gap-3 text-xs text-secondary">
+                <time dateTime={post.date}>{formatDate(post.date)}</time>
+                {post.tags.length > 0 && (
+                  <div className="flex gap-1.5">
+                    {post.tags.slice(0, 3).map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-md bg-code-bg px-1.5 py-0.5"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Link>
         </motion.article>
       ))}
     </motion.div>

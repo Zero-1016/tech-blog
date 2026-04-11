@@ -1,4 +1,5 @@
 import { posts } from "#site/content";
+import { Hero } from "@/components/ui/hero";
 import { PostList } from "@/components/ui/post-list";
 
 export default function Home() {
@@ -11,24 +12,21 @@ export default function Home() {
       description: p.description,
       date: p.date,
       tags: p.tags,
+      cover: p.cover,
     }));
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-16">
-      <section className="mb-16">
-        <h1 className="text-3xl font-bold tracking-tight">Tech Blog</h1>
-        <p className="mt-3 text-lg text-secondary">
-          AI가 쓰고, 개발자가 다듬는 테크 블로그
-        </p>
-      </section>
-
-      <section>
-        {published.length > 0 ? (
-          <PostList posts={published} />
-        ) : (
-          <p className="text-secondary">아직 글이 없습니다.</p>
-        )}
-      </section>
-    </div>
+    <>
+      <Hero />
+      <div id="posts" className="mx-auto max-w-3xl px-6 py-16">
+        <section>
+          {published.length > 0 ? (
+            <PostList posts={published} />
+          ) : (
+            <p className="text-secondary">아직 글이 없습니다.</p>
+          )}
+        </section>
+      </div>
+    </>
   );
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ThemeToggle } from "./theme-toggle";
+import { LocaleToggle } from "./locale-toggle";
 import { SearchButton } from "./search-button";
 
 export function Header() {
@@ -9,8 +10,9 @@ export function Header() {
         <Link href="/" className="text-lg font-bold tracking-tight">
           Tech Blog
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <SearchButton />
+          <LocaleToggle />
           <ThemeToggle />
         </div>
       </div>

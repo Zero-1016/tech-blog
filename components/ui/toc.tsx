@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/context";
 
 interface TocEntry {
   title: string;
@@ -26,6 +27,7 @@ function flattenToc(entries: TocEntry[], depth = 2): { title: string; url: strin
 
 export function Toc({ items }: TocProps) {
   const [activeId, setActiveId] = useState("");
+  const { t } = useI18n();
   const flat = flattenToc(items);
 
   useEffect(() => {
@@ -56,7 +58,7 @@ export function Toc({ items }: TocProps) {
     <nav className="hidden xl:block">
       <div className="fixed top-28 w-56">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-secondary">
-          목차
+          {t.post.toc}
         </p>
         <ul className="flex flex-col gap-1 border-l border-border">
           {flat.map((item) => (
