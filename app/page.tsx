@@ -1,11 +1,17 @@
-import Link from "next/link";
 import { posts } from "#site/content";
-import { formatDate } from "@/lib/utils";
+import { PostList } from "@/components/ui/post-list";
 
 export default function Home() {
   const published = posts
     .filter((p) => p.published)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .map((p) => ({
+      slug: p.slug,
+      title: p.title,
+      description: p.description,
+      date: p.date,
+      tags: p.tags,
+    }));
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
@@ -17,41 +23,9 @@ export default function Home() {
       </section>
 
       <section>
-        <div className="flex flex-col gap-1">
-          {published.map((post) => (
-            <article
-              key={post.slug}
-              className="-mx-3 rounded-xl px-3 py-4 transition-colors hover:bg-card-hover"
-            >
-              <Link href={`/posts/${post.slug}`}>
-                <h2 className="text-lg font-semibold tracking-tight hover:text-accent">
-                  {post.title}
-                </h2>
-                <p className="mt-1 text-sm text-secondary line-clamp-2">
-                  {post.description}
-                </p>
-              </Link>
-              <div className="mt-2 flex items-center gap-3 text-xs text-secondary">
-                <time dateTime={post.date}>{formatDate(post.date)}</time>
-                {post.tags.length > 0 && (
-                  <div className="flex gap-1.5">
-                    {post.tags.map((tag) => (
-                      <Link
-                        key={tag}
-                        href={`/tags/${tag}`}
-                        className="rounded-md bg-code-bg px-1.5 py-0.5 transition-colors hover:bg-accent/10 hover:text-accent"
-                      >
-                        {tag}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
-
-        {published.length === 0 && (
+        {published.length > 0 ? (
+          <PostList posts={published} />
+        ) : (
           <p className="text-secondary">아직 글이 없습니다.</p>
         )}
       </section>
