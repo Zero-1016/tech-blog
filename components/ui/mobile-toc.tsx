@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useI18n } from "@/lib/i18n/context";
 
 interface TocEntry {
   title: string;
@@ -26,7 +25,6 @@ function flattenToc(entries: TocEntry[], depth = 2): { title: string; url: strin
 
 export function MobileToc({ items }: MobileTocProps) {
   const [open, setOpen] = useState(false);
-  const { t } = useI18n();
   const flat = flattenToc(items);
 
   if (flat.length === 0) return null;
@@ -39,7 +37,7 @@ export function MobileToc({ items }: MobileTocProps) {
         aria-label="Toggle table of contents"
         className="flex w-full items-center justify-between rounded-lg border border-border px-4 py-3 text-sm font-medium transition-colors hover:bg-card-hover"
       >
-        <span>{t.post.toc} ({flat.length})</span>
+        <span>목차 ({flat.length})</span>
         <svg
           width="16"
           height="16"

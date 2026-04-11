@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { useI18n } from "@/lib/i18n/context";
 
 interface TocEntry {
   title: string;
@@ -27,12 +26,11 @@ function flattenToc(entries: TocEntry[], depth = 2): { title: string; url: strin
 
 export function Toc({ items }: TocProps) {
   const [activeId, setActiveId] = useState("");
-  const { t } = useI18n();
   const flat = useMemo(() => flattenToc(items), [items]);
 
   useEffect(() => {
     const headings = flat
-      .map((item) => document.querySelector(item.url))
+      .map((item) => document.getElementById(decodeURIComponent(item.url.slice(1))))
       .filter(Boolean) as Element[];
 
     if (headings.length === 0) return;
@@ -58,7 +56,7 @@ export function Toc({ items }: TocProps) {
     <nav className="hidden xl:block">
       <div className="fixed top-28 w-56">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-secondary">
-          {t.post.toc}
+          목차
         </p>
         <ul className="flex flex-col gap-1 border-l border-border">
           {flat.map((item) => (
@@ -67,7 +65,9 @@ export function Toc({ items }: TocProps) {
                 href={item.url}
                 onClick={(e) => {
                   e.preventDefault();
-                  const el = document.querySelector(item.url);
+                  const el = document.getElementById(
+                    decodeURIComponent(item.url.slice(1))
+                  );
                   if (el) {
                     el.scrollIntoView({ behavior: "smooth" });
                     setActiveId(item.url);
