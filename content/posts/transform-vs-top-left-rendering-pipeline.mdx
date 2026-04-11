@@ -1,0 +1,216 @@
+---
+title: "애니메이션이 끊기는 진짜 이유"
+description: "top/left는 매 프레임 레이아웃을 다시 계산합니다. transform은 그 과정을 건너뛰죠."
+date: 2026-04-11
+tags: ["CSS", "성능", "애니메이션"]
+published: true
+---
+
+드롭다운 메뉴가 아래로 쓱 내려오는 애니메이션을 만들었어요. 로컬에선 부드러운데 모바일에서 보니까 뚝뚝 끊깁니다. DevTools Performance 탭을 켜보니 초록색 막대(Rendering)가 한가득. "position을 `top`에서 `transform`으로 바꾸기만 해도 된다"는 조언은 많이 들어봤지만, 왜 그런지 제대로 짚고 넘어간 적은 없었거든요.
+
+이유는 브라우저가 화면을 그리는 순서에 있습니다.
+
+## 브라우저가 한 프레임을 그리는 순서
+
+사용자가 버튼을 누르든, 스크롤을 내리든, CSS 애니메이션이 돌아가든, 브라우저는 16.67ms 안에 한 프레임을 뽑아내야 해요(60fps 기준). 그 짧은 시간 동안 아래 단계를 순서대로 밟습니다.<Cite id="web-dev-rendering" />
+
+<AnimatedStep steps={[
+  { title: "1. JavaScript", content: "이벤트 핸들러, setTimeout, requestAnimationFrame 콜백 등 스타일 변경을 일으키는 코드가 먼저 실행돼요." },
+  { title: "2. Style", content: "어떤 CSS 규칙이 어떤 요소에 적용되는지 매칭하고 최종 computed style을 계산합니다." },
+  { title: "3. Layout", content: "각 요소가 어디에 얼마만큼의 크기로 놓일지를 계산해요. 한 요소가 움직이면 형제·부모까지 연쇄적으로 다시 측정됩니다." },
+  { title: "4. Paint", content: "계산된 geometry 위에 색·그림자·텍스트 같은 픽셀을 채워 넣어요. 한 장의 비트맵이 아니라 여러 레이어로 나눠서 그립니다." },
+  { title: "5. Composite", content: "완성된 레이어들을 GPU에서 올바른 순서로 합쳐 화면에 띄워요. 이 단계는 메인 스레드 밖에서도 돌릴 수 있습니다." }
+]} />
+
+핵심은 이겁니다. <strong>어떤 CSS 속성을 건드렸냐에 따라 이 파이프라인에서 출발하는 지점이 달라져요.</strong> 어떤 속성은 맨 위 Layout부터 다시 뛰고, 어떤 속성은 맨 아래 Composite만 건드리고 끝납니다.
+
+## top과 left는 왜 Layout부터 다시 뛰나
+
+`top: 100px` → `top: 120px`로 바꾸면 브라우저는 이렇게 생각합니다. "이 요소 위치가 바뀌었네. 그럼 다음 형제는 어디로 밀려야 하지? 부모 높이는 그대로인가? 자식들도 따라 움직여야 하나?" 요소의 기하학적 위치가 변하면 주변 요소까지 영향을 받을 수 있으므로, 파이프라인을 Layout 단계부터 다시 돌려야 합니다.
+
+Layout이 끝나면 Paint도 다시 해야 해요. 새 위치에 픽셀을 다시 칠해야 하니까요. 그리고 마지막으로 Composite까지.
+
+```
+top 변경:  Style → Layout → Paint → Composite
+```
+
+매 프레임마다 네 단계 전부. 60fps면 초당 60번. 복잡한 레이아웃일수록 한 번의 Layout이 수 ms씩 먹습니다. 1~2ms만 넘어가도 16.67ms 예산이 금방 쪼들리죠.
+
+<CodePlayground
+  code={`function MoveWithTopLeft() {
+    return (
+      <div className="stage">
+        <div className="ball ball--top" />
+        <p className="hint">top/left - Layout부터 매 프레임 재계산</p>
+      </div>
+    );
+  }`}
+  css={`.stage {
+    position: relative;
+    height: 160px;
+    background: #0f172a;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .ball {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f97316, #ef4444);
+  }
+
+  .ball--top {
+    animation: moveTop 1.6s ease-in-out infinite alternate;
+  }
+
+  @keyframes moveTop {
+    to {
+      top: 80px;
+      left: calc(100% - 68px);
+    }
+  }
+
+  .hint {
+    position: absolute;
+    bottom: 8px;
+    left: 12px;
+    margin: 0;
+    color: #94a3b8;
+    font-size: 12px;
+  }`}
+  template="react"
+/>
+
+## transform은 왜 Composite만 건드려도 되나
+
+`transform: translate(120px, 0)`을 걸면 이야기가 달라집니다. 브라우저는 이 요소를 별도의 합성 레이어(compositor layer)로 따로 그려둔 뒤, 그 레이어를 GPU에서 어디에 배치할지만 바꿔요. 레이어 내부 픽셀은 이미 그려져 있으니 Paint가 필요 없고, 주변 요소의 위치에도 영향을 주지 않아서 Layout도 필요 없어요.<Cite id="web-dev-animations" />
+
+```
+transform 변경:  Style → Composite
+```
+
+Layout과 Paint를 통째로 건너뛰는 거죠. 게다가 Composite 단계는 대부분 메인 스레드 밖, GPU 위에서 돕니다. 메인 스레드가 다른 JS를 처리하느라 바빠도 애니메이션은 부드럽게 흘러가요.
+
+<CodePlayground
+  code={`function MoveWithTransform() {
+    return (
+      <div className="stage">
+        <div className="ball ball--transform" />
+        <p className="hint">transform - Composite만 갱신</p>
+      </div>
+    );
+  }`}
+  css={`.stage {
+    position: relative;
+    height: 160px;
+    background: #0f172a;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .ball {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #22d3ee, #6366f1);
+  }
+
+  .ball--transform {
+    animation: moveTransform 1.6s ease-in-out infinite alternate;
+  }
+
+  @keyframes moveTransform {
+    to {
+      transform: translate(220px, 60px);
+    }
+  }
+
+  .hint {
+    position: absolute;
+    bottom: 8px;
+    left: 12px;
+    margin: 0;
+    color: #94a3b8;
+    font-size: 12px;
+  }`}
+  template="react"
+/>
+
+web.dev에서 측정한 결과에 따르면 동일한 움직임을 `top/left`로 돌리면 약 50% 프레임이 드롭되는데, `transform`으로 바꾸면 99%가 유지된다고 해요. 같은 "공이 오른쪽으로 이동"인데 체감이 전혀 다른 이유가 여기에 있습니다.
+
+## opacity도 같은 편, 그런데 background-color는?
+
+`opacity`도 Composite만 건드리는 친구예요. 레이어 전체의 투명도를 GPU에서 곱해주면 끝이니까 Paint가 필요 없어요. 페이드 인/아웃을 `display: none ↔ block` 토글 대신 opacity 전환으로 하라는 조언이 여기서 나옵니다.
+
+반면 `background-color`는 좀 애매해요. Layout은 안 건드리지만, 색을 바꾸려면 그 요소를 다시 칠해야(Paint) 합니다.
+
+```
+background-color 변경:  Style → Paint → Composite
+```
+
+Layout을 건너뛴다는 점에서 `top/left`보다는 낫지만, Composite-only인 `transform`/`opacity`보단 느려요. 정적인 hover 색 전환 정도는 아무 문제없는데, 60fps로 색을 그라데이션하듯 매 프레임 바꾸는 애니메이션은 피하는 게 좋습니다.
+
+<Callout variant="tip">
+**기억할 규칙**
+
+• 움직임(이동·회전·크기) → `transform`<br/>
+• 나타남·사라짐 → `opacity`<br/>
+• 색상 전환 → 가능하면 짧은 transition에 한정
+
+CSS Triggers(csstriggers.com) 같은 사이트에 속성별로 어떤 단계가 트리거되는지 표로 정리돼 있어요. 새 속성으로 애니메이션할 때 한 번씩 찾아보면 버벅임을 미리 예방할 수 있습니다.
+</Callout>
+
+## 그럼 will-change는 어디에 쓰나
+
+"transform으로 바꿨는데도 첫 프레임이 미묘하게 걸린다"는 경우가 있어요. 브라우저가 합성 레이어를 미리 만들어두지 않았다가, 애니메이션이 시작되는 순간 부랴부랴 만드느라 생기는 일입니다. 이럴 때 `will-change: transform`으로 귀띔해줄 수 있어요.
+
+다만 이 속성은 아무 데나 뿌리면 오히려 성능을 갉아먹는 양날의 검입니다. 언제 써야 하고 언제 쓰면 안 되는지는 [will-change로 브라우저에 미리 귀띔하기](/posts/css-will-change)에서 자세히 다뤘으니 그쪽을 참고해 주세요.
+
+## 마무리 - 애니메이션 만들기 전에 체크할 것
+
+<Callout variant="info">
+**렌더링 비용 체크리스트**
+
+☐ 위치 이동을 `top/left`가 아닌 `transform: translate()`로 할 수 있는가?<br/>
+☐ 보이기/숨기기를 `display` 토글 대신 `opacity` 전환으로 할 수 있는가?<br/>
+☐ 매 프레임 바뀌는 속성이 Layout이나 Paint를 트리거하진 않는가?<br/>
+☐ DevTools Performance 탭에서 Rendering(초록) 막대가 과하게 쌓이진 않는가?
+</Callout>
+
+브라우저가 한 프레임을 그리는 데 허락된 시간은 16.67ms뿐입니다. 그 짧은 예산을 Layout·Paint에 소진하지 않도록 파이프라인의 가장 끝 단계(Composite)만 건드리는 게 부드러운 애니메이션의 출발점이에요. 다음에 애니메이션이 버벅이면 Performance 탭을 먼저 열어보세요. 어느 단계에서 시간이 새고 있는지 한눈에 보입니다.
+
+<References
+  items={[
+    {
+      id: "web-dev-animations",
+      title: "web.dev - Animations and performance",
+      href: "https://web.dev/articles/animations-guide",
+      description: "transform/opacity가 Composite 단계에만 머무는 이유와 FPS 비교 실험",
+    },
+    {
+      id: "web-dev-rendering",
+      title: "web.dev - Rendering performance",
+      href: "https://web.dev/articles/rendering-performance",
+      description: "픽셀 파이프라인 5단계(JS → Style → Layout → Paint → Composite) 원문",
+    },
+    {
+      id: "mdn-animation-perf",
+      title: "MDN - CSS and JavaScript animation performance",
+      href: "https://developer.mozilla.org/en-US/docs/Web/Performance/Guides/CSS_JavaScript_animation_performance",
+      description: "컴포지터 레이어와 off-main-thread animation 설명",
+    },
+    {
+      id: "mdn-will-change",
+      title: "MDN - will-change",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/will-change",
+      description: "will-change가 합성 레이어 승격에 미치는 영향과 주의사항",
+    },
+  ]}
+/>

@@ -1,0 +1,202 @@
+---
+title: "스타일링, 취향이 아니라 기준"
+description: "Tailwind냐 CSS-in-JS냐는 취향 싸움이 아닙니다. 각자 다른 문제를 푸는 도구예요."
+date: 2026-04-11
+tags: ["CSS", "Tailwind", "CSS-in-JS", "CSS Modules"]
+published: true
+---
+
+새 프로젝트를 세팅하는데 팀 채팅에 "스타일링 뭐로 할까요"를 던지면 세 가지 답이 돌아옵니다. "그냥 Tailwind 쓰죠." "우리 styled-components 잘 쓰고 있잖아요." "CSS Modules로도 충분해요." 셋 다 틀린 말이 아닙니다. 그래서 더 혼란스럽죠.
+
+이 글은 "뭐가 제일 좋은가"를 정하려는 게 아니에요. 세 방식이 각각 어떤 문제를 풀려고 태어났는지 짚고, 프로젝트 조건에 따라 어느 쪽이 덜 아플지 고르는 기준을 세워봅니다.
+
+## 똑같은 버튼, 세 가지 방법
+
+같은 버튼을 세 방식으로 써보면 "어디에 어떻게" 스타일이 놓이는지가 눈에 바로 들어옵니다.
+
+<AnimatedStep steps={[
+  {
+    title: "Tailwind - 클래스 나열",
+    content: "마크업 위에 유틸리티 클래스를 직접 나열합니다. 내가 만든 클래스명은 0개.",
+    code: `<button className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600">\n  저장\n</button>`
+  },
+  {
+    title: "CSS Modules - 로컬 스코프 CSS",
+    content: "평범한 CSS를 쓰되 파일 단위로 자동 스코핑. 빌드타임에 고유 해시로 변환됩니다.",
+    code: `import styles from "./Button.module.css";\n\n<button className={styles.primary}>저장</button>\n\n/* Button.module.css */\n.primary {\n  background: #3b82f6;\n  border-radius: 8px;\n}`
+  },
+  {
+    title: "CSS-in-JS - JS가 곧 스타일",
+    content: "자바스크립트 안에 템플릿 리터럴로 스타일을 선언. 런타임에 스타일이 주입됩니다.",
+    code: `import styled from "styled-components";\n\nconst Button = styled.button\`\n  background: #3b82f6;\n  border-radius: 8px;\n  &:hover { background: #2563eb; }\n\`;`
+  }
+]} />
+
+표면적으론 "문법만 다른 것"처럼 보이지만, 실제로 세 방식은 **다른 층위에서 다른 문제**를 풀고 있습니다.
+
+## 스코프 충돌: 셋이 공통으로 푸는 문제
+
+글로벌 CSS 지옥을 겪은 적 있죠. A 페이지에서 `.card`를 정의했는데 B 페이지에서 다른 의미로 썼고, 나중에 B를 고치니까 A가 부서지는 그 상황. 셋 다 이 문제를 해결하려고 태어났습니다. 다만 푸는 방법이 달라요.
+
+CSS Modules는 파일 단위로 자동 해싱합니다. `.card`라고 써도 최종 결과는 `Button_card__x8f2a`처럼 바뀌죠. 공식 저장소가 "A CSS Module is a CSS file where all class names and animation names are scoped locally by default"라고 못박습니다.<Cite id="css-modules-repo" />
+
+styled-components는 컴포넌트가 곧 스타일의 단위예요. `const Card = styled.div` 한 줄을 쓰면 컴포넌트가 마운트될 때 고유 클래스가 주입됩니다. 이름 자체를 내가 짓지 않으니 충돌할 일이 없죠.<Cite id="styled-basics" />
+
+Tailwind는 접근이 완전히 달라요. **애초에 내 클래스를 만들지 않습니다.** `bg-blue-500`, `px-4` 같은 미리 정의된 유틸리티만 조합하니까 "내 이름이 다른 사람 이름과 겹친다"는 사건이 존재하지 않아요.<Cite id="tailwind-utility" />
+
+## 런타임 vs 빌드타임, 그리고 RSC라는 균열
+
+여기서부터 세 방식이 크게 갈라집니다.
+
+Tailwind와 CSS Modules는 **빌드타임에 끝납니다.** 빌드가 끝나면 그냥 정적 CSS 파일 한 장이 나와요. 브라우저는 평범한 스타일시트를 로드할 뿐, 런타임에 스타일을 만들 일이 없습니다.
+
+styled-components나 Emotion은 다릅니다. 컴포넌트가 렌더될 때마다 템플릿 리터럴을 파싱하고, 해시를 만들고, `<style>` 태그에 주입하는 작업이 브라우저에서 벌어져요. 공식 문서도 "dynamic interpolation requires computation at render time"이라고 인정합니다.
+
+<Callout variant="warning">
+React Server Components가 등장하면서 이 차이가 결정적으로 커졌습니다. styled-components는 React Context에 의존하는데, Context는 서버 컴포넌트에서 지원되지 않아요. Next.js App Router에서 styled-components를 쓰면 컴포넌트 트리가 사실상 전부 `"use client"`가 되어 RSC의 장점이 사라집니다. 공식 이슈에서도 메인테이너가 "the core problem is that styled components use context, which is not supported on server side"라고 확인한 상태예요.<Cite id="styled-rsc-issue" />
+</Callout>
+
+최근 vanilla-extract나 Linaria 같은 **zero-runtime CSS-in-JS**가 뜨는 이유가 여기 있어요. CSS-in-JS의 작성감은 유지하면서 빌드타임에 정적 CSS로 뽑아버리는 접근이죠.<Cite id="vanilla-extract" />
+
+## 동적 스타일은 어떻게 다를까
+
+"prop에 따라 색이 바뀌는 버튼"을 각 방식이 어떻게 처리하는지 보면 trade-off가 선명해집니다.
+
+<CodePlayground
+  code={`function DynamicButton() {
+    const [variant, setVariant] = React.useState("primary");
+    return (
+      <div className="wrap">
+        <div className="row">
+          <button onClick={() => setVariant("primary")}>primary</button>
+          <button onClick={() => setVariant("danger")}>danger</button>
+          <button onClick={() => setVariant("ghost")}>ghost</button>
+        </div>
+        <button className={\`btn btn--\${variant}\`}>현재: {variant}</button>
+      </div>
+    );
+  }`}
+  css={`.wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+    font-family: system-ui, sans-serif;
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .row button {
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    background: #f9fafb;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .btn {
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: none;
+    color: white;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn--primary {
+    background: #3b82f6;
+  }
+
+  .btn--primary:hover {
+    background: #2563eb;
+  }
+
+  .btn--danger {
+    background: #ef4444;
+  }
+
+  .btn--danger:hover {
+    background: #dc2626;
+  }
+
+  .btn--ghost {
+    background: transparent;
+    color: #374151;
+    border: 1px solid #d1d5db;
+  }
+
+  .btn--ghost:hover {
+    background: #f3f4f6;
+  }`}
+  template="react"
+/>
+
+이건 **modifier 클래스 패턴**입니다. Tailwind든 CSS Modules든 같은 방식으로 풀려요. variant 개수만큼 클래스를 미리 정의해두고 JS에서 조합합니다. 예측 가능하고 빠르고 런타임 비용이 0이죠.
+
+CSS-in-JS는 여기서 한 발짝 더 나갑니다. `` background: ${props => props.theme.primary} `` 같은 식으로 런타임 prop을 그대로 스타일에 꽂을 수 있어요. 대신 그만큼 런타임 비용을 냅니다. 실무 감각으로는 이렇게 정리돼요. 값이 유한하면(primary/danger/ghost 같은) 클래스 조합으로 충분하고, 값이 사용자 입력처럼 무한하면 그때서야 인라인 스타일이나 CSS 변수로 가는 게 맞아요. 대부분의 variant는 유한합니다.
+
+## 그래서 어떻게 고를까
+
+세 질문을 순서대로 던지면 대부분 답이 나옵니다.
+
+### 1) React Server Components를 쓰는가
+
+Next.js App Router, Remix 등 RSC 기반이라면 기존 런타임 CSS-in-JS는 사실상 탈락입니다. 강행하면 트리 대부분이 client로 떨어져요. 남는 선택지는 **Tailwind / CSS Modules / vanilla-extract** 계열입니다.
+
+### 2) 디자인 토큰이 이미 있는가
+
+팀에 디자인 토큰이 명확히 정의돼 있고 가능한 값이 유한하다면 Tailwind가 거의 항상 잘 맞아요. 유틸리티가 곧 토큰이라 **토큰 밖으로 벗어나는 걸 막아주는 가드레일** 역할까지 겸합니다. 반대로 값이 매번 달라지는 마케팅 랜딩이나 CMS 기반이면 Tailwind의 제약이 거추장스러울 수 있어요. 그럴 땐 CSS Modules가 더 자유롭습니다.
+
+### 3) 팀에 CSS 배경이 어느 정도 있는가
+
+CSS를 오래 써온 팀이면 CSS Modules가 마찰이 가장 적어요. 새로운 문법을 배울 게 없고 기존 지식이 그대로 쓰입니다. 반대로 주니어 비중이 높거나 빠른 실행이 중요하면 Tailwind의 **"이름 짓기 면제권"** 이 생산성을 크게 올려주죠.
+
+<Callout variant="tip">
+하나만 고를 필요도 없어요. Tailwind와 CSS Modules는 공존이 쉽습니다. 전역 레이아웃은 Tailwind로 빠르게, 복잡한 애니메이션이 있는 차트 컴포넌트는 CSS Modules로 따로. 둘 다 빌드타임 정적 CSS라서 겹쳐 써도 런타임 비용이 없습니다.
+</Callout>
+
+## 한 걸음 더
+
+"뭐가 제일 좋나요"는 함정 질문이에요. 실전 질문은 **"우리 프로젝트 조건에서 뭐가 제일 덜 아픈가"** 입니다.
+
+2026년 시점에서 React + 신규 프로젝트 + 서버 컴포넌트 조합이라면 Tailwind나 zero-runtime 계열(vanilla-extract, Panda CSS)이 가장 안전한 기본값이에요. 기존 styled-components 코드베이스면 당장 갈아엎을 필요는 없고, RSC로 넘어갈 시점에 한 번에 마이그레이션하는 편이 낫습니다. CSS를 오래 써온 팀의 새 프로젝트면 CSS Modules로 시작해도 전혀 손색이 없고요.
+
+어느 쪽을 고르든, 그 선택을 왜 했는지만 팀 안에서 합의돼 있으면 됩니다. 스타일링은 도구지 신앙이 아니거든요.
+
+<References
+  items={[
+    {
+      id: "tailwind-utility",
+      title: "Tailwind CSS - Styling with utility classes",
+      href: "https://tailwindcss.com/docs/styling-with-utility-classes",
+      description: "유틸리티 우선 철학, 인라인 스타일과의 차이, 중복 관리 패턴",
+    },
+    {
+      id: "css-modules-repo",
+      title: "css-modules/css-modules (공식 저장소)",
+      href: "https://github.com/css-modules/css-modules",
+      description: "로컬 스코프 정의와 ICSS 컴파일 구조",
+    },
+    {
+      id: "styled-basics",
+      title: "styled-components - Basics",
+      href: "https://styled-components.com/docs/basics",
+      description: "컴포넌트 결속 스타일과 런타임 비용 설명",
+    },
+    {
+      id: "styled-rsc-issue",
+      title: "styled-components Issue #4025 - RSC 호환성 논의",
+      href: "https://github.com/styled-components/styled-components/issues/4025",
+      description: "Context 의존성과 Next.js App Router 충돌 근거",
+    },
+    {
+      id: "vanilla-extract",
+      title: "vanilla-extract 공식 사이트",
+      href: "https://vanilla-extract.style/",
+      description: "zero-runtime CSS-in-JS 접근의 근거와 철학",
+    },
+  ]}
+/>
