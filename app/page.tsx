@@ -2,6 +2,7 @@ import Link from "next/link";
 import { posts } from "#site/content";
 import { Hero } from "@/components/ui/hero";
 import { PostList } from "@/components/ui/post-list";
+import { siteConfig, SITE_URL } from "@/lib/site";
 
 const POPULAR_TAG_MIN_COUNT = 3;
 const POPULAR_TAG_LIMIT = 8;
@@ -72,8 +73,46 @@ export default function Home() {
       }));
     });
 
+  const websiteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: siteConfig.name,
+    url: SITE_URL,
+    description: siteConfig.description,
+    inLanguage: "ko-KR",
+    publisher: {
+      "@type": "Person",
+      name: siteConfig.author,
+    },
+  };
+
+  const blogJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    name: siteConfig.name,
+    url: SITE_URL,
+    description: siteConfig.description,
+    inLanguage: "ko-KR",
+    blogPost: published.slice(0, 10).map((p) => ({
+      "@type": "BlogPosting",
+      headline: p.title,
+      description: p.description,
+      datePublished: new Date(p.date).toISOString(),
+      url: `${SITE_URL}/posts/${p.slug}`,
+      keywords: p.tags.join(", "),
+    })),
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(blogJsonLd) }}
+      />
       <Hero />
       <div id="posts" className="mx-auto max-w-3xl px-6 py-16">
         {popularTags.length > 0 && (

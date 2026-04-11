@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
+    "prebuild": "tsx scripts/generate-seo.ts",
     "build": "next build --webpack",
+    "seo:generate": "tsx scripts/generate-seo.ts",
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write .",

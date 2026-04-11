@@ -16,6 +16,10 @@
 # velite
 .velite
 
+# generated at build time
+/public/sitemap.xml
+/public/robots.txt
+
 # claude code (local config)
 .claude/skills/
 

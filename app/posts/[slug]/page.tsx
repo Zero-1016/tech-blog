@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { posts } from "#site/content";
 import { formatCardDate } from "@/lib/utils";
 import { readingTime } from "@/lib/reading-time";
+import { siteConfig, SITE_URL } from "@/lib/site";
 import { MDXContent } from "@/components/mdx/mdx-content";
 import { SeriesNav } from "@/components/ui/series-nav";
 import { Toc } from "@/components/ui/toc";
@@ -24,19 +26,36 @@ export function generateStaticParams() {
   return posts.filter((p) => p.published).map((p) => ({ slug: p.slug }));
 }
 
-export async function generateMetadata({ params }: Props) {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const post = getPost(slug);
   if (!post) return {};
+
   const ogUrl = `/og?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description)}`;
+  const canonical = `/posts/${post.slug}`;
+  const publishedTime = new Date(post.date).toISOString();
+
   return {
     title: post.title,
     description: post.description,
+    keywords: post.tags,
+    authors: [{ name: siteConfig.author }],
+    alternates: {
+      canonical,
+    },
     openGraph: {
+      type: "article",
+      locale: siteConfig.locale,
+      url: `${SITE_URL}${canonical}`,
+      siteName: siteConfig.name,
       title: post.title,
       description: post.description,
-      type: "article",
-      images: [{ url: ogUrl, width: 1200, height: 630 }],
+      publishedTime,
+      modifiedTime: publishedTime,
+      authors: [siteConfig.author],
+      tags: post.tags,
+      section: post.series ?? (post.tags[0] || "Tech"),
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: post.title }],
     },
     twitter: {
       card: "summary_large_image",
@@ -56,8 +75,60 @@ export default async function PostPage({ params }: Props) {
     ? [...post.toc, { title: "참고 자료", url: "#references", items: [] }]
     : post.toc;
 
+  const postUrl = `${SITE_URL}/posts/${post.slug}`;
+  const publishedIso = new Date(post.date).toISOString();
+  const ogImageUrl = `${SITE_URL}/og?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description)}`;
+
+  const blogPostingJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.description,
+    image: [ogImageUrl],
+    datePublished: publishedIso,
+    dateModified: publishedIso,
+    author: {
+      "@type": "Person",
+      name: siteConfig.author,
+      url: SITE_URL,
+    },
+    publisher: {
+      "@type": "Organization",
+      name: siteConfig.name,
+      logo: {
+        "@type": "ImageObject",
+        url: `${SITE_URL}/android-chrome-512x512.png`,
+      },
+    },
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": postUrl,
+    },
+    keywords: post.tags.join(", "),
+    inLanguage: "ko-KR",
+    articleSection: post.series ?? post.tags[0] ?? "Tech",
+  };
+
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "홈", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "글", item: `${SITE_URL}/#posts` },
+      { "@type": "ListItem", position: 3, name: post.title, item: postUrl },
+    ],
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(blogPostingJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
       <ScrollProgress />
       <div className="relative mx-auto max-w-5xl px-6 py-16">
         <div className="xl:flex xl:gap-16">

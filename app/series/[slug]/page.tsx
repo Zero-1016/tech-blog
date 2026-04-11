@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { posts } from "#site/content";
 import { formatCardDate } from "@/lib/utils";
+import { siteConfig, SITE_URL } from "@/lib/site";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -25,11 +27,39 @@ export function generateStaticParams() {
   return getAllSeries().map((s) => ({ slug: s }));
 }
 
-export async function generateMetadata({ params }: Props) {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const seriesPosts = getSeriesPosts(slug);
   if (seriesPosts.length === 0) return {};
-  return { title: `${slug} 시리즈` };
+
+  const title = `${slug} 시리즈`;
+  const description = `${slug}에 관한 ${seriesPosts.length}편의 글 모음 — ${seriesPosts
+    .slice(0, 3)
+    .map((p) => p.title)
+    .join(", ")}${seriesPosts.length > 3 ? " 외" : ""}.`;
+  const canonical = `/series/${encodeURIComponent(slug)}`;
+  const ogUrl = `/og?title=${encodeURIComponent(title)}&description=${encodeURIComponent(description)}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "website",
+      locale: siteConfig.locale,
+      url: `${SITE_URL}${canonical}`,
+      siteName: siteConfig.name,
+      title,
+      description,
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogUrl],
+    },
+  };
 }
 
 export default async function SeriesPage({ params }: Props) {
