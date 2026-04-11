@@ -1,0 +1,9 @@
+node_modules
+.next
+.velite
+pnpm-lock.yaml
+public/static
+
+# MDX는 prettier의 multi-line template literal 처리가 깨져서 제외.
+# CodePlayground 안 코드는 scripts/format-post.ts로 별도 포매팅.
+**/*.mdx
