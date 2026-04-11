@@ -41,12 +41,16 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* prose styles for MDX content */
 .prose {
   max-width: 42rem;
   line-height: 1.8;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .prose h2 {
