@@ -17,6 +17,7 @@ const posts = defineCollection({
       const parts = p.split("/");
       return parts[parts.length - 1];
     }),
+    toc: s.toc(),
     body: s.mdx(),
   }),
 });

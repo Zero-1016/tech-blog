@@ -3,6 +3,7 @@ import { posts } from "#site/content";
 import { formatDate } from "@/lib/utils";
 import { MDXContent } from "@/components/mdx/mdx-content";
 import { SeriesNav } from "@/components/ui/series-nav";
+import { Toc } from "@/components/ui/toc";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -34,44 +35,49 @@ export default async function PostPage({ params }: Props) {
   if (!post) notFound();
 
   return (
-    <article className="mx-auto max-w-3xl px-6 py-16">
-      <header className="mb-10">
-        <h1 className="text-3xl font-bold tracking-tight leading-tight">
-          {post.title}
-        </h1>
-        <p className="mt-3 text-lg text-secondary">{post.description}</p>
-        <div className="mt-4 flex items-center gap-3 text-sm text-secondary">
-          <time dateTime={post.date}>{formatDate(post.date)}</time>
-          {post.tags.length > 0 && (
-            <div className="flex gap-1.5">
-              {post.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-md bg-code-bg px-2 py-0.5 text-xs"
-                >
-                  {tag}
-                </span>
-              ))}
+    <div className="relative mx-auto max-w-5xl px-6 py-16">
+      <div className="xl:flex xl:gap-16">
+        <article className="min-w-0 max-w-3xl flex-1">
+          <header className="mb-10">
+            <h1 className="text-3xl font-bold tracking-tight leading-tight">
+              {post.title}
+            </h1>
+            <p className="mt-3 text-lg text-secondary">{post.description}</p>
+            <div className="mt-4 flex items-center gap-3 text-sm text-secondary">
+              <time dateTime={post.date}>{formatDate(post.date)}</time>
+              {post.tags.length > 0 && (
+                <div className="flex gap-1.5">
+                  {post.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-md bg-code-bg px-2 py-0.5 text-xs"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
+          </header>
+          <div className="prose">
+            <MDXContent code={post.body} />
+          </div>
+          {post.series && (
+            <SeriesNav
+              series={post.series}
+              posts={posts
+                .filter((p) => p.published && p.series === post.series)
+                .map((p) => ({
+                  slug: p.slug,
+                  title: p.title,
+                  seriesOrder: p.seriesOrder,
+                }))}
+              currentSlug={post.slug}
+            />
           )}
-        </div>
-      </header>
-      <div className="prose">
-        <MDXContent code={post.body} />
+        </article>
+        {post.toc.length > 0 && <Toc items={post.toc} />}
       </div>
-      {post.series && (
-        <SeriesNav
-          series={post.series}
-          posts={posts
-            .filter((p) => p.published && p.series === post.series)
-            .map((p) => ({
-              slug: p.slug,
-              title: p.title,
-              seriesOrder: p.seriesOrder,
-            }))}
-          currentSlug={post.slug}
-        />
-      )}
-    </article>
+    </div>
   );
 }
