@@ -21,14 +21,24 @@ export default function RootLayout({
       <head>
         <link
           rel="preload"
-          as="style"
+          as="font"
+          type="font/woff2"
+          href="/fonts/Pretendard-Regular.subset.woff2"
           crossOrigin="anonymous"
-          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
         />
         <link
-          rel="stylesheet"
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="/fonts/Pretendard-Medium.subset.woff2"
           crossOrigin="anonymous"
-          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+        />
+        <link
+          rel="preload"
+          as="font"
+          type="font/woff2"
+          href="/fonts/Pretendard-Bold.subset.woff2"
+          crossOrigin="anonymous"
         />
       </head>
       <body className="min-h-screen flex flex-col antialiased">
