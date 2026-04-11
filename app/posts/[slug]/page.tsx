@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { posts } from "#site/content";
 import { formatDate } from "@/lib/utils";
 import { MDXContent } from "@/components/mdx/mdx-content";
+import { SeriesNav } from "@/components/ui/series-nav";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -58,6 +59,19 @@ export default async function PostPage({ params }: Props) {
       <div className="prose">
         <MDXContent code={post.body} />
       </div>
+      {post.series && (
+        <SeriesNav
+          series={post.series}
+          posts={posts
+            .filter((p) => p.published && p.series === post.series)
+            .map((p) => ({
+              slug: p.slug,
+              title: p.title,
+              seriesOrder: p.seriesOrder,
+            }))}
+          currentSlug={post.slug}
+        />
+      )}
     </article>
   );
 }
