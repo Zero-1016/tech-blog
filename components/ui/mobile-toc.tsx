@@ -35,6 +35,8 @@ export function MobileToc({ items }: MobileTocProps) {
     <div className="mb-8 xl:hidden">
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label="Toggle table of contents"
         className="flex w-full items-center justify-between rounded-lg border border-border px-4 py-3 text-sm font-medium transition-colors hover:bg-card-hover"
       >
         <span>{t.post.toc} ({flat.length})</span>
