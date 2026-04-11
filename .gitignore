@@ -18,8 +18,6 @@
 
 # claude code (local config)
 .claude/skills/
-.claude/hooks/
-.claude/settings.json
 
 # playwright
 /test-results/
