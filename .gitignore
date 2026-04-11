@@ -19,6 +19,12 @@
 # gstack skills (local install)
 .claude/skills/
 
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # next.js
 /.next/
 /out/
