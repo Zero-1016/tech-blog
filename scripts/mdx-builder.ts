@@ -89,3 +89,32 @@ published: true
 
   return `${frontmatter}\n\n${body}\n`;
 }
+
+export async function improveMDX(
+  client: Anthropic,
+  original: string,
+  instruction?: string
+): Promise<string> {
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 4000,
+    system: `당신은 기술 블로그 편집자입니다. 기존 MDX 글을 개선합니다.
+규칙:
+- frontmatter는 그대로 유지
+- 인터랙티브 컴포넌트를 더 활용
+- 설명을 명확하게, 예제를 풍부하게
+- 전체 MDX를 반환 (frontmatter 포함)
+
+${COMPONENT_SCHEMAS}`,
+    messages: [
+      {
+        role: "user",
+        content: `다음 MDX 글을 개선해주세요.${instruction ? `\n\n지시: ${instruction}` : ""}\n\n---\n${original}`,
+      },
+    ],
+  });
+
+  const text =
+    response.content[0].type === "text" ? response.content[0].text : "";
+  return text;
+}

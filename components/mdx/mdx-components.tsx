@@ -4,6 +4,7 @@ import { Callout } from "@/components/ui/callout";
 import { CodePlayground } from "@/components/ui/code-playground";
 import { AnimatedStep } from "@/components/ui/animated-step";
 import { VideoEmbed } from "@/components/ui/video-embed";
+import { CodeBlock } from "@/components/mdx/code-block";
 
 function slugify(text: string): string {
   return text
@@ -33,6 +34,7 @@ function Heading({ level, children }: { level: 2 | 3; children?: ReactNode }) {
 export const mdxComponents: MDXComponents = {
   h2: (props) => <Heading level={2} {...props} />,
   h3: (props) => <Heading level={3} {...props} />,
+  pre: (props) => <CodeBlock>{<pre {...props} />}</CodeBlock>,
   Callout,
   CodePlayground,
   AnimatedStep,
