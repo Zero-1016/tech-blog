@@ -1,0 +1,275 @@
+---
+title: "white-space 속성으로 공백과 줄바꿈 제어하기"
+description: "white-space 속성의 다양한 값들을 활용해 공백, 탭, 줄바꿈을 자유자재로 제어하는 방법을 학습합니다."
+date: 2026-04-11
+tags: ["CSS","텍스트","제어"]
+series: "CSS 텍스트 제어 완전정복: word-break와 white-space"
+seriesOrder: 3
+published: true
+---
+
+웹 개발을 하다 보면 텍스트의 공백과 줄바꿈을 원하는 대로 제어하고 싶을 때가 있습니다. 코드 블록을 예쁘게 보여주거나, 시나 주소처럼 줄바꿈이 중요한 콘텐츠를 표시할 때 말이죠. 바로 이때 `white-space` 속성이 빛을 발합니다!
+
+## white-space가 제어하는 것들
+
+`white-space` 속성이 제어하는 건 크게 세 가지예요. 스페이스와 탭 같은 **공백 문자**의 처리 방식, **줄바꿈 문자**(`\n`)의 처리 방식, 그리고 **자동 줄바꿈** 여부입니다.
+
+<AnimatedStep steps={[
+  {
+    title: "1단계: 기본 동작 이해하기",
+    content: "HTML에서는 기본적으로 연속된 공백이 하나로 합쳐지고, 줄바꿈 문자는 무시됩니다.",
+    code: `<!-- HTML -->
+  <div>
+    여러    공백과
+    줄바꿈이
+    있는 텍스트
+  </div>`
+  },
+  {
+    title: "2단계: white-space로 제어하기",
+    content: "white-space 속성으로 이런 기본 동작을 바꿀 수 있습니다!",
+    code: `div {
+    white-space: pre; /* 공백과 줄바꿈을 그대로 유지 */
+  }`
+  }
+]} />
+
+## 핵심 속성값들 완전 정복
+
+각 속성값이 실제로 어떻게 다른지 좁은 컨테이너에 같은 텍스트를 넣고 비교해볼게요.
+
+<CodePlayground
+  code={`function WhitespaceDemo() {
+    const text = \`여러    공백과\n줄바꿈이\n있는    긴 텍스트입니다.\`;
+    const values = ["normal", "nowrap", "pre", "pre-wrap", "pre-line"];
+
+    return (
+      <div className="demo">
+        {values.map((value) => (
+          <div key={value} className="card">
+            <h4 className="title">{value}</h4>
+            <div className={\`sample sample--\${value}\`}>{text}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }`}
+  css={`.demo {
+    font-family: monospace;
+  }
+
+  .card {
+    margin: 20px 0;
+    padding: 10px;
+    border: 1px solid #ccc;
+    width: 200px;
+  }
+
+  .title {
+    margin: 0 0 10px 0;
+    color: #0066cc;
+  }
+
+  .sample {
+    background: #f5f5f5;
+    padding: 5px;
+  }
+
+  .sample--normal {
+    white-space: normal;
+  }
+
+  .sample--nowrap {
+    white-space: nowrap;
+  }
+
+  .sample--pre {
+    white-space: pre;
+  }
+
+  .sample--pre-wrap {
+    white-space: pre-wrap;
+  }
+
+  .sample--pre-line {
+    white-space: pre-line;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+<Callout variant="tip">
+각 값의 차이점을 눈으로 확인해보세요! 컨테이너의 너비가 좁아서 자동 줄바꿈이 어떻게 다르게 동작하는지 알 수 있습니다.
+</Callout>
+
+## 속성값별 상세 분석
+
+<AnimatedStep steps={[
+  {
+    title: "normal (기본값)",
+    content: "• 연속 공백 → 하나로 합침\n• 줄바꿈 문자 → 무시\n• 자동 줄바꿈 → O\n\n가장 일반적인 텍스트 표시 방식입니다."
+  },
+  {
+    title: "nowrap", 
+    content: "• 연속 공백 → 하나로 합침\n• 줄바꿈 문자 → 무시\n• 자동 줄바꿈 → X\n\n한 줄로만 표시하고 싶을 때 사용합니다."
+  },
+  {
+    title: "pre",
+    content: "• 연속 공백 → 그대로 유지\n• 줄바꿈 문자 → 그대로 유지\n• 자동 줄바꿈 → X\n\n<pre> 태그와 동일한 동작입니다."
+  },
+  {
+    title: "pre-wrap",
+    content: "• 연속 공백 → 그대로 유지\n• 줄바꿈 문자 → 그대로 유지\n• 자동 줄바꿈 → O\n\n코드 블록에서 가장 많이 사용됩니다!"
+  },
+  {
+    title: "pre-line",
+    content: "• 연속 공백 → 하나로 합침\n• 줄바꿈 문자 → 그대로 유지\n• 자동 줄바꿈 → O\n\n시나 주소 같은 텍스트에 적합합니다."
+  }
+]} />
+
+## 실무 활용 패턴
+
+### 1. 코드 블록 스타일링
+
+코드 블록에서는 들여쓰기와 줄바꿈을 그대로 살려야 읽힙니다. 이럴 때 `pre-wrap`이 가장 자주 쓰여요.
+
+<CodePlayground
+  code={`function CodeBlockExample() {
+    const codeString = \`function hello() {\n  console.log("Hello World!");\n  return "success";\n}\`;
+
+    return (
+      <div>
+        <h3>잘못된 예 (normal)</h3>
+        <div className="code code--bad">{codeString}</div>
+
+        <h3>올바른 예 (pre-wrap)</h3>
+        <div className="code code--good">{codeString}</div>
+      </div>
+    );
+  }`}
+  css={`.code {
+    background: #f4f4f4;
+    padding: 10px;
+    font-family: monospace;
+    border: 1px solid #ddd;
+  }
+
+  .code--bad {
+    white-space: normal;
+  }
+
+  .code--good {
+    white-space: pre-wrap;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+### 2. 주소나 시 표시하기
+
+주소나 시는 줄바꿈은 살리되 중간에 낀 불필요한 공백은 한 칸으로 정리되는 게 자연스럽죠. 이럴 땐 `pre-line`이 딱입니다.
+
+<CodePlayground
+  code={`function AddressExample() {
+    const address = \`서울특별시    강남구\n테헤란로    123번길\n우편번호: 12345\`;
+    const poem = \`봄이    오면\n산에    산에\n진달래    꽃\`;
+
+    return (
+      <div className="row">
+        <div>
+          <h4>주소 (pre-line 사용)</h4>
+          <div className="block block--address">{address}</div>
+        </div>
+        <div>
+          <h4>시 (pre-line 사용)</h4>
+          <div className="block block--poem">{poem}</div>
+        </div>
+      </div>
+    );
+  }`}
+  css={`.row {
+    display: flex;
+    gap: 20px;
+  }
+
+  .block {
+    white-space: pre-line;
+    background: #f9f9f9;
+    padding: 10px;
+    border: 1px solid #ddd;
+  }
+
+  .block--address {
+    font-family: sans-serif;
+  }
+
+  .block--poem {
+    font-family: serif;
+    font-style: italic;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+### 3. 긴 텍스트 한 줄 유지하기
+
+테이블 셀이나 내비게이션 메뉴에서는 텍스트가 한 줄로 유지되어야 할 때가 많습니다. 이럴 땐 `nowrap`을 `overflow`와 함께 쓰는 게 정석이에요.
+
+<CodePlayground
+  code={`function NoWrapExample() {
+    const longText =
+      "이것은 매우 긴 텍스트입니다. 컨테이너 너비를 넘어도 줄바꿈되지 않아야 합니다.";
+
+    return (
+      <div>
+        <h4>기본 동작 (normal)</h4>
+        <div className="box box--normal">{longText}</div>
+
+        <h4>한 줄 유지 (nowrap)</h4>
+        <div className="box box--nowrap">{longText}</div>
+      </div>
+    );
+  }`}
+  css={`.box {
+    width: 200px;
+    padding: 10px;
+  }
+
+  .box--normal {
+    background: #ffe6e6;
+    border: 1px solid #ff9999;
+    white-space: normal;
+  }
+
+  .box--nowrap {
+    background: #e6f3ff;
+    border: 1px solid #99ccff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+<Callout variant="warning">
+`nowrap`을 사용할 때는 `overflow: hidden`과 `text-overflow: ellipsis`를 함께 사용하여 텍스트가 컨테이너를 벗어나지 않도록 주의하세요!
+</Callout>
+
+## 브라우저 호환성과 주의사항
+
+<Callout variant="info">
+`white-space` 속성은 모든 주요 브라우저에서 잘 지원됩니다. IE 8+에서도 사용 가능하니 안심하고 사용하세요.
+</Callout>
+
+다만 몇 가지는 기억해두는 게 좋습니다. **성능 측면**에서 `pre`나 `pre-wrap`은 매우 긴 텍스트의 렌더링에 부담을 줄 수 있고요. **접근성** 관점에서는 스크린 리더가 공백과 줄바꿈을 어떻게 읽을지 따로 고민이 필요합니다. 그리고 **모바일**처럼 좁은 화면에서는 `nowrap`보다 `pre-wrap`이나 `pre-line`이 훨씬 안전한 선택이 되는 경우가 많아요.
+
+## 마무리
+
+`white-space` 속성을 마스터하면 텍스트 레이아웃을 훨씬 정교하게 제어할 수 있습니다. 특히 코드 블록, 시, 주소 같은 특별한 형식의 텍스트를 다룰 때 필수적인 도구입니다.
+
+다음 편에서는 `word-break`와 `white-space`를 조합한 실무 패턴들을 살펴보겠습니다. 반응형 디자인에서 텍스트가 어떻게 동작해야 하는지, 다국어 사이트에서는 어떤 점을 고려해야 하는지 등 실전 노하우를 공유해드릴게요!
+
+<Callout variant="tip">
+지금까지 학습한 내용을 바탕으로 여러분만의 텍스트 컴포넌트를 만들어보세요. `white-space`의 각 값들을 직접 실험해보는 것이 가장 좋은 학습 방법입니다.
+</Callout>

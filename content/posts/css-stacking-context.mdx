@@ -1,0 +1,128 @@
+---
+title: "CSS Stacking Context: HTML의 숨겨진 Z축 이야기"
+description: "z-index 9999를 걸었는데도 모달이 헤더 뒤에 깔리는 이유. HTML을 3D 공간으로 다시 보는 법."
+date: 2026-04-11
+tags: ["CSS", "stacking-context", "z-index"]
+published: true
+---
+
+"z-index: 9999인데 왜 모달이 헤더 뒤에 깔려 있죠?"
+
+이 한 줄을 속으로 외쳐본 적 있다면, 오늘 글은 당신 얘깁니다. 저도 몇 번을 겪었어요. 분명 숫자는 최대치로 박았는데 원하는 대로 안 올라오고, DevTools 한참 뒤져도 이유가 안 잡히고. 범인은 z-index 숫자가 아니라 `stacking context`라는 개념입니다.
+
+## HTML은 평면이 아닙니다
+
+브라우저 화면을 우리는 보통 2D로 상상하죠. 가로 X, 세로 Y. 하지만 드롭다운이 버튼 위에 얹히고, 모달이 본문을 덮고, 툴팁이 카드 위로 떠오르는 순간 Z축이 등장합니다. 화면 안쪽으로 뚫고 들어가는 세 번째 축이요.
+
+HTML에는 처음부터 이 Z축이 존재했어요. `z-index`는 그 Z축 위에서 요소의 순서를 정하는 도구고요. 문제는 이 Z축이 **전역적으로 하나가 아니라는 점** 입니다.
+
+## Stacking Context: 작은 세계들의 집합
+
+핵심 개념은 한 줄입니다. 브라우저는 Z축을 여러 개의 **독립된 세계로 쪼갭니다**. 각 세계가 바로 stacking context고요.
+
+<AnimatedStep steps={[
+  { title: "1. 하나의 문서, 하나의 루트", content: "문서가 로드되면 <html> 요소가 최상위 stacking context를 만듭니다. 모든 쌓임의 출발점이에요." },
+  { title: "2. 특정 속성이 새 세계를 만든다", content: "어떤 요소가 특정 CSS 속성을 만나면 그 자리에서 자기만의 새 stacking context를 개설합니다. 이 안에 들어가는 자식들은 바깥 세상과 섞이지 못해요." },
+  { title: "3. 내부 z-index는 내부에서만 유효", content: "자식이 z-index 9999를 걸어도, 부모 context 바깥으로는 나갈 수 없습니다. 부모 context의 z-index가 곧 그 세계 전체의 대외 순위거든요." }
+]} />
+
+비유하자면 아파트예요. 401호 사람이 옥상에 올라서 있어도, 501호 현관보다는 낮은 층에 속해 있죠. 층(stacking context)이 먼저고 그 다음이 내부 호수(z-index)입니다.
+
+## 무엇이 Stacking Context를 만드나
+
+"그럼 새 세계가 만들어지는 조건이 뭔데요?" 여기가 진짜 함정입니다. `z-index`만 트리거인 줄 알지만 실은 꽤 많아요.
+
+<Callout variant="warning">
+**stacking context를 만드는 주요 조건**
+
+• 루트 `<html>` 요소<br/>
+• `position: relative/absolute` + `z-index`가 auto가 아닌 값<br/>
+• `position: fixed` 또는 `sticky`<br/>
+• `opacity`가 1보다 작을 때<br/>
+• `transform`, `filter`, `perspective`, `clip-path`, `mask`가 none이 아닐 때<br/>
+• `will-change`에 위 속성 중 하나가 지정됐을 때<br/>
+• `isolation: isolate`<br/>
+• flex/grid 자식이 z-index를 가질 때
+</Callout>
+
+여기서 함정. `opacity: 0.99` 하나만 줘도 새 context가 열립니다. 페이드인 애니메이션이나 호버 효과 때문에 opacity를 잠깐 건드리는 순간, 그 요소는 독립 세계가 돼요. 애니메이션 라이브러리들이 쓰는 `transform: translateZ(0)` 트릭도 같은 부작용을 만들고요.
+
+## 실전: 갇힌 z-index
+
+말로만 하면 안 와닿죠. 직접 봅시다. 아래 예제는 헤더(파란색) 위에 모달(빨간색)을 띄우려는 상황입니다. 모달은 `z-index: 9999`, 헤더는 `z-index: 10`. 숫자만 보면 모달이 이겨야 하는데요.
+
+<CodePlayground
+  code={`function TrappedModal() {
+    return (
+      <div className="page">
+        <header className="header">Header (z-index: 10)</header>
+        <div className="card">
+          <p>이 카드 부모에 transform이 걸려있어요</p>
+          <div className="modal">Modal (z-index: 9999)</div>
+        </div>
+      </div>
+    );
+  }`}
+  css={`.page {
+    font-family: sans-serif;
+  }
+
+  .header {
+    position: relative;
+    z-index: 10;
+    background: #3b82f6;
+    color: white;
+    padding: 16px;
+    text-align: center;
+    font-weight: 600;
+  }
+
+  .card {
+    position: relative;
+    margin: 24px 20px;
+    padding: 16px;
+    background: #f3f4f6;
+    border-radius: 8px;
+    transform: translateZ(0);
+  }
+
+  .modal {
+    position: absolute;
+    top: -40px;
+    left: 40px;
+    right: 40px;
+    z-index: 9999;
+    background: #ef4444;
+    color: white;
+    padding: 16px;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 600;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+분명 모달의 z-index가 훨씬 큰데 헤더에 가려지죠. 범인은 `.card`에 걸린 `transform: translateZ(0)` 입니다. 이 한 줄 때문에 `.card`가 자기만의 stacking context를 만들고, 그 안의 모달은 부모 세계 안에 갇혀버려요. 바깥에서 보면 모달의 "대외 z-index"는 그냥 `.card`의 값(여기선 auto)일 뿐입니다. 9999는 `.card` 내부에서만 통하는 숫자예요.
+
+`.card`의 transform을 지우면 바로 해결됩니다. 직접 한 번 지워보세요.
+
+## 해결하는 세 가지 방법
+
+이런 상황을 만나면 보통 세 가지 중 하나로 풉니다.
+
+첫째는 **Portal 쓰기**. React의 `createPortal`이나 Vue의 `Teleport`로 모달 DOM을 `<body>` 직속으로 옮겨버립니다. 이게 제일 깔끔하고, UI 라이브러리들이 모달·툴팁·드롭다운을 만들 때 거의 예외 없이 이 방식을 택해요.
+
+둘째는 **불필요한 트리거 제거**. 부모 체인에 걸린 transform/opacity/filter가 정말 필요한지 되짚어봅니다. 별 의미 없이 `will-change: transform`이 들어가 있거나, 페이드 흉내만 내려고 `opacity: 0.99`를 쓰고 있는 경우가 의외로 많거든요.
+
+셋째는 **의도적 격리**. 반대로 내가 먼저 새 context를 열고 싶을 땐 `isolation: isolate`를 쓰세요. 부작용 없이 "여기부터 새로운 z축 세계"라고 선언만 하는 속성이라 목적이 명확할 때 가장 안전합니다.
+
+<Callout variant="tip">
+z-index 버그가 안 풀릴 땐 Chrome DevTools의 Layers 패널을 열어보세요. `Cmd+Shift+P`로 커맨드 팔레트 띄우고 "Show Layers"를 치면 됩니다. 실제 브라우저가 레이어를 어떻게 쌓았는지 3D로 보여주거든요. 말 그대로 stacking context를 눈으로 보는 셈이에요.
+</Callout>
+
+## 마무리
+
+핵심만 다시 짚어볼게요. 첫째, HTML은 X, Y에 Z를 더한 **3D 공간** 입니다. z-index는 그 Z축 위의 순서고요. 둘째, z-index는 **같은 stacking context 안에서만** 서로 비교됩니다. 부모 세계가 다르면 숫자가 아무리 커도 소용없어요. 셋째, stacking context는 `z-index`만이 아니라 `opacity`, `transform`, `filter` 같은 속성들도 만듭니다. 이 부작용이 대부분의 z-index 버그의 진짜 원인이에요.
+
+다음에 모달이 엉뚱한 위치에 깔리는 걸 보면, 숫자를 올리기 전에 먼저 부모 체인을 거슬러 올라가 보세요. 조상 어딘가에서 누군가 조용히 새 세계를 열고 있을 겁니다.

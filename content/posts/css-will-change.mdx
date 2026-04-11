@@ -1,0 +1,152 @@
+---
+title: "will-change로 브라우저에 미리 귀띔하기"
+description: "will-change가 실제로 무엇을 하는지, 언제 써야 하고 언제 쓰면 안 되는지 정리합니다."
+date: 2026-04-11
+tags: ["CSS", "성능", "애니메이션"]
+published: true
+---
+
+버튼에 hover하면 살짝 떠오르는 카드 애니메이션을 만들었습니다. 로컬에선 부드럽게 잘 돌아갔어요. 그런데 저사양 기기에서 처음 한 번 hover할 때, 그 첫 프레임이 묘하게 탁 걸립니다. 두 번째부터는 멀쩡해요. "왜 첫 프레임만 버벅이지?" 싶어서 찾아보다 `will-change`라는 속성을 만나게 되죠.
+
+이 글은 그 "왜"에 대한 이야기입니다. will-change가 실제로 뭘 하는지, 언제 써야 하고 언제는 오히려 해로운지.
+
+## 첫 프레임이 버벅이는 이유
+
+브라우저가 화면을 그리는 과정은 크게 **레이아웃 → 페인트 → 합성(composite)** 순서로 흐릅니다. 이 중 `transform`이나 `opacity`는 합성 단계에서만 처리되기 때문에 빠르다고들 하죠. 맞습니다. 단, 조건이 있어요. 그 요소가 **별도의 합성 레이어(compositor layer)** 로 올라가 있을 때만요.
+
+레이어가 없는 요소를 움직이려고 하면, 브라우저는 애니메이션이 시작되는 그 순간 부랴부랴 레이어를 만듭니다. 페인트를 다시 하고, GPU로 텍스처를 올리고... 이 작업이 첫 프레임에 들어가면서 끊기는 거예요. 두 번째 hover부터 멀쩡해 보이는 이유는 레이어가 이미 만들어져 있어서입니다.
+
+<AnimatedStep
+  steps={[
+    {
+      title: "1. 평소 상태",
+      content: "요소는 주변 요소들과 같은 레이어에 함께 그려져 있습니다. 합성 단계에서 따로 분리되어 있지 않아요.",
+    },
+    {
+      title: "2. 애니메이션 시작",
+      content: "transform이 바뀌는 순간, 브라우저가 '아, 이건 분리해야겠다'고 판단해서 이 요소만 떼어내 새 레이어로 옮깁니다.",
+    },
+    {
+      title: "3. 레이어 승격 비용",
+      content: "페인트를 다시 하고 텍스처를 GPU에 업로드하는 일이 첫 프레임 안에서 일어납니다. 여기서 프레임 드랍이 생깁니다.",
+    },
+    {
+      title: "4. 이후 프레임",
+      content: "이제부터는 GPU에서 transform 매트릭스만 바뀝니다. 60fps가 쉽게 나와요.",
+    },
+  ]}
+/>
+
+## will-change가 하는 일
+
+`will-change`는 "이 요소가 곧 이런 속성이 바뀔 예정이에요"라고 브라우저한테 미리 귀띔하는 힌트입니다. 브라우저는 그 힌트를 받고, **애니메이션이 시작되기 전에 미리 레이어를 준비해둡니다**. 그래서 첫 프레임에 승격 비용이 들어가지 않아요.
+
+```css
+.card {
+  transition: transform 200ms;
+  will-change: transform;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+}
+```
+
+이렇게만 써도 동작은 합니다. 하지만 이건 권장되는 방식이 아닙니다. 왜 그런지는 다음 섹션에서 다루죠.
+
+<Callout variant="info">
+will-change는 **힌트**이지 명령이 아닙니다. 브라우저가 최종 결정권자예요. `will-change: transform`을 줬다고 해서 항상 레이어가 만들어진다는 보장은 없고, 반대로 안 줘도 알아서 만들어주는 경우도 많습니다.
+</Callout>
+
+## 남용하면 오히려 느려집니다
+
+will-change가 만드는 합성 레이어에는 **메모리 비용**이 붙습니다. 요소의 픽셀을 GPU 텍스처로 따로 들고 있어야 하거든요. 한두 개는 괜찮지만 페이지의 모든 카드, 모든 버튼, 모든 아이콘에 `will-change: transform`을 박아두면 메모리가 순식간에 불어납니다. 특히 모바일에선 치명적이에요.
+
+더 교묘한 문제도 있어요. will-change를 상시로 켜두면 브라우저는 그 요소를 "언제든 변할 수 있는 것"으로 간주해서, 평소에도 몇 가지 최적화를 포기합니다. 예를 들면 주변 요소와 함께 레이어를 공유하는 최적화 같은 거죠. 결과적으로 "최적화하려고 넣었는데 오히려 느려졌다"는 전형적인 안티패턴이 생깁니다.
+
+<Callout variant="warning">
+`* { will-change: transform; }` 같은 전역 선언은 재앙입니다. 메모리만 잡아먹고 실제 이득은 없어요. 그리고 `.card:hover { will-change: transform }` 처럼 hover에 넣는 것도 늦습니다 — hover가 감지된 시점엔 이미 애니메이션이 시작돼서요.
+</Callout>
+
+## 올바른 사용 — 필요한 순간에만 켜고 끈다
+
+실전에서 will-change는 **애니메이션이 시작되기 직전에 JS로 붙였다가, 끝나면 떼는** 방식으로 씁니다. 사용자가 해당 영역에 가까이 오거나, 포커스가 들어가거나, 모달이 열리려는 순간 같은 "곧 일어난다"는 신호에 반응해서요.
+
+<CodePlayground
+  code={`function WillChangeDemo() {
+    const prime = (e) => {
+      e.currentTarget.style.willChange = "transform";
+    };
+    const release = (e) => {
+      e.currentTarget.style.willChange = "auto";
+    };
+
+    return (
+      <div className="grid">
+        <button className="card" onMouseEnter={prime} onMouseLeave={release}>
+          hover 직전에 레이어 준비
+        </button>
+        <p className="hint">
+          mouseenter에서 will-change를 켜고,
+          <br />
+          mouseleave에서 다시 auto로 돌려둡니다.
+        </p>
+      </div>
+    );
+  }`}
+  css={`.grid {
+    display: grid;
+    gap: 16px;
+    padding: 24px;
+    font-family: system-ui, sans-serif;
+  }
+
+  .card {
+    padding: 20px 28px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      transform 200ms ease,
+      box-shadow 200ms ease;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+  }
+
+  .card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 12px 24px rgba(99, 102, 241, 0.35);
+  }
+
+  .hint {
+    margin: 0;
+    color: #6b7280;
+    font-size: 14px;
+    line-height: 1.6;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+핵심은 `mouseenter`와 `hover`는 다르다는 점이에요. `mouseenter`는 커서가 요소에 닿자마자, 즉 hover 효과가 적용되기 **바로 직전**에 먼저 발동합니다. 이 타이밍에 will-change를 켜면 브라우저가 레이어를 준비할 시간이 생기고, 뒤이어 들어오는 hover 스타일이 부드럽게 이어져요. 그리고 mouseleave에서 `auto`로 되돌려 메모리를 반납합니다.
+
+## 언제 쓰고 언제는 안 쓰는지
+
+정리하면 이렇습니다.
+
+**쓰면 좋은 경우.** 드래그 앤 드롭처럼 시작 타이밍이 명확하고 성능이 중요한 인터랙션. 모달 오픈, 화면 전환처럼 "곧 움직인다"는 사용자 의도를 미리 감지할 수 있는 곳. 이미 측정해봤더니 첫 프레임이 실제로 끊기는 케이스.
+
+**쓰면 안 되는 경우.** "혹시 모르니까" 상시로 박아두는 경우. 이미 잘 돌아가는데 그냥 붙이는 경우. CSS만으로 `will-change: transform`을 선언해두고 방치하는 경우. 이런 상황에선 뺀 게 더 빠릅니다.
+
+<Callout variant="tip">
+will-change를 넣기 전에 먼저 물어보세요. "지금 실제로 버벅거리나?" DevTools의 Performance 탭에서 실제로 프레임 드랍이 보이고, 그게 레이어 승격 비용 때문이라는 근거가 있을 때 쓰세요. 체감상 느리다는 이유만으로 넣으면 안 됩니다.
+</Callout>
+
+## 마무리
+
+`will-change`는 **브라우저에 보내는 미래 예고장**입니다. 잘 쓰면 첫 프레임의 끊김을 없애주지만, 남용하면 메모리 낭비와 최적화 기회 상실이라는 대가를 치르게 되죠. 핵심 원칙은 간단해요. **필요한 순간에만 켜고, 끝나면 끈다.** 그리고 "필요한 순간"은 측정으로 확인하세요, 감으로 넣지 말고.
+
+한 걸음 더 나아가고 싶다면 Chrome DevTools의 Layers 패널을 열어보세요. 현재 페이지에 어떤 요소들이 별도 레이어로 올라가 있는지, 각 레이어가 얼마나 메모리를 쓰는지 시각적으로 볼 수 있어요. will-change를 붙이기 전후를 비교해보면 "아, 얘가 진짜로 뭘 하는 거구나" 하는 감이 확실히 잡힙니다.
