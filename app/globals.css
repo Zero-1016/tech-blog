@@ -241,32 +241,3 @@ body {
 [data-theme="dark"] .theme-icon__rays line {
   transform: scale(0.4);
 }
-
-/* hover previews the opposite state */
-[data-theme="light"]:hover .theme-icon__core {
-  r: 9;
-}
-[data-theme="light"]:hover .theme-icon__mask-circle {
-  transform: translate(-7px, -1px);
-}
-[data-theme="light"]:hover .theme-icon__rays {
-  transform: rotate(40deg);
-  opacity: 0;
-}
-[data-theme="light"]:hover .theme-icon__rays line {
-  transform: scale(0.4);
-}
-
-[data-theme="dark"]:hover .theme-icon__core {
-  r: 5;
-}
-[data-theme="dark"]:hover .theme-icon__mask-circle {
-  transform: translate(0, 0);
-}
-[data-theme="dark"]:hover .theme-icon__rays {
-  transform: rotate(0deg);
-  opacity: 1;
-}
-[data-theme="dark"]:hover .theme-icon__rays line {
-  transform: scale(1);
-}
