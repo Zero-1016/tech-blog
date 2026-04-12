@@ -1,0 +1,141 @@
+---
+title: "* + * 한 줄의 비밀"
+description: "선택자 한 줄이 마법처럼 동작하는 이유는 캐스케이드와 결합자에 있습니다."
+date: 2026-04-12
+tags: ["CSS", "Cascade", "선택자"]
+published: true
+---
+
+며칠 전 코드 리뷰에서 이런 한 줄을 봤어요.
+
+```css
+.stack > * + * { margin-top: 16px; }
+```
+
+별표 두 개에 더하기 한 개. 선언이라기엔 뭘 고르는 건지 한참을 봐야 합니다. 그런데 실행해 보면 부모 안의 자식들 사이에 16px 간격이 정확히 들어가요. 첫 번째 자식 위에는 안 들어갑니다. 마법 같죠. 사실 마법이 아니라 CSS의 기본기 두 가지가 정직하게 만나는 자리예요. 캐스케이드와 결합자입니다.
+
+## 우선순위는 한 줄이 아니라 계단
+
+"이 스타일이 왜 안 먹히지?"의 답은 거의 항상 캐스케이드입니다. 그런데 많은 사람이 캐스케이드를 `specificity` 한 단어로 줄여서 기억해요. 실제 캐스케이드는 여러 단계를 차례로 내려가는 흐름입니다. 단순화하면 네 칸짜리 계단이에요.<Cite id="mdn-cascade" />
+
+<AnimatedStep
+  steps={[
+    {
+      title: "1. 출처(Origin)와 중요도",
+      content: "user-agent(브라우저 기본), user, author(내 CSS) 중 누가 썼는지와 !important가 붙었는지를 먼저 본다. 여기서 결판 나면 그 아래는 쳐다보지도 않는다.",
+    },
+    {
+      title: "2. 캐스케이드 레이어(@layer)",
+      content: "같은 author 스코프 안에서도 @layer로 묶인 규칙은 레이어 순서대로 정리된다. unlayered 규칙이 가장 센 층.",
+    },
+    {
+      title: "3. Specificity",
+      content: "같은 층에서 부딪히면 그제서야 숫자 싸움. (a, b, c) 세 자리로 환산해서 왼쪽부터 비교.",
+    },
+    {
+      title: "4. 소스 순서",
+      content: "여기까지도 같으면 나중에 선언된 쪽이 이긴다. 위에서 아래로, import 순서대로.",
+    },
+  ]}
+/>
+
+위 단계에서 결판이 나면 아래로는 내려가지 않아요. 그래서 `!important`가 박힌 줄과 specificity가 훨씬 높은 줄이 부딪히면 숫자 비교를 아예 안 합니다. 1단계에서 이미 끝났거든요. specificity 한 단어만 외우고 디버깅하러 가면, 사실은 1단계 싸움을 3단계 언어로 설명하고 있는 꼴이 됩니다.
+
+## (a, b, c)로 읽는 specificity
+
+3단계까지 내려왔다고 해봅시다. 같은 출처, 같은 레이어 안에서 두 규칙이 부딪히면 그제야 숫자가 등장해요. 모든 선택자는 세 자리 숫자로 환산됩니다.<Cite id="mdn-specificity" />
+
+`a`는 ID 선택자 개수. `b`는 class, 속성, 가상 클래스 개수. `c`는 타입, 가상 요소 개수. 이 세 자리를 **왼쪽부터** 비교합니다. 자릿수 사이는 그냥 다른 차원이에요. `(1, 0, 0)` 이 `(0, 99, 99)` 보다 무조건 셉니다. ID 하나가 클래스 99개보다 큰 게 아니라, 비교 자체가 윗자리에서 끝나버리는 거예요.
+
+```css
+#header .nav a:hover  /* (1, 2, 1) */
+.nav a                /* (0, 1, 1) */
+a                     /* (0, 0, 1) */
+```
+
+특수한 경우 두 개를 꼭 기억해 두세요. 첫째, 인라인 `style="..."` 은 `(1, 0, 0, 0)` 으로 한 칸 더 윗자리에 앉습니다. 둘째, universal selector인 `*` 와 결합자(`>`, `+`, `~`)는 specificity에 **0을 보탭니다**. 깎지도 보태지도 않아요. 이 마지막 문장이 오늘 글의 열쇠입니다.
+
+## 결합자 네 가지
+
+선택자 사이의 공백 한 칸, 부등호, 더하기, 물결. 이 네 개가 "어떤 관계의 형제나 자손을 고를지"를 정합니다.
+
+첫째, 공백(`A B`)은 자손 결합자예요. `.card p` 라고 쓰면 `.card` 안의 모든 `p` 가 잡힙니다. 깊이 상관없이 전부. 둘째, `>` 는 자식 결합자로 바로 한 단계 아래만 봅니다. `.card > p` 는 직계 자식 `p` 만 잡고 손주는 놓쳐요. 셋째, `+` 는 인접 형제 결합자입니다. `h2 + p` 는 `h2` 바로 다음에 오는 형제 `p` **하나**만 잡아요. 그 다음 `p` 는 안 걸립니다. 넷째, `~` 는 일반 형제 결합자로 뒤에 오는 형제 전부를 봅니다.<Cite id="w3c-combinators" />
+
+직접 만져보면 차이가 또렷해져요. 아래 CSS에서 주석을 한 줄씩 바꿔가며 확인해 보세요.
+
+<CodePlayground
+  code={`function CombinatorDemo() {\n  return (\n    <div className="card">\n      <h2 className="title">제목</h2>\n      <p>제목 바로 다음 문단</p>\n      <p>두 번째 문단</p>\n      <p>세 번째 문단</p>\n    </div>\n  );\n}`}
+  css={`.card {\n  padding: 16px;\n  border: 1px solid #888;\n  border-radius: 8px;\n  font-family: system-ui;\n  color: #111;\n  background: #fff;\n}\n\n.title {\n  margin: 0 0 8px;\n}\n\n.card p {\n  margin: 4px 0;\n}\n\n/* 1) 자식 결합자 - 직계 p 전부 파랑 */\n.card > p {\n  color: #2563eb;\n}\n\n/* 2) 인접 형제 - 제목 바로 다음 한 문단만 노란 배경 */\n.card .title + p {\n  background: #fef3c7;\n  padding: 4px 8px;\n  border-radius: 4px;\n}\n\n/* 3) 일반 형제 - 주석을 해제하면 제목 뒤의 모든 p가 들여쓰기 */\n/* .card .title ~ p { padding-left: 16px; } */`}
+  template="react"
+  showPreview={true}
+/>
+
+2번 규칙이 포인트예요. "제목 바로 다음" 한 문단만 노랗게 칠해지고, 두 번째 세 번째 문단은 얌전하죠. `+` 는 정말 한 칸만 봅니다.
+
+## 다시 `* + *` 해부
+
+이제 한 줄을 다시 읽어봅시다.
+
+```css
+.stack > * + * { margin-top: 16px; }
+```
+
+`.stack` 의 직계 자식(`>`) 중에서, 바로 앞에 어떤 형제(`+`)가 있는 모든 요소(`*`). 풀어 쓰면 이렇습니다. "첫 번째 자식만 빼고 나머지 자식 전부에 위쪽 margin을 16px 준다." 이름이 재미있어요. 별 두 개가 부엉이 눈처럼 보인다고 해서 "lobotomized owl"이라고 부릅니다. 2014년 Heydon Pickering이 A List Apart에 소개한 패턴이죠.<Cite id="ala-owl" />
+
+이 한 줄이 왜 좋을까요. 첫 자식과 마지막 자식을 따로 처리할 필요가 없고, 자식이 몇 개가 되든 일반화가 됩니다. 그리고 `*` 와 `+` 가 specificity에 0을 보탠다는 아까 그 사실 덕에 전체 specificity는 `(0, 1, 0)` 이에요. `.stack` 클래스 하나만 카운트됩니다. 다른 규칙으로 덮어쓰기도 쉽고, 이 규칙이 다른 걸 망가뜨릴 일도 거의 없어요. 범위는 정확한데 힘은 작습니다. 그게 핵심이에요.
+
+<CodePlayground
+  code={`function Stack() {\n  return (\n    <div className="stack">\n      <h3>제목</h3>\n      <p>본문 한 줄.</p>\n      <p>본문 두 줄째.</p>\n      <button className="btn">확인</button>\n    </div>\n  );\n}`}
+  css={`.stack {\n  padding: 16px;\n  border: 1px dashed #999;\n  background: #fff;\n  color: #111;\n  font-family: system-ui;\n}\n\n.stack > * {\n  margin-top: 0;\n  margin-bottom: 0;\n}\n\n.stack > * + * {\n  margin-top: 16px;\n}\n\n.btn {\n  padding: 6px 12px;\n  border: 1px solid #2563eb;\n  background: #eff6ff;\n  color: #1e3a8a;\n  border-radius: 6px;\n}`}
+  template="react"
+  showPreview={true}
+/>
+
+제목 위에는 margin이 안 붙고, 그 아래부터는 자식이 몇 개든 일정한 간격으로 쌓이는 게 보일 거예요. 컨테이너 하나에 규칙 한 줄. 이게 전부입니다.
+
+## `!important` 는 마지막 카드여야 합니다
+
+말이 나온 김에 함정 하나. `!important` 는 1단계에서 바로 이기기 때문에 효과가 즉각적이고, 그래서 손이 자주 갑니다. 문제는 일단 박히는 순간이에요. 이걸 덮으려면 또 `!important` 를 박는 수밖에 없거든요. 두세 번 반복되면 우선순위 추적이 사실상 불가능해집니다.
+
+진짜 답은 specificity를 낮게 유지해서 덮을 일이 거의 없게 만드는 쪽이에요. 클래스 한두 개로 끝나는 선택자, 결합자로 범위를 잡는 패턴이 그래서 매력적입니다. 어떤 스타일링 도구를 쓰든 이 원칙은 비슷하게 적용되는데, 방식마다 어디서 타협을 받아내는지는 [스타일링 도구 고르는 기준](/posts/css-styling-tradeoffs)에서 따로 정리해 두었어요.
+
+z-index 싸움도 사실 비슷한 동네에 있습니다. 숫자를 아무리 올려도 안 먹히는 이유가 궁금하다면 [z-index 9999의 배신](/posts/css-stacking-context)에서 이어 보면 그림이 닫힙니다.
+
+## 정리
+
+`* + *` 가 마법처럼 보이는 이유는 캐스케이드 4단 계단과 결합자 네 종류, 그리고 specificity 0이라는 작은 디테일이 한 자리에서 만났기 때문이에요. 다음번에 스타일이 안 먹히는 장면을 만나면 `!important` 를 꺼내기 전에 한 호흡 쉬고, 지금 몇 단계에서 충돌하고 있는지부터 물어보세요. 대부분은 specificity를 `(0, 1, 0)` 정도로 낮게 유지하는 것만으로 해결됩니다.
+
+<References
+  items={[
+    {
+      id: "mdn-cascade",
+      title: "MDN - CSS Cascade",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_cascade/Cascade",
+      description: "캐스케이드 단계(출처/중요도, 레이어, specificity, 소스 순서) 확인",
+    },
+    {
+      id: "mdn-specificity",
+      title: "MDN - Specificity",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_cascade/Specificity",
+      description: "(a, b, c) 계산과 universal/combinator가 0을 보탠다는 규칙 확인",
+    },
+    {
+      id: "w3c-combinators",
+      title: "W3C Selectors Level 4 - Combinators",
+      href: "https://www.w3.org/TR/selectors-4/#combinators",
+      description: "descendant, child, next-sibling, subsequent-sibling 정의 원문",
+    },
+    {
+      id: "mdn-selector-structure",
+      title: "MDN - Selector structure",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_selectors/Selector_structure",
+      description: "결합자와 복합 선택자의 구조를 개념적으로 정리",
+    },
+    {
+      id: "ala-owl",
+      title: "A List Apart - Axiomatic CSS and Lobotomized Owls",
+      href: "https://alistapart.com/article/axiomatic-css-and-lobotomized-owls/",
+      description: "`* + *` 패턴을 처음 소개한 Heydon Pickering의 글",
+    },
+  ]}
+/>

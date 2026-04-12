@@ -1,0 +1,154 @@
+---
+title: "box-sizing: border-box인 이유"
+description: "width: 200px인데 220px로 렌더링되는 이유, border-box 한 줄이 해결합니다."
+date: 2026-04-12
+tags: ["CSS", "박스 모델", "레이아웃"]
+published: true
+---
+
+## width: 200px인데 왜 220px이지?
+
+카드 컴포넌트에 `width: 200px`을 줬는데, DevTools를 열어보면 실제 렌더링 크기가 220px입니다. 분명 200이라고 썼는데요.
+
+범인은 `padding`입니다. CSS의 기본 `box-sizing` 값인 `content-box`에서는 `width`가 **콘텐츠 영역만** 의미하거든요. padding과 border는 그 바깥에 추가됩니다.
+
+<CodePlayground
+  code={`function ContentBoxTrap() {
+    return (
+      <div className="wrapper">
+        <div className="box box--content">
+          <strong>content-box (기본값)</strong>
+          <br />
+          width: 200px + padding 10px x 2
+          <br />= 실제 220px
+        </div>
+        <div className="box box--border">
+          <strong>border-box</strong>
+          <br />
+          width: 200px (padding 포함)
+          <br />= 실제 200px
+        </div>
+      </div>
+    );
+  }`}
+  css={`.wrapper {
+    display: flex;
+    gap: 24px;
+    padding: 16px;
+  }
+
+  .box {
+    width: 200px;
+    padding: 10px;
+    border: 2px solid #6366f1;
+    border-radius: 8px;
+    background: #eef2ff;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .box--content {
+    box-sizing: content-box;
+  }
+
+  .box--border {
+    box-sizing: border-box;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+왼쪽 박스는 `content-box`라서 200 + 10 + 10 + 2 + 2 = 실제로는 224px이 됩니다. 오른쪽은 `border-box`라서 선언한 그대로 200px이죠. DevTools에서 직접 확인해 보면 차이가 확 와닿습니다.
+
+## border-box가 바꾸는 것
+
+두 모드의 차이는 `width`/`height`가 **어디까지를 포함하느냐** 입니다.
+
+<AnimatedStep steps={[
+  {
+    title: "content-box (기본값)",
+    content: "width/height = 콘텐츠 영역만. 실제 차지하는 크기 = width + padding-left + padding-right + border-left + border-right. padding이나 border를 바꿀 때마다 전체 크기가 흔들립니다."
+  },
+  {
+    title: "border-box",
+    content: "width/height = 콘텐츠 + padding + border 전부 포함. 콘텐츠 영역 = width - padding - border (0 미만이면 0으로 잘림). 선언한 크기가 곧 눈에 보이는 크기입니다."
+  }
+]} />
+
+`border-box`에서는 padding을 늘리면 콘텐츠 영역이 줄어들고, 박스의 바깥 크기는 그대로 유지됩니다. [Grid나 Flexbox](/posts/grid-vs-flex) 같은 레이아웃 시스템에서 칼럼 너비를 계산할 때, 이 예측 가능성이 결정적이에요. `width: 25%`라고 선언하면 진짜 부모의 25%를 차지하니까요.
+
+<Callout variant="info">
+"The border-box value makes dealing with the sizes of elements much easier." - MDN
+
+"다루기 쉬워진다"는 게 핵심입니다. padding을 조정할 때마다 width를 역산할 필요가 없으니까요.
+
+</Callout>
+
+## 왜 CSS 기본값은 content-box인가
+
+CSS2.1 스펙은 박스 모델에서 `width`와 `height`를 콘텐츠 영역으로 정의했습니다.<Cite id="w3c-css2-box" /> 그때는 그게 자연스러웠어요. 문서의 텍스트 영역 크기를 지정하고, 여백과 테두리는 그 밖에 두는 인쇄 레이아웃 모델이었거든요.
+
+문제는 웹이 "문서"에서 "애플리케이션"으로 진화하면서 생겼습니다. 고정 너비 칼럼에 padding을 넣으면 레이아웃이 깨지고, `calc(100% - 20px)` 같은 계산을 반복해야 했죠. 그래서 CSS3에서 `box-sizing` 속성이 등장했고, `border-box`라는 선택지가 생긴 겁니다.
+
+그렇다면 W3C가 기본값 자체를 `border-box`로 바꾸면 될 텐데, 왜 안 했을까요? 기존 웹사이트가 깨지기 때문입니다. 수십억 페이지가 `content-box` 기준으로 레이아웃을 잡아놨는데, 브라우저가 갑자기 기본값을 바꾸면 패딩 있는 모든 요소의 크기가 달라지겠죠. 그래서 기본값은 건드리지 않고, 개발자가 명시적으로 선택하는 방식을 택한 겁니다.
+
+재밌는 건, 브라우저 자신은 이미 `border-box`를 쓰고 있다는 점이에요. `<input>`, `<button>`, `<select>`, `<table>` 같은 폼 요소들은 브라우저 UA 스타일시트에서 기본으로 `box-sizing: border-box`가 적용되어 있습니다.<Cite id="mdn-box-sizing" />
+
+## 전역 리셋 한 줄의 의미
+
+현대 CSS 리셋은 거의 예외 없이 이 패턴을 포함합니다.
+
+```css
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+```
+
+[`*` 선택자가 어떻게 동작하는지](/posts/css-cascade-and-combinators) 알고 있다면, 이 한 줄이 문서의 모든 요소와 의사 요소를 border-box로 전환한다는 걸 바로 이해할 수 있어요. [Tailwind 같은 CSS 프레임워크](/posts/css-styling-tradeoffs)도 내부적으로 이 리셋을 기본 포함합니다.
+
+상속 기반의 대안 패턴도 있습니다.
+
+```css
+html {
+  box-sizing: border-box;
+}
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+```
+
+이 방식은 특정 컴포넌트만 `content-box`로 되돌리고 싶을 때 유용합니다. 부모에 `box-sizing: content-box`를 주면 자식들이 자동으로 따라가니까요. 서드파티 위젯을 임베드할 때 `content-box`를 기대하는 라이브러리가 있다면 이 패턴이 낫습니다.
+
+<Callout variant="tip">
+`content-box`가 더 나은 경우가 아예 없지는 않습니다. `position: absolute`로 정밀 배치하면서 콘텐츠 영역 크기를 고정하고, padding/border는 별도로 제어하고 싶을 때가 그렇습니다. 다만 이런 상황은 매우 드물고, 대부분의 레이아웃에서는 border-box가 압도적으로 편합니다.
+
+</Callout>
+
+## 정리
+
+`box-sizing: border-box` 한 줄이 하는 일은 단순합니다. **내가 선언한 크기가 곧 화면에 보이는 크기가 되는 것** 이죠. CSS 기본값이 `content-box`인 건 하위 호환 때문이고, 현대 웹 개발에서는 전역 리셋으로 `border-box`를 깔아두는 게 사실상 표준입니다.
+
+한 가지 기억할 점이 있다면, `box-sizing`은 `margin`에는 영향을 주지 않는다는 겁니다. `border-box`든 `content-box`든 margin은 항상 바깥에 추가돼요. `width: 100%`에 `margin`까지 더해서 부모를 넘치는 문제는 `box-sizing`이 아니라 다른 접근이 필요합니다.
+
+<References
+  items={[
+    {
+      id: "mdn-box-sizing",
+      title: "MDN - CSS box-sizing",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/box-sizing",
+      description: "content-box/border-box 동작 차이와 브라우저 UA 기본값 확인",
+    },
+    {
+      id: "w3c-css-sizing",
+      title: "W3C CSS Sizing Level 3 - Specifying Box Sizes",
+      href: "https://www.w3.org/TR/css-sizing-3/#box-sizing",
+      description: "border-box 계산 공식과 floor 규칙 원문",
+    },
+    {
+      id: "w3c-css2-box",
+      title: "W3C CSS2.1 - Box Model",
+      href: "https://www.w3.org/TR/CSS2/box.html",
+      description: "width/height가 콘텐츠 영역만 지정하는 CSS2 박스 모델 원문",
+    },
+  ]}
+/>
