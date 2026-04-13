@@ -1,0 +1,178 @@
+---
+title: "padding 비율 트릭은 이제 그만"
+description: "16:9 비율 만들겠다고 padding-top에 56.25%를 넣고 있나요? 더 나은 방법이 있어요."
+date: 2026-04-13
+tags: ["CSS", "aspect-ratio", "레이아웃"]
+published: true
+---
+
+16:9 영상 비율을 만들겠다고 `padding-top: 56.25%`를 쓰고, 자식 요소를 `position: absolute`로 띄워본 적 있나요? 동작은 하는데 "이게 왜 비율이지?" 싶은 느낌을 떨칠 수가 없었어요. `aspect-ratio` 한 줄이면 그 해킹이 통째로 사라집니다.
+
+## padding-top이 비율이 되던 시절
+
+padding의 퍼센트 값은 **부모 너비** 기준으로 계산돼요. 높이가 아니라 너비요. 이 특성을 이용해서 `padding-top: 56.25%`(= 9/16 × 100)를 주면 부모 너비의 56.25%만큼 세로 공간이 생기죠. 거기에 `position: relative`를 걸고, 실제 콘텐츠는 `position: absolute`로 채우는 겁니다.
+
+```css
+/* 과거의 16:9 비율 해킹 */
+.video-wrapper {
+  position: relative;
+  padding-top: 56.25%;
+  height: 0;
+}
+
+.video-wrapper > iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+```
+
+동작은 합니다. 근데 코드를 처음 보는 사람이 "아, 이게 16:9 비율이구나"라고 바로 알 수 있을까요? `height: 0`에 `padding-top`으로 높이를 만든다는 발상 자체가 직관적이지 않거든요.
+
+## 한 줄로 비율 잡기
+
+`aspect-ratio` 속성은 이름 그대로 비율을 지정해요. 값은 세 가지 형태를 받습니다.
+
+<AnimatedStep
+  steps={[
+    {
+      title: "auto",
+      content: "기본값이에요. 요소 고유의 비율이 있으면(img, video 등) 그걸 따르고, 없으면 비율 제약 없이 동작해요.",
+    },
+    {
+      title: "너비 / 높이",
+      content: "16/9, 4/3, 1/1처럼 직접 비율을 지정해요. 숫자 하나만 쓰면 높이가 1로 간주돼서 0.5는 0.5/1과 같아요.",
+    },
+    {
+      title: "auto && 비율",
+      content: "auto 3/4처럼 쓰면 replaced 요소(img 등)는 고유 비율 우선, non-replaced 요소(div 등)는 지정 비율을 사용해요.",
+    },
+  ]}
+/>
+
+앞의 padding 해킹을 `aspect-ratio`로 바꾸면 이렇게 돼요.
+
+```css
+.video-wrapper {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+}
+
+.video-wrapper > iframe {
+  width: 100%;
+  height: 100%;
+}
+```
+
+`position: relative`, `absolute`, `height: 0`, `padding-top: 56.25%` 전부 사라졌어요. 코드를 읽는 사람도 "16:9 비율이구나"를 바로 알 수 있죠.<Cite id="mdn-aspect-ratio" />
+
+## width와 height를 둘 다 쓰면?
+
+여기가 진짜 함정이에요. `width`와 `height`를 둘 다 명시하면 `aspect-ratio`는 아무 효과가 없어요.
+
+```css
+/* aspect-ratio가 무시되는 코드 */
+.box {
+  width: 200px;
+  height: 200px;
+  aspect-ratio: 16 / 9; /* 아무 일도 안 일어남 */
+}
+```
+
+MDN이 딱 한 줄로 정리해줍니다.
+
+<Callout variant="warning">
+"At least one box dimension must be automatic for aspect-ratio to have any effect." - MDN
+
+최소 한 축은 auto여야 비율이 동작해요. 두 축 다 잡아버리면 브라우저가 비율을 계산할 여지가 없는 거죠.
+
+</Callout>
+
+저도 처음에 이걸 몰라서 "왜 안 먹히지?" 하고 한참 헤맸어요. `width`만 주고 `height`는 비워두거나, 반대로 `height`만 주고 `width`를 auto로 두면 비율이 정상 동작합니다.
+
+## img와 div는 다르게 동작해요
+
+`aspect-ratio: auto 3/4`를 `<img>`와 `<div>`에 각각 적용하면 결과가 달라요.
+
+`<img>`는 replaced 요소예요. 고유한 비율을 이미 갖고 있죠. `auto 3/4`를 주면 이미지가 로드되기 전에는 3:4 비율로 공간을 잡아두고, 로드가 끝나면 이미지 고유 비율로 전환돼요. 이게 CLS(Cumulative Layout Shift) 방지에 아주 유용합니다.
+
+`<div>`는 non-replaced 요소라서 고유 비율이 없어요. `auto 3/4`를 줘도 그냥 3:4 비율을 일관되게 적용해요. `auto`를 쓰든 안 쓰든 결과가 같죠.
+
+<Callout variant="info">
+"Having a preferred aspect ratio does not make a box into a replaced element." - W3C CSS Sizing 4
+
+aspect-ratio를 줬다고 div가 img처럼 변하는 건 아니에요. 비율 계산 로직만 빌려오는 거예요.
+
+</Callout>
+
+정리하면, `auto && 비율` 문법은 주로 `<img>`에서 의미가 있어요. "이미지 로드 전 fallback 비율"을 지정하는 용도거든요.<Cite id="w3c-css-sizing" />
+
+## 실전에서 쓰는 패턴
+
+가장 흔하게 쓰이는 세 가지 패턴이에요.
+
+**CLS 방지**. 이미지에 `width`와 `height` 속성을 HTML에 직접 쓰면 브라우저가 로드 전에 비율을 계산해요. 반응형으로 `width: 100%`를 줄 때 `aspect-ratio`를 함께 쓰면 더 명확합니다.
+
+```html
+<img
+  src="hero.jpg"
+  width="1600"
+  height="900"
+  style="width: 100%; height: auto;"
+  alt="히어로 이미지"
+/>
+```
+
+이 경우 브라우저가 width/height 속성에서 16:9 비율을 자동으로 추론해요. 명시적으로 쓰고 싶다면 CSS에 `aspect-ratio: 16 / 9`를 추가하면 됩니다.
+
+**object-fit과 결합**. 비율은 유지하면서 이미지가 잘리지 않게 하고 싶다면 `object-fit: contain`을 함께 쓰세요. 정사각 썸네일을 만들 때는 `cover`가 더 유용해요.
+
+```css
+.thumbnail {
+  aspect-ratio: 1 / 1;
+  width: 120px;
+  object-fit: cover;
+}
+```
+
+원본 비율이 뭐든 1:1 영역 안에 꽉 채워줍니다.
+
+**Grid 카드 레이아웃**. [Flexbox와 Grid의 차이](/posts/grid-vs-flex)를 알고 있다면, Grid로 카드를 배치할 때 각 카드의 이미지 영역에 `aspect-ratio`를 거는 패턴이 자연스러울 거예요.
+
+```css
+.card-image {
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+```
+
+카드마다 이미지 크기가 달라도 4:3 영역이 고정되니까 레이아웃이 안 깨져요.<Cite id="webdev-aspect-ratio" />
+
+지금 전 세계 브라우저의 95% 이상이 `aspect-ratio`를 지원하고 있어요. IE만 아니면 안심하고 쓸 수 있습니다.
+
+<References
+  items={[
+    {
+      id: "mdn-aspect-ratio",
+      title: "MDN - CSS aspect-ratio",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/aspect-ratio",
+      description: "속성 정의, 값 유형, replaced/non-replaced 동작 차이 확인",
+    },
+    {
+      id: "w3c-css-sizing",
+      title: "W3C CSS Box Sizing Module Level 4 - Aspect Ratio",
+      href: "https://www.w3.org/TR/css-sizing-4/#aspect-ratio",
+      description: "preferred aspect ratio 계산 로직과 min/max 제약 상호작용 원문",
+    },
+    {
+      id: "webdev-aspect-ratio",
+      title: "web.dev - CSS aspect-ratio",
+      href: "https://web.dev/articles/aspect-ratio",
+      description: "padding-trick 대체, CLS 방지, object-fit 결합 실전 팁",
+    },
+  ]}
+/>
