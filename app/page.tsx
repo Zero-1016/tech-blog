@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { posts } from "#site/content";
 import { Hero } from "@/components/ui/hero";
-import { PostList } from "@/components/ui/post-list";
+import {
+  PostList,
+  type PostEntry,
+  type PostItem,
+  type SeriesGroup,
+} from "@/components/ui/post-list";
 import { siteConfig, SITE_URL } from "@/lib/site";
 
 const POPULAR_TAG_MIN_COUNT = 3;
@@ -55,22 +60,26 @@ export default function Home() {
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, POPULAR_TAG_LIMIT);
 
-  const published = [...groups.values()]
+  const toPostItem = (p: (typeof posts)[number]): PostItem => ({
+    slug: p.slug,
+    title: p.title,
+    description: p.description,
+    date: p.date,
+    tags: p.tags,
+    cover: p.cover,
+    charCount: p.charCount,
+  });
+
+  const published: PostEntry[] = [...groups.values()]
     .sort((a, b) => b.date - a.date)
-    .flatMap((group) => {
-      const list =
-        group.kind === "single"
-          ? [group.post]
-          : [...group.items].sort((a, b) => (a.seriesOrder ?? 0) - (b.seriesOrder ?? 0));
-      return list.map((p) => ({
-        slug: p.slug,
-        title: p.title,
-        description: p.description,
-        date: p.date,
-        tags: p.tags,
-        cover: p.cover,
-        charCount: p.charCount,
-      }));
+    .map((group): PostEntry => {
+      if (group.kind === "single") return toPostItem(group.post);
+      const sorted = [...group.items].sort((a, b) => (a.seriesOrder ?? 0) - (b.seriesOrder ?? 0));
+      return {
+        kind: "series",
+        name: group.name,
+        items: sorted.map(toPostItem),
+      } satisfies SeriesGroup;
     });
 
   const websiteJsonLd = {
@@ -93,14 +102,17 @@ export default function Home() {
     url: SITE_URL,
     description: siteConfig.description,
     inLanguage: "ko-KR",
-    blogPost: published.slice(0, 10).map((p) => ({
-      "@type": "BlogPosting",
-      headline: p.title,
-      description: p.description,
-      datePublished: new Date(p.date).toISOString(),
-      url: `${SITE_URL}/posts/${p.slug}`,
-      keywords: p.tags.join(", "),
-    })),
+    blogPost: published
+      .flatMap((entry) => ("kind" in entry ? entry.items : [entry]))
+      .slice(0, 10)
+      .map((p) => ({
+        "@type": "BlogPosting",
+        headline: p.title,
+        description: p.description,
+        datePublished: new Date(p.date).toISOString(),
+        url: `${SITE_URL}/posts/${p.slug}`,
+        keywords: p.tags.join(", "),
+      })),
   };
 
   return (

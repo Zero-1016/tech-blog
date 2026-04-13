@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import type { Metadata } from "next";
 import { posts } from "#site/content";
-import { formatCardDate } from "@/lib/utils";
 import { siteConfig, SITE_URL } from "@/lib/site";
+import { PostList } from "@/components/ui/post-list";
 
 interface Props {
   params: Promise<{ tag: string }>;
@@ -72,26 +71,17 @@ export default async function TagPage({ params }: Props) {
         <h1 className="mt-2 text-3xl font-bold tracking-tight">#{decoded}</h1>
         <p className="mt-2 text-secondary">{filtered.length}개의 글</p>
       </header>
-      <div className="flex flex-col gap-1">
-        {filtered.map((post) => (
-          <Link
-            key={post.slug}
-            href={`/posts/${post.slug}`}
-            className="group -mx-3 rounded-xl px-3 py-4 transition-colors hover:bg-card-hover"
-          >
-            <article>
-              <h2 className="font-semibold tracking-tight group-hover:text-accent">{post.title}</h2>
-              <p className="mt-1 text-sm text-secondary line-clamp-2">{post.description}</p>
-              <time
-                dateTime={post.date}
-                className="mt-1 block whitespace-nowrap text-xs text-secondary"
-              >
-                {formatCardDate(post.date)}
-              </time>
-            </article>
-          </Link>
-        ))}
-      </div>
+      <PostList
+        posts={filtered.map((post) => ({
+          slug: post.slug,
+          title: post.title,
+          description: post.description,
+          date: post.date,
+          tags: post.tags,
+          cover: post.cover,
+          charCount: post.charCount,
+        }))}
+      />
     </div>
   );
 }

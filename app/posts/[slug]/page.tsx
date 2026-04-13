@@ -13,6 +13,8 @@ import { PostHeader } from "@/components/ui/post-header";
 import { ScrollProgress } from "@/components/ui/scroll-progress";
 import { RelatedPosts } from "@/components/ui/related-posts";
 import { Comments } from "@/components/ui/comments";
+import { OverflowTags } from "@/components/ui/overflow-tags";
+import { CopyArticle } from "@/components/ui/copy-article";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -134,9 +136,12 @@ export default async function PostPage({ params }: Props) {
         <div className="xl:flex xl:gap-16">
           <article className="mx-auto min-w-0 max-w-3xl flex-1 xl:mx-0">
             <PostHeader>
-              <h1 className="text-3xl font-bold tracking-tight leading-tight">{post.title}</h1>
+              <div className="flex items-start justify-between gap-4">
+                <h1 className="text-3xl font-bold tracking-tight leading-tight">{post.title}</h1>
+                <CopyArticle />
+              </div>
               <p className="mt-3 text-lg text-secondary">{post.description}</p>
-              <div className="mt-4 flex items-center gap-3 text-sm text-secondary">
+              <div className="mt-4 flex items-center gap-1 text-sm text-secondary">
                 <time dateTime={post.date} className="whitespace-nowrap">
                   {formatCardDate(post.date)}
                 </time>
@@ -145,17 +150,7 @@ export default async function PostPage({ params }: Props) {
                 {post.tags.length > 0 && (
                   <>
                     <span>·</span>
-                    <div className="flex min-w-0 gap-1.5 overflow-x-auto">
-                      {post.tags.map((tag) => (
-                        <Link
-                          key={tag}
-                          href={`/tags/${tag}`}
-                          className="whitespace-nowrap rounded-md bg-code-bg px-2 py-0.5 text-xs transition-colors hover:bg-accent/10 hover:text-accent"
-                        >
-                          {tag}
-                        </Link>
-                      ))}
-                    </div>
+                    <OverflowTags tags={post.tags} />
                   </>
                 )}
               </div>
