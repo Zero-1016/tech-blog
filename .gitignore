@@ -63,3 +63,6 @@ content/tmp/*
 settings.local.json
 # blog-revise 백업
 content/posts/.backups/
+
+# blog-write 의 blog-revise 호출 시 임시 저장
+content/posts/.tmp/
