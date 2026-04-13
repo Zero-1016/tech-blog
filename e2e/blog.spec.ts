@@ -4,7 +4,7 @@ test.describe("메인 페이지", () => {
   test("제목과 설명이 보인다", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("h1")).toHaveText("Tech Blog");
-    await expect(page.getByText("AI가 쓰고")).toBeVisible();
+    await expect(page.getByText("© Copyright All Developers")).toBeVisible();
   });
 
   test("포스트 목록이 보인다", async ({ page }) => {
