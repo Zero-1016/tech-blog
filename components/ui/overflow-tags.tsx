@@ -39,7 +39,6 @@ export function OverflowTags({ tags }: OverflowTagsProps) {
   }, [tags]);
 
   useEffect(() => {
-    calculate();
     const observer = new ResizeObserver(calculate);
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();

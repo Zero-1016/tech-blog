@@ -304,9 +304,6 @@ async function formatAnimatedStepCodes(
     for (let f = fields.length - 1; f >= 0; f--) {
       const { fStart, fEnd, prefix, raw } = fields[f];
 
-      const lineStart = newBlock.lastIndexOf("\n", fStart) + 1;
-      const lineIndent = newBlock.slice(lineStart, fStart).match(/^(\s*)/)?.[1] ?? "";
-
       const parser = pickParser(undefined, raw);
       const absoluteLine = source.slice(0, start + fStart).split("\n").length;
       const unescaped = raw.replace(/\\`/g, "`").replace(/\\\$\{/g, "${");
