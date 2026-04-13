@@ -1,0 +1,94 @@
+---
+title: "import가 안 되는 진짜 이유"
+description: "moduleResolution을 바꾸면 되긴 하는데, 왜 바꿔야 하는 건지 모르겠다면요."
+date: 2026-04-14
+tags: ["TypeScript", "Node.js", "모듈 시스템", "ESM"]
+published: true
+---
+
+`import something from './utils'`를 썼는데 빨간 줄이 뜹니다. "Cannot find module"이라는 메시지가 반겨주죠. 분명 파일은 있는데요. 저도 처음엔 tsconfig를 이리저리 만지다가 `moduleResolution`을 바꾸니까 해결됐는데, 왜 그래야 하는지는 한참 뒤에야 이해했어요.
+
+## 빨간 줄이 뜨는 그 순간
+
+에디터에서 import 경로에 빨간 밑줄이 생기는 건 TypeScript 컴파일러가 "이 경로에 해당하는 파일을 못 찾겠어"라고 말하는 거예요. 여기서 한 가지 오해가 생깁니다. TypeScript가 직접 파일 시스템을 뒤져서 모듈을 찾는다고 생각하기 쉬운데, 실제로는 좀 다르거든요.
+
+TypeScript의 모듈 해석은 결국 이 질문으로 귀결돼요. "이 import 경로가 실제로 어떤 파일을 가리키는가?" 공식 문서에서는 이걸 "모듈 지정자(module specifier)를 파일 시스템의 특정 파일에 매핑하는 과정"이라고 정의합니다.<Cite id="ts-modules-theory" />
+
+## TypeScript는 경로를 바꾸지 않는다
+
+여기가 핵심이에요. TypeScript는 컴파일할 때 import 경로를 **건드리지 않아요.** `import { foo } from './utils'`라고 쓰면, 컴파일된 JavaScript에도 그 경로가 그대로 남습니다.<Cite id="ts-modules-reference" />
+
+그러면 실제로 `./utils`를 해석해서 파일을 찾는 건 누구 몫일까요? Node.js 같은 런타임이거나, webpack 같은 번들러예요. TypeScript는 이 "호스트"가 경로를 어떻게 해석할지를 **미리 흉내 내서** 타입을 체크할 뿐이에요.
+
+그래서 TypeScript에서 import가 안 되는 문제는 대부분 이런 구조에서 생겨요. TypeScript가 흉내 내는 방식과 실제 런타임이 해석하는 방식이 안 맞는 거죠.
+
+## Node.js가 모듈을 찾는 두 가지 방식
+
+TypeScript가 흉내 내려는 대상, 즉 Node.js의 모듈 해석은 CJS(CommonJS)와 ESM(ECMAScript Modules)에서 규칙이 다릅니다.
+
+CJS에서 `require('./utils')`를 호출하면 Node.js는 순서대로 `./utils.js`, `./utils.json`, `./utils.node`를 시도해요.<Cite id="nodejs-cjs" /> 확장자를 안 써도 알아서 찾아주는 거죠. 디렉토리를 넘기면 `package.json`의 `main` 필드를 보고, 그것도 없으면 `index.js`를 찾습니다.
+
+ESM에서는 이야기가 달라져요. `import { foo } from './utils'`라고 쓰면 에러가 납니다. ESM은 확장자를 생략할 수 없어요.<Cite id="nodejs-esm" /> `'./utils.js'`라고 명시해야 합니다. 디렉토리 인덱스 자동 해석도 없어서 `'./lib'` 대신 `'./lib/index.js'`를 써야 하고요.
+
+<Callout variant="info">
+"ES modules require explicit file extensions in all import specifiers." - Node.js ESM docs
+
+CJS에서는 확장자 없이 잘 됐던 게 ESM에서는 안 되는 이유가 이거예요. 해석 규칙 자체가 다릅니다.
+
+</Callout>
+
+`node_modules`에서 패키지를 찾는 것도 다릅니다. CJS는 현재 디렉토리부터 루트까지 `node_modules` 폴더를 거슬러 올라가며 탐색하고, ESM은 `package.json`의 `exports` 필드를 먼저 봐요. `exports`에 정의된 경로만 외부에서 접근할 수 있고, 정의되지 않은 내부 파일은 import 자체가 차단됩니다.
+
+## moduleResolution이 하는 일
+
+이제 tsconfig의 `moduleResolution`이 뭘 하는지 감이 올 거예요. 이 옵션은 TypeScript에게 "어떤 호스트의 해석 규칙을 흉내 낼지" 알려주는 설정이에요.
+
+`node`로 설정하면 CJS 스타일의 Node.js 해석을 따라해요. 확장자 없이 `'./utils'`라고 써도 TypeScript가 `.ts`, `.js` 같은 확장자를 붙여가며 찾아줍니다. 오래된 프로젝트에서 익숙한 동작이죠.
+
+`node16`이나 `nodenext`로 바꾸면 Node.js의 ESM 규칙까지 반영해요. `.mts` 파일에서는 ESM 해석을, `.cts` 파일에서는 CJS 해석을 적용하고, 일반 `.ts` 파일은 가장 가까운 `package.json`의 `type` 필드를 보고 판단합니다. 확장자도 명시해야 하고요.
+
+`bundler`는 webpack이나 Vite 같은 번들러 환경을 위한 설정이에요. `nodenext`처럼 `package.json`의 `exports` 필드는 지원하지만, 상대 경로에서 확장자를 생략해도 돼요. 번들러가 확장자 해석을 알아서 처리하니까요.
+
+<Callout variant="warning">
+`moduleResolution: "node"`는 CJS만 흉내 내요. 최신 Node.js의 ESM 동작이나 `package.json`의 `exports` 필드를 이해하지 못합니다. 새 프로젝트에서는 `nodenext`나 `bundler`가 더 적절해요.
+
+</Callout>
+
+## paths는 타입만, 런타임은 별도
+
+tsconfig의 `paths`도 같은 맥락에서 이해하면 돼요. `"@app/*": ["./src/*"]`처럼 경로 별칭을 설정하면 TypeScript가 import를 해석할 때 그 매핑을 사용해요. 에디터의 자동완성도 되고, 타입 체크도 통과하죠.
+
+근데 빌드하고 나면 안 되는 경우가 있어요. `paths`는 TypeScript의 **타입 해석에만** 영향을 주거든요. 컴파일된 JavaScript에는 `@app/utils` 같은 경로가 그대로 남아 있고, Node.js는 그런 경로를 모릅니다.
+
+그래서 번들러를 쓴다면 webpack의 `resolve.alias`나 Vite의 `resolve.alias` 같은 설정을 별도로 맞춰줘야 해요. Node.js에서 직접 실행한다면 `tsconfig-paths` 같은 런타임 헬퍼가 필요하고요.
+
+처음엔 "TypeScript에서 설정했으니까 당연히 런타임에서도 되는 거 아냐?"라고 생각하기 쉬운데, TypeScript는 경로를 바꾸지 않는다는 원칙을 기억하면 이 함정에 안 빠져요.
+
+<References
+  items={[
+    {
+      id: "ts-modules-theory",
+      title: "TypeScript - Modules Theory",
+      href: "https://www.typescriptlang.org/docs/handbook/modules/theory.html",
+      description: "TypeScript가 모듈 지정자를 해석하는 원리와 호스트 위임 개념",
+    },
+    {
+      id: "ts-modules-reference",
+      title: "TypeScript - Modules Reference",
+      href: "https://www.typescriptlang.org/docs/handbook/modules/reference.html",
+      description: "`moduleResolution` 옵션별 동작과 `paths` 설정 상세",
+    },
+    {
+      id: "nodejs-cjs",
+      title: "Node.js - CommonJS Modules",
+      href: "https://nodejs.org/api/modules.html",
+      description: "`require()` 알고리즘과 확장자 자동 해석 순서",
+    },
+    {
+      id: "nodejs-esm",
+      title: "Node.js - ECMAScript Modules",
+      href: "https://nodejs.org/api/esm.html",
+      description: "ESM의 확장자 필수 규칙과 `exports` 필드 동작",
+    },
+  ]}
+/>
