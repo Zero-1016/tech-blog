@@ -6,9 +6,6 @@ description: |
   → 정합성 검증(blog-validator) 순서로 실행한다. 각 단계는 별도 skill 파일을
   Read로 주입해 처리하며, 오케스트레이터 컨텍스트는 구조화된 결과만 주고받는다.
 
-  v0.1: 자료 수집 + 기획 + 집필 + 검증 (최소 파이프라인)
-  v0.2 (TODO): draft-review, expression-review, coherence-review 추가
-
   사용 트리거: "블로그 글 써줘", "이 주제로 포스트 만들어줘", "/blog-write",
   또는 주제 + URL 붙여넣기.
 
