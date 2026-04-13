@@ -25,9 +25,27 @@ interface SearchItem {
 
 export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: boolean }) {
   const [open, setOpen] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpen = () => {
+    setQuery("");
+    setOpen(true);
+    setVisible(true);
+    setClosing(false);
+  };
+
+  const handleClose = () => {
+    setClosing(true);
+    setTimeout(() => {
+      setOpen(false);
+      setVisible(false);
+      setClosing(false);
+    }, 150);
+  };
 
   useEffect(() => {
     searchData.then(setItems);
@@ -44,32 +62,35 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setOpen((prev) => {
-          if (!prev) setQuery("");
-          return !prev;
-        });
+        if (visible) handleClose();
+        else handleOpen();
       }
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape" && visible) handleClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [visible]);
 
   useEffect(() => {
-    if (open) {
+    if (open && !closing) {
       requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }, [open]);
+  }, [open, closing]);
+
+  const overlayAnim = closing ? "search-overlay-out" : "search-overlay-in";
+  const panelAnim = closing ? "search-panel-out" : "search-panel-in";
 
   const modal =
     open && typeof window !== "undefined"
       ? createPortal(
           <>
             <div
-              className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
-              onClick={() => setOpen(false)}
+              className={`${overlayAnim} fixed inset-0 z-[100] bg-black/30`}
+              onClick={handleClose}
             />
-            <div className="fixed inset-x-0 top-24 z-[100] mx-auto w-full max-w-lg px-4">
+            <div
+              className={`${panelAnim} fixed inset-x-0 top-24 z-[100] mx-auto w-full max-w-lg px-4`}
+            >
               <div className="overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
                 <div className="flex items-center gap-3 border-b border-border px-4">
                   <svg
@@ -132,10 +153,7 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
   return (
     <>
       <button
-        onClick={() => {
-          setQuery("");
-          setOpen(true);
-        }}
+        onClick={handleOpen}
         className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm text-secondary transition-colors hover:border-accent/50"
       >
         <svg
