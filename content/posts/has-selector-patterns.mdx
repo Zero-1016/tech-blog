@@ -1,0 +1,177 @@
+---
+title: ":has()로 부모를 고르는 법"
+description: "자식을 보고 부모를 골라야 하는 순간, JavaScript 없이 CSS만으로 해결할 수 있어요."
+date: 2026-04-13
+tags: ["CSS", "선택자", "has"]
+published: true
+---
+
+폼 입력 필드에 에러가 생기면 감싸는 컨테이너 배경을 빨갛게 바꿔야 했어요. 자식의 상태를 보고 부모를 골라야 하는 거죠. 예전엔 JavaScript로 부모 요소에 클래스를 붙였다 떼는 수밖에 없었어요. CSS 선택자는 항상 위에서 아래로만 흘렀거든요. `:has()`가 그 방향을 뒤집었습니다.
+
+## 자식을 보고 부모를 고르고 싶다
+
+카드 컴포넌트 안에 이미지가 있을 때만 레이아웃을 바꾸고 싶다고 해볼게요. 이미지가 없는 카드는 텍스트만 꽉 채우고, 이미지가 있는 카드는 좌우 분할로 바꾸는 거예요.
+
+`:has()` 이전에는 이런 패턴이 불가능했어요. JavaScript로 DOM을 순회하면서 `.has-image` 같은 클래스를 부모에 달아줘야 했죠. 상태가 바뀔 때마다 동기화도 필요하고요.
+
+```css
+/* 예전 방식: JS가 .has-image 클래스를 토글 */
+.card.has-image {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+}
+```
+
+`:has()`는 이 문제를 CSS 한 줄로 풀어요.
+
+```css
+/* :has() 방식: JS 불필요 */
+.card:has(img) {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+}
+```
+
+`.card` 안에 `img`가 존재하면 그 `.card`를 선택해요. DOM이 바뀌면 브라우저가 알아서 재평가하고요.
+
+## 문법과 동작 원리
+
+`:has()`는 함수형 의사 클래스예요. 괄호 안에 **상대 셀렉터** 를 받아서, 그 셀렉터가 매칭되는 요소가 하나라도 있으면 앵커 요소를 선택합니다.<Cite id="w3c-selectors4" />
+
+[선택자와 결합자를 다룬 지난 글](/posts/css-cascade-and-combinators)에서 봤던 `>`, `+`, `~` 결합자를 `:has()` 안에서도 그대로 쓸 수 있어요.
+
+<AnimatedStep
+  steps={[
+    {
+      title: "후손 매칭",
+      content: "a:has(b)는 a 하위 어딘가에 b가 있으면 a를 선택해요. 깊이 제한 없이 탐색합니다."
+    },
+    {
+      title: "직접 자식 매칭",
+      content: "a:has(> b)는 a의 바로 아래 자식 중 b가 있을 때만 선택해요. 탐색 범위가 한 단계로 좁혀지죠."
+    },
+    {
+      title: "인접 형제 매칭",
+      content: "h1:has(+ h2)는 h1 바로 다음에 h2가 오면 그 h1을 선택해요. 형제 관계도 조건으로 쓸 수 있습니다."
+    }
+  ]}
+/>
+
+논리 연산도 돼요. 쉼표로 구분하면 OR, `:has()`를 여러 번 체이닝하면 AND예요.
+
+```css
+/* OR: 자식 중 img 또는 video가 있으면 */
+.card:has(img, video) {
+  aspect-ratio: 16 / 9;
+}
+
+/* AND: checked인 input과 .error가 둘 다 있으면 */
+.form:has(input:checked):has(.error) {
+  border-color: orange;
+}
+```
+
+명시도는 괄호 안 셀렉터 중 가장 높은 값을 따릅니다. `:is()`나 `:not()`과 같은 규칙이에요.<Cite id="mdn-has" />
+
+## 실전 패턴
+
+이론보다 코드가 와닿으니까, 바로 쓸 수 있는 패턴 세 가지를 볼게요.
+
+### 폼 유효성 피드백
+
+입력이 유효하지 않을 때 감싸는 필드 그룹 전체에 시각 피드백을 줄 수 있어요.
+
+```css
+.field-group:has(input:invalid) {
+  background-color: #fef2f2;
+  border-left: 3px solid #ef4444;
+}
+
+.field-group:has(input:valid) {
+  border-left: 3px solid #22c55e;
+}
+```
+
+JavaScript 이벤트 리스너 없이 실시간으로 반응해요. 사용자가 타이핑하는 순간 브라우저가 `:invalid` 상태를 재평가하고, `:has()`도 함께 갱신되죠.
+
+### 빈 상태 처리
+
+리스트에 아이템이 하나도 없을 때 빈 상태 메시지를 보여주는 패턴이에요.
+
+```css
+.todo-list:has(li) .empty-state {
+  display: none;
+}
+
+.todo-list:not(:has(li)) .empty-state {
+  display: block;
+}
+```
+
+`:not(:has(li))`는 "li가 하나도 없는 .todo-list"를 선택해요. 정규식의 부정 전방 탐색과 비슷한 느낌이죠.
+
+### 이미지 유무에 따른 카드 레이아웃
+
+앞에서 살짝 봤던 패턴을 좀 더 다듬어볼게요.
+
+```css
+.card {
+  padding: 1.5rem;
+}
+
+.card:has(> img) {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 1rem;
+  padding: 0;
+}
+
+.card:has(> img) > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+```
+
+직접 자식(`>`)으로 범위를 좁힌 게 포인트예요. `.card` 안에 중첩된 아이콘 이미지까지 매칭되는 걸 막아주죠.
+
+## 성능과 주의사항
+
+`:has()`는 편리하지만, 아무 데나 걸면 브라우저가 힘들어해요.
+
+<Callout variant="warning">
+`:has()`의 앵커가 `body`, `:root`, `*` 같은 넓은 셀렉터이면 브라우저가 페이지 전체를 재평가해야 합니다. 반드시 `>`, `+` 결합자로 탐색 범위를 제한하세요.
+</Callout>
+
+몇 가지 제약도 있어요. `:has()` 안에 `:has()`를 중첩할 수 없고, 의사 요소(`::before`, `::after`)도 인자로 쓸 수 없습니다. 이 제약은 스펙에 명시된 사항이에요.
+
+브라우저 지원은 2023년 말 기준 주요 브라우저 전체에서 돼요. Chrome 105+, Safari 15.4+, Firefox 121+이고 전역 지원율은 약 94%예요. IE는 전 버전 미지원이지만, IE를 지원해야 하는 프로젝트가 아니라면 프로덕션에서 충분히 쓸 수 있는 수준이에요.
+
+## 정리
+
+`:has()`는 CSS 선택자의 방향을 뒤집은 기능이에요. 자식이나 형제의 상태를 보고 부모를 고를 수 있게 되면서, JavaScript로 클래스를 토글하던 패턴 상당수가 CSS만으로 가능해졌어요. 폼 유효성, 빈 상태, 조건부 레이아웃 같은 곳에서 특히 빛나죠.
+
+다만 넓은 앵커는 피하고, 결합자로 탐색 범위를 좁히는 습관을 들이면 성능 걱정 없이 쓸 수 있습니다.
+
+<References
+  items={[
+    {
+      id: "mdn-has",
+      title: "MDN - CSS `:has()` pseudo-class",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/:has",
+      description: ":has()의 문법, 명시도 규칙, 성능 가이드라인, 실전 예제 참고",
+    },
+    {
+      id: "w3c-selectors4",
+      title: "W3C Selectors Level 4 - Relational Pseudo-class",
+      href: "https://www.w3.org/TR/selectors-4/#relational",
+      description: ":has() 공식 명세, 상대 셀렉터 정의와 명시도 계산 규칙",
+    },
+    {
+      id: "caniuse-has",
+      title: "Can I Use - CSS :has()",
+      href: "https://caniuse.com/css-has",
+      description: "브라우저별 지원 현황과 전역 지원율 확인",
+    },
+  ]}
+/>
