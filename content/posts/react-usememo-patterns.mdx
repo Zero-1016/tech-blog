@@ -1,0 +1,133 @@
+---
+title: "useMemo가 필요한 순간"
+description: "느린 것 같으니까 useMemo 감싸자, 로 시작하면 대부분 빗나갑니다."
+date: 2026-04-13
+tags: ["React", "성능", "Hooks"]
+published: true
+---
+
+컴포넌트가 느린 것 같으면 제일 먼저 손이 가는 게 `useMemo`예요. 저도 처음엔 "비싸 보이는 계산은 일단 감싸두자"는 식으로 썼거든요. 근데 나중에 프로파일러를 켜보니, 감싼 부분은 멀쩡하고 정작 병목은 엉뚱한 데 있었습니다.
+
+`useMemo`는 측정 후 꺼내는 도구이지, 기본값으로 쓰는 보험이 아니에요.
+
+## 매번 다시 계산되는 게 정말 문제인가
+
+React 컴포넌트가 리렌더될 때 본문의 코드가 다시 실행되는 건 맞아요. 그래서 "리렌더 = 느리다"고 생각하기 쉽죠. 다만 대부분의 계산은 정말 빠릅니다. 배열 10개를 필터링하는 건 마이크로초 단위라서, `useMemo`로 감싸 봤자 의존성 비교 비용만 추가돼요.
+
+React 공식 문서도 이 점을 분명히 짚고 있어요.
+
+<Callout variant="warning">
+"You should only rely on useMemo as a performance optimization." - React 공식 문서
+
+성능 최적화 수단일 뿐이고, `useMemo` 없이 코드가 동작하지 않는다면 그건 다른 문제가 있다는 신호입니다.
+
+</Callout>
+
+그러면 언제 "진짜 비싼 계산"인지 어떻게 알 수 있을까요. `console.time()`으로 측정해보면 됩니다.
+
+```tsx
+console.time("filter");
+const result = items.filter((item) => item.score > threshold);
+console.timeEnd("filter");
+```
+
+이 값이 **1ms 이상** 이면 `useMemo`를 고려할 만해요.<Cite id="react-usememo" /> 그 아래라면 감싸지 않는 편이 코드도 깔끔하고 실익도 없습니다.
+
+## useMemo가 실제로 돕는 네 가지 장면
+
+공식 문서가 제시하는 유효한 사용처는 네 가지예요. 하나씩 볼게요.
+
+### 비용 큰 재계산 건너뛰기
+
+수천 개 이상의 배열을 매 렌더마다 정렬하거나 필터링한다면, 의존성이 바뀔 때만 재계산하는 게 합리적이에요.
+
+```tsx
+const sorted = useMemo(
+  () => items.sort((a, b) => a.name.localeCompare(b.name)),
+  [items]
+);
+```
+
+여기서 핵심은 `items` 참조가 바뀌지 않으면 정렬을 건너뛴다는 점이에요. React는 `Object.is()`로 의존성을 비교합니다.
+
+### memo() 자식에 전달하는 객체 안정화
+
+`React.memo()`로 감싼 자식 컴포넌트에 매 렌더마다 새 객체를 넘기면, memo가 소용없어요. 객체 참조가 매번 달라지거든요.
+
+```tsx
+const style = useMemo(
+  () => ({ color: theme.primary, fontSize: size }),
+  [theme.primary, size]
+);
+
+return <MemoizedChild style={style} />;
+```
+
+이렇게 하면 `theme.primary`와 `size`가 바뀌지 않는 한 `style` 참조가 유지돼서, 자식이 리렌더를 건너뛸 수 있어요.
+
+### Effect 의존성 안정화
+
+`useEffect`의 의존성 배열에 매 렌더마다 새로 만들어지는 객체가 들어가면, Effect가 무한으로 돌 수 있어요. `useMemo`로 참조를 고정하면 이 문제를 피할 수 있죠.
+
+```tsx
+const options = useMemo(() => ({ endpoint, retry: 3 }), [endpoint]);
+
+useEffect(() => {
+  fetchData(options);
+}, [options]);
+```
+
+### Context Provider value 안정화
+
+Context의 `value`에 매번 새 객체를 넘기면, 그 Context를 구독하는 모든 컴포넌트가 리렌더됩니다. Provider 쪽에서 `useMemo`로 감싸면 소비자 쪽 리렌더를 최소화할 수 있어요.
+
+```tsx
+const value = useMemo(
+  () => ({ user, updateUser }),
+  [user, updateUser]
+);
+
+return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+```
+
+## 꺼내지 말아야 할 때
+
+`useMemo`를 꺼내지 않는 게 나은 경우도 분명 있어요.
+
+**단순한 계산은 그냥 두세요.** 숫자 더하기, 문자열 합치기, 짧은 배열 map 같은 건 감싸지 않아도 됩니다. 의존성 배열 비교 자체에도 비용이 들기 때문에, 계산이 충분히 빠르면 오히려 손해예요.
+
+**컴포넌트 구조로 풀 수 있다면 그쪽이 먼저예요.** 비싼 컴포넌트가 있다면 `useMemo`로 값을 캐싱하기보다, 상태를 아래로 내리거나 `children` 패턴으로 분리하는 게 근본적인 해결이에요. React 공식 문서도 이렇게 강조합니다.
+
+<Callout variant="info">
+"If your code doesn't work without useMemo, find the underlying problem and fix it first." - React 공식 문서
+
+`useMemo` 없이 동작하지 않는 코드가 있다면, 먼저 근본 원인을 찾아 고치세요.
+
+</Callout>
+
+**프로파일링 없이 추측으로 추가하지 마세요.** "여기가 느릴 것 같아서"라는 감으로 `useMemo`를 뿌리면, 코드만 복잡해지고 실제 병목은 그대로 남습니다. DevTools Profiler를 켜고, 어디서 시간을 잡아먹는지 확인한 다음에 적용해야 효과가 있어요.
+
+## React Compiler가 바꾸는 풍경
+
+React Compiler가 등장하면서 `useMemo` 이야기가 조금 달라졌어요. Compiler는 빌드 타임에 자동으로 메모이제이션을 삽입해주거든요. 수동으로 `useMemo`, `useCallback`, `React.memo`를 쓸 필요가 줄어드는 거죠.<Cite id="react-compiler" />
+
+새 프로젝트에서는 Compiler에 맡기고, 정밀한 제어가 필요한 곳(Effect 의존성 안정화처럼)에서만 `useMemo`를 직접 쓰는 게 공식 권장 방향이에요. 기존 코드에 이미 `useMemo`가 있다면 급하게 제거할 필요는 없어요. Compiler가 있어도 escape hatch로 계속 동작하니까요. 다만 제거할 때는 반드시 테스트를 돌려보세요. 컴파일 결과가 미묘하게 달라질 수 있거든요.
+
+결국 흐름은 "수동 메모이제이션에서 자동 메모이제이션으로" 가고 있어요. 그래도 `useMemo`가 언제 의미 있는지 아는 건 여전히 중요합니다. 도구가 자동화해주는 것과, 왜 그 자동화가 필요한지 이해하는 건 다른 문제니까요.
+
+<References
+  items={[
+    {
+      id: "react-usememo",
+      title: "React - useMemo API Reference",
+      href: "https://react.dev/reference/react/useMemo",
+      description: "useMemo의 동작 원리, 유효한 사용처 4가지, 주의사항 전체 정리",
+    },
+    {
+      id: "react-compiler",
+      title: "React - React Compiler Introduction",
+      href: "https://react.dev/learn/react-compiler/introduction",
+      description: "자동 메모이제이션과 수동 useMemo/useCallback의 관계",
+    },
+  ]}
+/>
