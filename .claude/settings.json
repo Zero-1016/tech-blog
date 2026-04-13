@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "allow": ["WebSearch", "Bash(mkdir -p content/tmp)", "Bash(touch content/tmp/.gitkeep)"]
+  },
   "hooks": {
     "PostToolUse": [
       {

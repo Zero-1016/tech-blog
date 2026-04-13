@@ -22,9 +22,6 @@
 # IndexNow key file (filename contains the key, written from env at build)
 /public/*.txt
 
-# claude code (local config)
-.claude/skills/
-
 # playwright
 /test-results/
 /playwright-report/
@@ -58,3 +55,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# content/tmp 폴더 안의 모든 파일 무시, 단 .gitkeep만 추적
+content/tmp/*
+!content/tmp/.gitkeep
+
+settings.local.json

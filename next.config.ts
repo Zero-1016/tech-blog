@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: [process.env.LOCAL_IP ?? "localhost"],
   images: {
     remotePatterns: [{ protocol: "https", hostname: "img.youtube.com" }],
   },
