@@ -61,3 +61,5 @@ content/tmp/*
 !content/tmp/.gitkeep
 
 settings.local.json
+# blog-revise 백업
+content/posts/.backups/

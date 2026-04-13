@@ -23,6 +23,8 @@ AI가 글을 쓰고, 개발자가 방향을 잡는 한국어 기술 블로그.
   작성·검증은 자동입니다.
 - **메타 관리**: 규칙이나 스킬 자체를 다듬는 별도 스킬 (`blog-rule-editor`) 이
   안전 장치와 함께 제공됩니다.
+- **글 다듬기**: 기존 글을 수정하는 별도 스킬 (`blog-revise`) 이 5가지 패턴 (재
+  검증/부분 수정/자료 보강/완전 재작성/분석만) 을 지원합니다.
 
 ## 빠른 시작
 
@@ -38,6 +40,22 @@ AI가 글을 쓰고, 개발자가 방향을 잡는 한국어 기술 블로그.
 
 오케스트레이터가 자료 수집부터 검증까지 자동 진행하고, 기획안 단계에서 한 번
 사용자 승인을 받습니다.
+
+### 기존 글 다듬기
+
+```bash
+# 파일만 지정 (다듬기 패턴 카탈로그 제시)
+/blog-revise content/posts/css-aspect-ratio.mdx
+
+# 의도와 함께
+/blog-revise content/posts/css-aspect-ratio.mdx 마무리 단락이 어색해
+/blog-revise content/posts/css-aspect-ratio.mdx 새 자료 추가가 필요해
+/blog-revise content/posts/css-aspect-ratio.mdx 뭐가 문제인지 분석만
+```
+
+5가지 패턴 (재검증/부분 수정/자료 보강/완전 재작성/분석만) 을 지원하고, 자동 백업
+
+- 검증 사이클이 포함됩니다.
 
 ### 규칙 수정
 
@@ -95,13 +113,19 @@ flowchart TD
 | 5.6    | `blog-coherence-review`  | 도입-결론 호응, 섹션 흐름, 모순 등 논리 완결성           |
 | 6      | (오케스트레이터)         | validator 와 리뷰어 전체 리포트, 다음 단계 안내          |
 
+기존 글을 다듬는 흐름은 별도 스킬 `blog-revise` 가 담당합니다. 5가지 패턴 (재검증
+/부분 수정/자료 보강/완전 재작성/분석만) 을 지원하며, 내부적으로 위 파이프라인의
+일부 (validator, 리뷰어들, 또는 blog-write 전체) 를 재사용합니다. 자세한 내용은
+[AGENTS.md](./AGENTS.md) 의 "시나리오 6: 기존 글 다듬기" 참조.
+
 ## 스킬 패밀리
 
 `.claude/skills/` 하위에 8개 스킬이 있습니다.
 
 ```
 .claude/skills/
-├── blog-write/                ← 오케스트레이터
+├── blog-write/                ← 오케스트레이터 (새 글 작성)
+├── blog-revise/               ← 오케스트레이터 (기존 글 다듬기)
 ├── blog-research/             ← 자료 수집 (sub-agent)
 ├── blog-writer/               ← 집필
 ├── blog-validator/            ← 정규식 검증 + 자동 수정
@@ -114,6 +138,12 @@ flowchart TD
     ├── config/domains.md      ← 도메인 화이트리스트
     ├── CHANGELOG.md           ← 자동 생성
     └── .backups/              ← 자동 생성
+
+content/
+├── posts/
+│   └── .backups/              ← blog-revise 자동 생성 (gitignored)
+└── tmp/
+    └── .gitkeep
 ```
 
 각 스킬의 상세 역할과 호출 관계는 [docs/skill-relationships.png](./docs/skill-relationships.png)
@@ -176,9 +206,10 @@ config, 개별 스킬 파일을 수정합니다.
 ```
 .
 ├── .claude/
-│   └── skills/                  ← 블로그 스킬 패밀리
+│   └── skills/                  ← 블로그 스킬 패밀리 (9개)
 ├── content/
 │   ├── posts/                   ← MDX 글 (글 작성 출력)
+│   │   └── .backups/            ← blog-revise 백업 (gitignored)
 │   └── tmp/                     ← 로컬 로그 (gitignored)
 │       ├── .gitkeep
 │       └── writer-failures.md   ← writer 실패 로그 (자동 생성)

@@ -88,6 +88,15 @@ content/tmp/*
 !content/tmp/.gitkeep
 EOF
 fi
+
+# blog-revise 임시 디렉토리도 (via: blog-revise 일 때 사용)
+if ! grep -q "^content/posts/.tmp" .gitignore 2>/dev/null; then
+  cat >> .gitignore <<'EOF'
+
+# blog-write 의 blog-revise 호출 시 임시 저장
+content/posts/.tmp/
+EOF
+fi
 ```
 
 누적 실패 로그 확인:
@@ -646,8 +655,46 @@ plan: <approved_plan 전문>
 sources: <Phase 2 결과의 구조화된 배열>
 internal_links: <Phase 1 후보 + 배치 힌트>
 today: <YYYY-MM-DD>
-via: "orchestrator"
+via: "orchestrator" 또는 "blog-revise"
+output_override: <임시 저장 경로, blog-revise 호출 시에만>
 ```
+
+### blog-revise 호출 시 특수 처리
+
+`via: blog-revise` 로 호출되면 blog-write 는 **기존 파일을 덮어쓰지 않고 임시
+경로에 저장**. 덮어쓰기는 blog-revise 가 백업 후 처리.
+
+임시 경로 규칙:
+
+```
+content/posts/.tmp/<slug>-rewrite-<timestamp>.mdx
+```
+
+`output_override` 가 입력으로 들어오면 그 경로를 사용. 없으면 위 기본 규칙으로
+자동 생성.
+
+writer 에게 전달할 때 `slug` 와 `output_override` 를 함께 전달:
+
+```
+slug: <원본 slug, 그대로 유지>
+output_override: content/posts/.tmp/<slug>-rewrite-<timestamp>.mdx
+via: blog-revise
+```
+
+writer 는 `output_override` 가 있으면 그 경로에 저장 (slug 기반 자동 경로 무시).
+
+### 완료 시 반환
+
+`via: orchestrator` 일 때:
+
+- 저장된 파일 경로를 반환 (`content/posts/<slug>.mdx`)
+- 정상 Phase 5 진입
+
+`via: blog-revise` 일 때:
+
+- 저장된 임시 경로를 반환 (`content/posts/.tmp/<slug>-rewrite-<timestamp>.mdx`)
+- Phase 5, 5.5, 5.6 은 임시 파일 대상으로 실행
+- 모든 검증 통과 후 blog-revise 에게 반환 → blog-revise 가 백업 후 임시 → 원본 이동
 
 ### writer 실행
 

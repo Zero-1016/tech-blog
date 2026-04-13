@@ -13,12 +13,14 @@
 | 작업                   | 명령                                               |
 | ---------------------- | -------------------------------------------------- |
 | 새 글 작성             | `/blog-write <주제> [URL ...]`                     |
+| 기존 글 다듬기         | `/blog-revise <파일> [의도]`                       |
 | 규칙 수정              | `/blog-rule-editor`                                |
 | validator 단독 실행    | `/blog-validator content/posts/<slug>.mdx`         |
 | expression-review 단독 | `/blog-expression-review content/posts/<slug>.mdx` |
 | coherence-review 단독  | `/blog-coherence-review content/posts/<slug>.mdx`  |
 | writer 실패 로그 확인  | `cat content/tmp/writer-failures.md`               |
-| 백업 확인              | `ls .claude/skills/blog-shared/.backups/`          |
+| 글 백업 확인           | `ls content/posts/.backups/`                       |
+| 스킬 백업 확인         | `ls .claude/skills/blog-shared/.backups/`          |
 | CHANGELOG 확인         | `cat .claude/skills/blog-shared/CHANGELOG.md`      |
 
 ---
@@ -129,13 +131,20 @@ via: orchestrator
 ### 호출 관계 (실선)
 
 ```
-blog-write (오케스트레이터)
+blog-write (오케스트레이터, 새 글 작성)
   ├── blog-research        (Phase 2, sub-agent)
   ├── blog-draft-review    (Phase 3.5)
   ├── blog-writer          (Phase 4)
   ├── blog-validator       (Phase 5)
   ├── blog-expression-review (Phase 5.5)
   └── blog-coherence-review  (Phase 5.6)
+
+blog-revise (오케스트레이터, 기존 글 다듬기)
+  ├── blog-validator       (패턴 1, 2, 3 검증 사이클)
+  ├── blog-expression-review (패턴 1, 2, 3 검증 사이클)
+  ├── blog-coherence-review  (패턴 1, 2, 3 검증 사이클)
+  ├── blog-research        (패턴 3 자료 보강, sub-agent)
+  └── blog-write           (패턴 4 완전 재작성)
 
 blog-rule-editor (메타 관리, 별도)
   ├── SHARED.md
@@ -157,6 +166,7 @@ blog-rule-editor (메타 관리, 별도)
 | `blog-coherence-review`  | (논리 구조 검사, 표면 규칙 참조 안 함)                                                                                             |
 | `blog-draft-review`      | §SOURCE-PRIORITY, §META-\*, §COMPLEXITY                                                                                            |
 | `blog-write`             | §SOURCE-PRIORITY, §META-\*, §COMPLEXITY, §FILE-LAYOUT, §UI-USER-CHOICE                                                             |
+| `blog-revise`            | §FILE-LAYOUT, §FRONTMATTER, §UI-USER-CHOICE                                                                                        |
 | `blog-rule-editor`       | §UI-USER-CHOICE                                                                                                                    |
 
 모든 스킬이 `§UI-USER-CHOICE` 를 참조해야 합니다 (사용자 선택지가 있는 경우).
@@ -228,6 +238,94 @@ blog-rule-editor (메타 관리, 별도)
 오케스트레이터 (`blog-write`) 와의 통합도 함께 처리합니다.
 
 직접 SKILL.md 를 편집하는 것보다 안전합니다.
+
+### 시나리오 6: 기존 글 다듬기
+
+기존 글을 수정할 때는 `blog-revise` 스킬을 사용합니다. 5가지 다듬기 패턴을
+지원합니다.
+
+```bash
+# 파일만 지정 — blog-revise 가 패턴 카탈로그 제시
+/blog-revise content/posts/.mdx
+
+# 파일 + 의도 함께 — 의도 분석 후 적절한 패턴으로 라우팅
+/blog-revise content/posts/.mdx 마무리 단락이 어색해
+/blog-revise content/posts/.mdx 새 자료 추가가 필요해
+/blog-revise content/posts/.mdx 새 규칙으로 다시 검증해줘
+/blog-revise content/posts/.mdx 완전히 다시 쓰자
+/blog-revise content/posts/.mdx 뭐가 문제인지 분석해줘
+```
+
+#### 5가지 패턴
+
+| 패턴           | 변경 범위                                 | 백업                         | 검증 사이클             |
+| -------------- | ----------------------------------------- | ---------------------------- | ----------------------- |
+| 1. 재검증만    | 본문 변경 없음 (검증 결과로만 자동 수정)  | 불필요                       | 실행                    |
+| 2. 부분 수정   | 특정 단락/섹션                            | 필요                         | 실행                    |
+| 3. 자료 보강   | 새 자료 + 섹션 통합 + References 업데이트 | 필요                         | 실행                    |
+| 4. 완전 재작성 | 전체 (blog-write 호출의 wrapper)          | 필요 (`-pre-rewrite` 접미사) | blog-write 가 자체 검증 |
+| 5. 분석만      | 변경 없음, 진단만                         | 불필요                       | dry_run 모드            |
+
+#### 패턴 5 (분석만) 의 dry_run 모드
+
+`blog-revise` 가 `validator` 와 `expression-review` 를 호출할 때 `dry_run: true`
+로 호출. 이 모드에서는:
+
+- Edit 툴 호출 안 함 (자동 수정 안 됨)
+- 모든 발견 항목을 "수정 가능 분류" 로 보고만
+- 검사 단계는 정상 실행
+
+`coherence-review` 는 원래 자동 수정을 거의 안 하므로 별도 dry_run 필요 없음.
+
+#### blog-revise 의 GATE
+
+GATE 는 두 곳만 (사용자 짜증 방지):
+
+1. **패턴 결정 GATE**: 어떤 패턴으로 진행할지
+2. **수정 적용 직전 GATE**: 패턴 2/3 의 수정안 최종 확인 또는 패턴 4 의
+   blog-write GATE 1 (위임)
+
+그 외 단계는 자동 진행.
+
+#### 백업
+
+`content/posts/.backups/` 에 자동 저장 (gitignored). 파일명 규칙:
+
+```
+content/posts/.backups/<slug>-<YYYYMMDD-HHMMSS>.mdx
+content/posts/.backups/<slug>-<YYYYMMDD-HHMMSS>-pre-rewrite.mdx  (패턴 4 전용)
+```
+
+30일 이상 된 백업은 수동 정리:
+
+```bash
+find content/posts/.backups/ -mtime +30 -delete
+```
+
+#### blog-rule-editor 와의 차이
+
+| 스킬               | 수정 대상                                         |
+| ------------------ | ------------------------------------------------- |
+| `blog-revise`      | 글 (`content/posts/*.mdx`)                        |
+| `blog-rule-editor` | 스킬 / 규칙 (`SHARED.md`, `config/`, 각 SKILL.md) |
+
+둘 다 호출이 필요하면 사용자가 순차로. 자동 연결 없음.
+
+#### 직접 글 편집과의 비교
+
+`blog-revise` 를 거치지 않고 직접 MDX 파일을 편집하는 것도 가능합니다. 하지만
+다음과 같은 차이가 있습니다:
+
+| 직접 편집                | blog-revise 사용      |
+| ------------------------ | --------------------- |
+| 빠름                     | 안전함                |
+| 검증 안 됨               | 검증 사이클 자동 실행 |
+| 백업 안 됨               | 자동 백업             |
+| References 업데이트 수동 | 패턴 3 에서 자동      |
+| 수정 이력 없음           | 백업 + git 으로 추적  |
+
+작은 오타 수정 같은 경우는 직접 편집이 빠르고, 어조나 구조 변경 같은 경우는
+`blog-revise` 가 안전합니다.
 
 ---
 
