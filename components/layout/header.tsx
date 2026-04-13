@@ -1,9 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { ThemeToggle } from "./theme-toggle";
 import { SearchButton } from "./search-button";
 
-export function Header() {
+export async function Header() {
+  const ua = (await headers()).get("user-agent") ?? "";
+  const isMac = /mac/i.test(ua);
+  const isMobile = /android|iphone|ipad|ipod/i.test(ua);
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
       <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-6">
@@ -12,7 +17,7 @@ export function Header() {
           Tech Blog
         </Link>
         <div className="flex items-center gap-1">
-          <SearchButton />
+          <SearchButton isMac={isMac} isMobile={isMobile} />
           <ThemeToggle />
         </div>
       </div>

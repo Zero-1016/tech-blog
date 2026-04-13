@@ -23,7 +23,7 @@ interface SearchItem {
   tags: string[];
 }
 
-export function SearchButton() {
+export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: boolean }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
@@ -57,7 +57,6 @@ export function SearchButton() {
 
   useEffect(() => {
     if (open) {
-      // focus는 DOM 업데이트 후 실행되므로 requestAnimationFrame 사용
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
@@ -151,9 +150,11 @@ export function SearchButton() {
           <path d="m21 21-4.35-4.35" />
         </svg>
         <span className="hidden sm:inline">검색</span>
-        <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[10px] font-medium sm:inline">
-          ⌘K
-        </kbd>
+        {!isMobile && (
+          <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[10px] font-medium sm:inline">
+            {isMac ? "⌘K" : "Ctrl K"}
+          </kbd>
+        )}
       </button>
       {modal}
     </>
