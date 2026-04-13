@@ -39,7 +39,7 @@ Read로 로드하세요:
 - `§META-TITLE`, `§META-DESCRIPTION` — 제목/설명 품질
 - `§COMPLEXITY` — 분량, H2 개수
 - `§FRONTMATTER` — 스키마
-- `§MDX-COMPONENTS`, `§MDX-CODEPLAYGROUND`, `§MDX-CHECKLIST`, `§MDX-JSX-BALANCE`
+- `§MDX-COMPONENTS`, `§MDX-ANIMATEDSTEP`, `§MDX-CODEPLAYGROUND`, `§MDX-CHECKLIST`, `§MDX-JSX-BALANCE`
 - `§FILE-LAYOUT` — 저장 경로
 
 **규칙 내재화 원칙**: writer는 검증 단계가 아니라 **작성 단계에서** 이미 규칙을
@@ -219,7 +219,7 @@ H2 하나씩 순차적으로 채웁니다.
 한 섹션(H2) 작성을 마칠 때마다 **기계적으로 치환 가능한 항목**만 그 자리에서
 바로 확인하고 고칩니다. 의미 판단이 필요한 항목은 Step 8 일괄 체크로 미룹니다.
 
-**즉시 체크할 항목 (4가지)**:
+**즉시 체크할 항목 (5가지)**:
 
 1. **em-dash** — 방금 쓴 섹션에 `—` 가 있는지. 있으면 **즉시 쉼표로 치환**.
    `§RULE-EMDASH` 적용 범위 전부 포함 (본문/주석/prop/코드 블록).
@@ -232,6 +232,10 @@ H2 하나씩 순차적으로 채웁니다.
 
 4. **반말 문어체** — `~다`, `~이다`, `~한다`, `~된다`, `~있다` 종결이 있는지.
    있으면 즉시 구어 존댓말로 전수 교체. (§BLOG-VOICE, 블로커급)
+
+5. **AnimatedStep title 번호** — `<AnimatedStep>`을 썼다면 title 값이 숫자로
+   시작하는지(`"1. ..."`, `"1단계..."`, `"Step 1..."` 등). 있으면 **즉시 번호
+   접두사 제거**. 컴포넌트가 자동 번호 뱃지를 렌더링함. (§MDX-ANIMATEDSTEP, 확정 에러)
 
 **미루는 항목 (Step 8에서 일괄 체크)**:
 

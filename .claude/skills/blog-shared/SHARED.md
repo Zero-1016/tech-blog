@@ -754,7 +754,6 @@ published: true
   { title: "제목", content: "설명", code: "코드(선택)" },
   { title: "제목", content: "설명" }
 ]} />
-{/* title에 "1.", "2." 번호 금지 - 컴포넌트가 자동 번호 뱃지 렌더링 */}
 
 <CodePlayground
   code={`코드 내용`}
@@ -765,6 +764,32 @@ published: true
 
 <VideoEmbed src="https://youtube.com/watch?v=..." title="제목" />
 ```
+
+### §MDX-ANIMATEDSTEP — AnimatedStep title 번호 금지
+
+컴포넌트가 왼쪽에 자동 번호 뱃지(1, 2, 3…)를 렌더링합니다.
+`title`에 수동 번호를 넣으면 이중 번호가 돼요.
+
+**금지 패턴** (확정 에러):
+
+- `"1. 토큰 추출"` → `"토큰 추출"`
+- `"1단계: 기본 동작 이해하기"` → `"기본 동작 이해하기"`
+- `"Step 1. Parse"` → `"Parse"`
+- `"1단계"` (번호만 있는 경우) → content에서 핵심 키워드를 뽑아 title로
+
+**검출**:
+
+AnimatedStep 블록 안의 title 값에서 번호 접두사를 찾습니다:
+
+```bash
+grep -nE 'title:\s*"[0-9]+[\.\s단]' <file>
+grep -nE 'title:\s*"Step\s*[0-9]' <file>
+```
+
+매칭되면 확정 에러. 번호 접두사(`\d+[\.\s]*단?계?[\.\s:：-]*`)를 제거하고,
+남는 제목이 빈 문자열이면 content에서 핵심 키워드를 뽑아 title로 씁니다.
+
+**자동 수정**: 번호 접두사 제거만으로 해결. writer/validator 모두 자동 수정 가능.
 
 ### §MDX-CODEPLAYGROUND — CodePlayground 규칙
 

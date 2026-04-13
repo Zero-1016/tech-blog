@@ -34,7 +34,7 @@ tools:
 - `§RULE-LINK-PATH` — 내부 링크 경로 규칙
 - `§RULE-REFERENCES`, `§RULE-CITE`, `§SOURCE-PRIORITY` — References 정합성
 - `§FRONTMATTER` — frontmatter 스키마
-- `§MDX-COMPONENTS`, `§MDX-CODEPLAYGROUND`, `§MDX-CHECKLIST`, `§MDX-JSX-BALANCE` — 컴포넌트 규칙
+- `§MDX-COMPONENTS`, `§MDX-ANIMATEDSTEP`, `§MDX-CODEPLAYGROUND`, `§MDX-CHECKLIST`, `§MDX-JSX-BALANCE` — 컴포넌트 규칙
 - `§FILE-LAYOUT` — 파일 경로 규칙
 - `§UI-USER-CHOICE` — 사용자 선택지 반환 형식 (오케스트레이터에게 전달 시)
 
@@ -355,7 +355,30 @@ grep -nE '^(- |[0-9]+\. )' <file>
 **중요 원칙**: validator가 제안하는 수정본도 SHARED.md 규칙을 전부 따라야 합니다.
 특히 em-dash, 콜론 구조, `**` 맥락 규칙을 제안 생성 시 재검증하세요.
 
-### 2-5. 영어 인용 한글 풀이 (§RULE-ENGLISH-QUOTE)
+### 2-5. AnimatedStep title 번호 (§MDX-ANIMATEDSTEP)
+
+**SHARED.md §MDX-ANIMATEDSTEP Read**.
+
+AnimatedStep 블록 안의 title 값에서 번호 접두사를 검출합니다:
+
+```bash
+grep -nE 'title:\s*"[0-9]+[\.\s단]' <file>
+grep -nE 'title:\s*"Step\s*[0-9]' <file>
+```
+
+매칭되면 **확정 에러**. 번호 접두사(`\d+[\.\s]*단?계?[\.\s:：-]*`)를 제거합니다.
+남은 문자열이 비었으면 "title이 비어 writer 재작성 필요"로 사용자 확인 카테고리로 분류.
+
+**자동 수정**: 접두사 제거 후 유의미한 문자열이 남으면 직접 Edit.
+
+```
+[§MDX-ANIMATEDSTEP] content/posts/foo.mdx
+  L28  AnimatedStep title (확정 에러)
+    원문: title: "1단계: 기본 동작 이해하기"
+    수정: title: "기본 동작 이해하기"
+```
+
+### 2-6. 영어 인용 한글 풀이 (§RULE-ENGLISH-QUOTE)
 
 **SHARED.md §RULE-ENGLISH-QUOTE Read**.
 
