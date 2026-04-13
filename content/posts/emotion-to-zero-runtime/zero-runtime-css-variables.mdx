@@ -1,0 +1,185 @@
+---
+title: "런타임 없이 같은 DX를 유지하는 법"
+description: "Emotion의 런타임 주입을 CSS 변수로 대체하면 어떤 일이 생기는지, 세 라이브러리로 확인해 봅니다."
+date: 2026-04-14
+tags: ["CSS-in-JS", "Vanilla Extract", "Panda CSS", "Linaria"]
+series: "Emotion에서 zero-runtime까지"
+seriesOrder: 2
+published: true
+---
+
+[지난 글](/posts/emotion-style-injection)에서 Emotion이 스타일을 주입하는 네 단계를 따라갔어요. 직렬화, Stylis 컴파일, 캐시, DOM 삽입. 이 모든 게 브라우저에서 벌어지는 런타임 작업이었죠.
+
+근데 React Server Components가 등장하면서 이 런타임 파이프라인이 문제가 됐어요. 저도 Next.js App Router로 옮기면서 styled-components가 서버 컴포넌트에서 안 돌아가는 걸 보고 당황했거든요.
+
+## 런타임 CSS-in-JS의 한계
+
+Emotion과 styled-components 같은 런타임 CSS-in-JS는 React Context에 의존합니다. ThemeProvider가 Context로 테마 값을 내려보내고, styled 컴포넌트가 그 값을 읽어서 스타일을 만들어요.
+
+문제는 React Server Components에서 Context가 지원되지 않는다는 거예요. 서버 컴포넌트는 클라이언트 상태를 갖지 않으니까요. 런타임 CSS-in-JS를 쓰려면 해당 컴포넌트를 전부 `"use client"`로 표시해야 하고, 그러면 서버 컴포넌트의 장점이 사라집니다.
+
+번들 크기도 이슈예요. Emotion 런타임만 약 7~8KB(gzip)이고, styled-components도 비슷합니다. 여기에 매 렌더마다 직렬화와 해시 계산이 돌아가니 초기 로드와 인터랙션 모두에서 비용이 발생해요.
+
+<Callout variant="info">
+
+Panda CSS 공식 문서가 이 상황을 한 문장으로 정리하고 있어요.
+
+"It doesn't generate styles in the browser nor inject styles in the `<head>`."
+
+브라우저에서 스타일을 만들거나 `<head>`에 주입하는 일 자체를 하지 않겠다는 선언이에요.<Cite id="panda-why" />
+
+</Callout>
+
+## 공통 패턴, 빌드에서 추출하고 변수로 위임하기
+
+Vanilla Extract, Panda CSS, Linaria. 이름도 다르고 문법도 다르지만 핵심 아키텍처는 놀랍도록 비슷해요.
+
+<AnimatedStep steps={[
+  {
+    title: "빌드 시 정적 CSS 추출",
+    content: "번들러 플러그인이 스타일 코드를 찾아서 평가하고, 결과물을 .css 파일로 뽑아냅니다. 브라우저에 도달하는 JS에는 스타일 생성 로직이 없어요."
+  },
+  {
+    title: "동적 값은 CSS 변수로 위임",
+    content: "props에 따라 바뀌는 값은 CSS custom property(변수)로 선언합니다. 빌드 시에 변수 이름만 확정하고, 실제 값은 런타임에 inline style로 주입해요."
+  },
+  {
+    title: "런타임 코드는 값 주입만",
+    content: "브라우저에서 실행되는 JS는 element.style.setProperty('--color', value) 수준의 최소 작업만 합니다. Stylis 컴파일도, 해시 계산도, style 태그 삽입도 없어요."
+  }
+]} />
+
+이 패턴이 가능한 건 CSS 변수의 특성 덕분이에요. CSS 변수는 cascade에 참여하고, 선언된 요소와 그 자식에게 상속됩니다.<Cite id="mdn-custom-properties" /> `:root`에 선언하면 전역으로, 특정 셀렉터에 선언하면 스코프가 제한되죠.
+
+핵심은 <strong>변수 이름은 정적이고 값만 동적</strong>이라는 점이에요. `var(--primary-color)`라는 이름은 빌드 시에 CSS 파일에 고정되고, 실제 `#3b82f6`이라는 값은 런타임에 바꿀 수 있어요. 런타임 CSS-in-JS가 "CSS 문자열 전체를 런타임에 만드는" 것과 대조적이죠.
+
+## 각자의 진입점, 같은 출구
+
+세 라이브러리가 빌드 시 CSS를 추출하는 방법은 제각각이에요. 하지만 결과물은 전부 정적 CSS + 최소 런타임이라는 같은 출구로 나옵니다.
+
+### Vanilla Extract
+
+`.css.ts` 파일 컨벤션을 씁니다.<Cite id="vanilla-extract-docs" /> 번들러가 이 파일을 만나면 TypeScript를 실행해서 `style()`, `createVar()`, `createTheme()` 호출 결과를 평가하고 CSS 파일로 뽑아내요.
+
+```ts
+// button.css.ts
+import { style, createVar } from '@vanilla-extract/css';
+
+const bgColor = createVar();
+
+export const button = style({
+  backgroundColor: bgColor,
+  padding: '8px 16px',
+  borderRadius: '8px',
+});
+
+export const variants = {
+  primary: style({ vars: { [bgColor]: '#3b82f6' } }),
+  danger: style({ vars: { [bgColor]: '#ef4444' } }),
+};
+```
+
+정적으로 결정되는 variant는 이렇게 각각 클래스로 뽑히고, 런타임에 값이 바뀌어야 할 때는 `@vanilla-extract/dynamic`의 `assignInlineVars`를 씁니다. inline style을 통해 CSS 변수 값만 주입하는 거예요.
+
+Vanilla Extract의 강점은 TypeScript와의 통합이에요. 테마 contract를 만들면 어떤 토큰이 빠졌는지 타입 에러로 잡아줍니다. 공식 문서에서 "type-safe runtime theming without the necessity of creating and injecting CSS during runtime"이라고 표현하고 있죠.
+
+### Panda CSS
+
+정적 분석 기반이에요.<Cite id="panda-why" /> `css()`, `styled()` 호출을 AST에서 찾아내고, PostCSS 파이프라인으로 atomic CSS를 생성합니다. Tailwind처럼 `bg-blue-500` 같은 원자 클래스가 나오는데, 작성 경험은 CSS-in-JS와 같은 거예요.
+
+```tsx
+import { css } from '../styled-system/css';
+
+function Card() {
+  return (
+    <div className={css({
+      bg: 'blue.500',
+      padding: '4',
+      borderRadius: 'lg',
+    })}>
+      내용
+    </div>
+  );
+}
+```
+
+디자인 토큰은 자동으로 CSS 변수로 바뀝니다. `blue.500`은 빌드 시 `var(--colors-blue-500)`으로 치환돼요. 다크모드 전환은 `[data-theme='dark']` 셀렉터에 같은 변수명으로 다른 값을 선언하는 방식이죠.
+
+Panda CSS가 재밌는 건 토큰 해석이 이중 모드라는 점이에요. `token('colors.red.500')`은 빌드 시 원시값(`#ef4444`)으로 치환되고, `token.var('colors.red.500')`은 CSS 변수(`var(--colors-red-500)`)로 출력됩니다. 정적 최적화가 가능한 자리에서는 원시값을, 런타임에 바뀔 수 있는 자리에서는 변수를 골라 쓸 수 있어요.
+
+### Linaria
+
+Emotion과 가장 닮은 문법을 제공합니다.<Cite id="linaria-docs" /> `css` 태그드 템플릿 리터럴과 `styled.div` 같은 API를 쓰면서도 zero-runtime이에요.
+
+```tsx
+import { styled } from '@linaria/react';
+
+const Button = styled.button<{ primary: boolean }>`
+  background: ${props => props.primary ? '#3b82f6' : '#e5e7eb'};
+  padding: 8px 16px;
+  border-radius: 8px;
+`;
+```
+
+비밀은 Babel 플러그인에 있어요. 동적 보간(`${props => ...}`)을 만나면 CSS 변수로 치환합니다. 위 코드는 빌드 후 이런 CSS가 됩니다.
+
+```css
+.button_abcd {
+  background: var(--abcd-0);
+  padding: 8px 16px;
+  border-radius: 8px;
+}
+```
+
+런타임에는 prop 값을 계산해서 inline style로 `--abcd-0`에 값을 넣는 것뿐이에요. Emotion 사용자가 거의 문법 변경 없이 전환할 수 있다는 게 Linaria의 포지셔닝이죠.
+
+## CSS 변수가 동적 값의 탈출구인 이유
+
+세 라이브러리 모두 동적 값 처리에 CSS 변수를 쓰는 건 우연이 아니에요. CSS 변수가 가진 세 가지 특성이 이 패턴을 가능하게 합니다.
+
+**첫째, 이름은 정적이고 값은 동적이에요.** `var(--primary)` 자체는 빌드 시 CSS 파일에 고정됩니다. 런타임에는 `element.style.setProperty('--primary', newValue)`로 값만 바꾸면 브라우저가 알아서 반영해요. 새 CSS 규칙을 만들거나 `<style>` 태그를 조작할 필요가 없죠.
+
+**둘째, cascade와 상속이 작동해요.** `:root`에 선언하면 전역 테마가 되고, 특정 컴포넌트에 선언하면 그 범위 안에서만 적용됩니다. `[data-theme='dark']` 셀렉터에 같은 변수명으로 다른 값을 넣으면 다크모드 전환이 CSS만으로 해결돼요.
+
+**셋째, inline style과 궁합이 좋아요.** `style={{ '--color': dynamicValue }}` 한 줄이면 해당 요소와 자식에게 변수 값이 전파됩니다. React의 inline style prop을 통해 자연스럽게 연결되죠. 이게 Emotion처럼 `<style>` 태그를 직접 조작하는 것보다 브라우저 입장에서 훨씬 가벼운 작업이에요.
+
+## 어떤 도구를 고를까
+
+zero-runtime CSS-in-JS로 전환을 고민한다면 프로젝트 상황에 따라 선택이 달라져요.
+
+Emotion이나 styled-components를 이미 쓰고 있고 **마이그레이션 비용을 줄이고 싶다면** Linaria가 가장 가까워요. 문법이 거의 같거든요. 다만 Babel 플러그인 설정이 필요하고, 정적으로 분석 가능한 코드만 동작한다는 제약이 있어요.
+
+**TypeScript를 적극 활용하고 테마 시스템을 타입으로 강제하고 싶다면** Vanilla Extract가 잘 맞아요. `.css.ts` 파일에서 타입 안전한 스타일을 작성하고, 테마 contract로 빠진 토큰을 컴파일 타임에 잡을 수 있어요.
+
+**디자인 토큰 기반으로 atomic CSS를 쓰고 싶다면** Panda CSS가 적합합니다. Tailwind의 원자 클래스 효율과 CSS-in-JS의 작성감을 동시에 가져가는 셈이죠.
+
+[스타일링 방식 간 비교](/posts/css-styling-tradeoffs)에서 다뤘듯이, 어떤 도구가 제일 좋은가보다 어떤 조건에서 뭐가 덜 아픈가가 실전 질문이에요. 런타임이 문제라면 zero-runtime으로 가되, 런타임이 문제가 아닌 프로젝트에서 굳이 마이그레이션할 필요는 없습니다. Emotion의 런타임 파이프라인이 정확히 뭘 하는지 이해하고 있다면, 그 비용이 자기 프로젝트에서 문제가 되는지 아닌지도 판단할 수 있으니까요.
+
+<References
+  items={[
+    {
+      id: "mdn-custom-properties",
+      title: "MDN - Using CSS custom properties (variables)",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties",
+      description: "CSS 변수의 선언, 상속, var() 폴백, @property 규칙",
+    },
+    {
+      id: "vanilla-extract-docs",
+      title: "vanilla-extract - Documentation",
+      href: "https://vanilla-extract.style/documentation/getting-started",
+      description: ".css.ts 컨벤션, createVar, createTheme, assignInlineVars API",
+    },
+    {
+      id: "panda-why",
+      title: "Panda CSS - Why Panda",
+      href: "https://panda-css.com/docs/overview/why-panda",
+      description: "런타임 CSS-in-JS 한계와 정적 분석 기반 접근의 근거",
+    },
+    {
+      id: "linaria-docs",
+      title: "Linaria - GitHub Repository",
+      href: "https://github.com/callstack/linaria",
+      description: "Babel 기반 zero-runtime 변환과 CSS 변수 동적 스타일링 메커니즘",
+    },
+  ]}
+/>

@@ -1,0 +1,156 @@
+---
+title: "Emotion은 스타일을 어떻게 주입할까"
+description: "css prop을 쓰면 스타일이 알아서 적용되죠. 그 사이에서 Emotion이 하는 일을 따라가 봅니다."
+date: 2026-04-14
+tags: ["CSS-in-JS", "Emotion", "런타임 스타일링", "React"]
+series: "Emotion에서 zero-runtime까지"
+seriesOrder: 1
+published: true
+---
+
+`css={{ color: 'red' }}`을 쓰면 빨간 글씨가 나옵니다. 근데 그 사이에 뭐가 벌어지는지 생각해본 적은 별로 없었어요. 저도 한동안 "그냥 되니까" 쓰다가, 스타일 우선순위가 꼬이는 버그를 만나고 나서야 내부를 뜯어보게 됐거든요.
+
+Emotion이 자바스크립트 객체를 실제 CSS로 바꿔 브라우저에 꽂기까지, 네 단계를 하나씩 따라가 볼게요.
+
+## `css` 함수가 반환하는 것
+
+Emotion을 처음 쓰면 `css` 함수가 클래스명 문자열을 돌려줄 거라 짐작하기 쉬워요. `@emotion/css` 패키지의 `css`는 실제로 클래스명 문자열을 반환하긴 합니다. 근데 `@emotion/react`의 `css`는 다릅니다.
+
+```js
+import { css } from '@emotion/react';
+
+const style = css`
+  color: hotpink;
+  &:hover {
+    color: darkorchid;
+  }
+`;
+
+console.log(style);
+// { name: "1a2b3c", styles: "color:hotpink;&:hover{color:darkorchid;}" }
+```
+
+클래스명이 아니라 `{ name, styles }` 형태의 객체가 나와요.<Cite id="emotion-css-prop" /> 이 객체는 Emotion 내부에서만 해석 가능한 중간 표현이에요. 왜 이렇게 만들었을까요.
+
+이유는 **스타일 합성** 때문이에요. 여러 `css` 호출 결과를 조합할 때 클래스명 문자열끼리 합치면 specificity가 꼬이거든요. 객체 형태로 가지고 있다가 최종적으로 한 번에 해시를 만들면 합성 순서를 Emotion이 직접 제어할 수 있어요.
+
+`@emotion/css`가 문자열을 바로 반환하는 건 프레임워크 무관 패키지라서 그래요. React의 jsx 변환 파이프라인을 거치지 않으니까 즉시 주입하고 클래스명을 돌려줘야 하죠. `@emotion/react`는 jsx 함수가 렌더 시점에 최종 처리를 해주니까 중간 객체로 넘겨도 괜찮은 거예요.
+
+## 직렬화와 해시 생성
+
+`css` 함수가 `{ name, styles }` 객체를 만드는 과정을 <strong>직렬화</strong>라고 부릅니다. 이 작업은 `@emotion/serialize` 패키지가 담당해요.
+
+<AnimatedStep steps={[
+  {
+    title: "입력 정규화",
+    content: "템플릿 리터럴이든 객체든 하나의 CSS 문자열로 변환합니다. 중첩 셀렉터, 미디어 쿼리도 이 단계에서 펼쳐져요."
+  },
+  {
+    title: "해시 생성",
+    content: "CSS 문자열을 입력으로 해시를 계산합니다. 같은 스타일이면 항상 같은 해시가 나와요. 이게 클래스명의 고유 식별자가 됩니다."
+  },
+  {
+    title: "객체 반환",
+    content: "name(해시)과 styles(CSS 문자열)를 묶어서 반환합니다. 아직 브라우저에는 아무것도 주입되지 않은 상태예요."
+  }
+]} />
+
+해시 기반 이름이 중요한 이유가 있어요. 같은 스타일은 같은 해시를 만들기 때문에, 10개 컴포넌트가 동일한 `css` 값을 쓰더라도 `<style>` 태그에는 딱 한 번만 들어갑니다. 중복 제거가 이름 자체에 내장된 거예요.
+
+Babel 플러그인(`@emotion/babel-plugin`)을 쓰면 이 직렬화 과정의 일부가 빌드 타임으로 옮겨집니다. 정적으로 분석 가능한 스타일은 미리 계산해두고, 런타임에는 해시 룩업만 하는 거죠. 완전한 zero-runtime은 아니지만 런타임 비용을 줄이는 하이브리드 접근이에요.
+
+## Stylis 컴파일과 캐시
+
+직렬화된 CSS 문자열이 바로 `<style>` 태그에 들어가는 건 아니에요. 그 사이에 <strong>Stylis</strong>라는 경량 CSS 컴파일러가 끼어듭니다.
+
+Stylis가 하는 일은 크게 두 가지예요. 첫째, vendor prefix를 자동으로 붙입니다. `-webkit-`, `-moz-` 같은 걸 직접 안 써도 되는 이유가 여기 있죠. 둘째, 중첩 셀렉터를 풀어서 유효한 CSS로 변환합니다.
+
+`@emotion/cache`가 이 전체 흐름을 관리해요.<Cite id="emotion-cache" /> 캐시 인스턴스 하나가 Stylis 컴파일러, 삽입된 스타일 목록, 설정(key, nonce, container 등)을 전부 들고 있습니다.
+
+```js
+import createCache from '@emotion/cache';
+
+const myCache = createCache({
+  key: 'my-app',       // 클래스명 접두사
+  nonce: 'abc123',     // CSP 대응
+  prepend: true,       // style 태그를 head 앞쪽에 삽입
+});
+```
+
+`key`는 클래스명 접두사이자 `data-emotion` 속성 값으로 들어갑니다. 마이크로 프론트엔드처럼 한 페이지에 여러 Emotion 인스턴스가 공존할 때 충돌을 피하려면 각각 다른 key를 줘야 해요.
+
+`stylisPlugins` 옵션으로 Stylis 동작을 커스터마이징할 수도 있어요. 다만 커스텀 플러그인을 넣으면 기본 prefixer가 빠지니까, vendor prefix가 필요하면 `prefixer`를 명시적으로 다시 넣어줘야 합니다.
+
+캐시가 스타일 중복 주입을 막는 원리는 단순해요. 해시 이름으로 "이미 삽입했는지"를 체크합니다. 같은 해시가 이미 캐시에 있으면 Stylis 컴파일과 DOM 삽입을 통째로 건너뛰죠.
+
+## DOM에 스타일 넣기
+
+캐시를 통과한 CSS는 최종적으로 `<style>` 태그로 DOM에 삽입됩니다. 이 과정에서 알아두면 좋은 옵션이 몇 가지 있어요.
+
+`prepend` 옵션은 specificity 제어의 핵심이에요. `true`로 설정하면 Emotion의 `<style>` 태그가 `<head>` 안에서 다른 스타일시트보다 **앞에** 놓입니다. CSS의 cascade 규칙에서 뒤에 오는 스타일이 이기니까, Emotion 스타일을 앞에 놓으면 외부 스타일시트나 Tailwind 같은 도구가 쉽게 오버라이드할 수 있어요.
+
+`container` 옵션은 `<style>` 태그를 특정 DOM 노드에 삽입합니다. iframe 안에 스타일을 격리할 때 쓰이죠.
+
+<Callout variant="info">
+
+**SSR에서는 전혀 다른 경로를 탑니다.** `@emotion/react`와 `@emotion/styled`는 기본적으로 `renderToString` 시 각 styled 요소 앞에 `<style>` 태그를 인라인으로 삽입해요.<Cite id="emotion-ssr" /> 단순하지만 `nth-child` 같은 셀렉터와 충돌할 수 있어서, 프로덕션에서는 `extractCriticalToChunks`로 critical CSS를 별도 추출하는 고급 방식을 쓰는 게 안전합니다.
+
+</Callout>
+
+정리하면 Emotion의 스타일 주입은 이 네 단계를 거칩니다. `css` 함수가 스타일을 직렬화하고, 해시 이름을 만들고, Stylis가 vendor prefix와 중첩을 처리하고, 캐시가 중복을 걸러낸 뒤 `<style>` 태그로 DOM에 삽입하는 거예요.
+
+## `styled` API는 이 위에 얹힌 래퍼
+
+`styled`를 쓰면 Emotion이 다른 파이프라인을 타는 것처럼 보이지만, 실제로는 위의 네 단계를 그대로 거쳐요.<Cite id="emotion-styled" /> `styled`가 추가하는 건 두 가지뿐입니다.
+
+첫째, <strong>props 기반 동적 스타일링</strong>이에요. 보간 함수가 `props`를 매개변수로 받아서 렌더 시점에 값을 결정합니다.
+
+```jsx
+const Button = styled.button`
+  background: ${props => props.primary ? '#3b82f6' : '#e5e7eb'};
+  color: ${props => props.primary ? 'white' : '#374151'};
+`;
+```
+
+이 보간 함수는 컴포넌트가 렌더될 때마다 실행되고, 결과가 직렬화 → Stylis → 캐시 → DOM 삽입 파이프라인을 타는 거예요. props가 바뀔 때마다 새 해시가 나오면 새 스타일이 삽입됩니다.
+
+둘째, <strong>prop 포워딩</strong>이에요. HTML 태그를 감싸면 `primary` 같은 커스텀 prop이 DOM 속성으로 전달되면 경고가 뜨잖아요. Emotion은 내부적으로 `@emotion/is-prop-valid`를 써서 유효한 HTML 속성만 골라 전달합니다. `shouldForwardProp`으로 이 동작을 직접 제어할 수도 있고요.
+
+결국 `styled`는 "props를 받아서 css 값을 만들어주는 래퍼 + prop 필터링"이에요. 핵심 엔진은 `css` → serialize → stylis → cache → DOM, 단 하나입니다.
+
+다음 편에서는 이 런타임 파이프라인을 통째로 없애면서도 비슷한 개발 경험을 유지하는 zero-runtime 접근을 다룹니다. CSS 변수가 그 전환의 열쇠예요.
+
+<References
+  items={[
+    {
+      id: "emotion-css-prop",
+      title: "Emotion - CSS Prop",
+      href: "https://emotion.sh/docs/css-prop",
+      description: "css 함수의 반환값 구조와 JSX pragma 설정 방법",
+    },
+    {
+      id: "emotion-cache",
+      title: "Emotion - @emotion/cache",
+      href: "https://emotion.sh/docs/@emotion/cache",
+      description: "캐시 생성 옵션(key, nonce, prepend, stylisPlugins)과 스타일 삽입 제어",
+    },
+    {
+      id: "emotion-ssr",
+      title: "Emotion - Server Side Rendering",
+      href: "https://emotion.sh/docs/ssr",
+      description: "기본 인라인 방식과 extractCriticalToChunks 고급 방식 비교",
+    },
+    {
+      id: "emotion-styled",
+      title: "Emotion - Styled Components",
+      href: "https://emotion.sh/docs/styled",
+      description: "styled API의 동적 스타일링과 prop 포워딩 메커니즘",
+    },
+    {
+      id: "emotion-intro",
+      title: "Emotion - Introduction",
+      href: "https://emotion.sh/docs/introduction",
+      description: "패키지 구성(@emotion/css, @emotion/react, @emotion/styled)과 설계 철학",
+    },
+  ]}
+/>
