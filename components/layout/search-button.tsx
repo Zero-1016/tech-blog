@@ -91,7 +91,7 @@ export function SearchButton() {
                     placeholder="글 제목, 설명, 태그로 검색..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    className="flex-1 bg-transparent py-4 text-sm outline-none placeholder:text-secondary"
+                    className="flex-1 bg-transparent py-4 text-base outline-none placeholder:text-secondary"
                   />
                   <kbd
                     onClick={() => setOpen(false)}

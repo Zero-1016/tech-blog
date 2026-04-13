@@ -136,21 +136,21 @@ export default async function PostPage({ params }: Props) {
             <PostHeader>
               <h1 className="text-3xl font-bold tracking-tight leading-tight">{post.title}</h1>
               <p className="mt-3 text-lg text-secondary">{post.description}</p>
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-secondary">
+              <div className="mt-4 flex items-center gap-3 text-sm text-secondary">
                 <time dateTime={post.date} className="whitespace-nowrap">
                   {formatCardDate(post.date)}
                 </time>
                 <span>·</span>
-                <span>{readingTime(post.charCount)}</span>
+                <span className="whitespace-nowrap">{readingTime(post.charCount)}</span>
                 {post.tags.length > 0 && (
                   <>
                     <span>·</span>
-                    <div className="flex gap-1.5">
+                    <div className="flex min-w-0 gap-1.5 overflow-x-auto">
                       {post.tags.map((tag) => (
                         <Link
                           key={tag}
                           href={`/tags/${tag}`}
-                          className="rounded-md bg-code-bg px-2 py-0.5 text-xs transition-colors hover:bg-accent/10 hover:text-accent"
+                          className="whitespace-nowrap rounded-md bg-code-bg px-2 py-0.5 text-xs transition-colors hover:bg-accent/10 hover:text-accent"
                         >
                           {tag}
                         </Link>

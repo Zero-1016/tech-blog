@@ -101,7 +101,7 @@ export function PostList({ posts }: { posts: PostItem[] }) {
       initial="hidden"
       animate="visible"
       variants={{ visible: { transition: { staggerChildren: 0.06 } } }}
-      className="grid gap-4 sm:grid-cols-2"
+      className="grid min-w-0 gap-4 sm:grid-cols-2"
     >
       {posts.map((post, i) => (
         <motion.article
@@ -110,7 +110,7 @@ export function PostList({ posts }: { posts: PostItem[] }) {
             hidden: { opacity: 0, y: 12 },
             visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
           }}
-          className={i === 0 ? "sm:col-span-2" : ""}
+          className={`min-w-0 ${i === 0 ? "sm:col-span-2" : ""}`}
         >
           <Link
             href={`/posts/${post.slug}`}

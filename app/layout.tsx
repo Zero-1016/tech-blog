@@ -85,7 +85,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body className="min-h-screen flex flex-col antialiased">
+      <body className="min-h-screen flex flex-col antialiased overflow-x-hidden">
         <Header />
         <main className="flex-1">{children}</main>
         <Footer />
