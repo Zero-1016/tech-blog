@@ -1,0 +1,690 @@
+---
+title: "깜빡임 없는 페이지 전환"
+description: "페이지 이동할 때마다 화면이 뚝 끊기죠. 브라우저 API 하나면 매끄럽게 이어줄 수 있어요."
+date: 2026-04-13
+tags: ["CSS", "JavaScript", "View Transitions"]
+published: true
+---
+
+SPA에서 라우트를 바꿀 때마다 화면이 뚝 끊기는 거, 다들 한 번쯤 겪어봤을 거예요. DOM을 통째로 갈아치우니까 이전 화면이 사라지고 다음 화면이 뜨는 사이에 빈 프레임이 끼어들죠. 이걸 매끄럽게 만들려고 old 요소를 페이드아웃 시키고, new 요소를 페이드인 시키고, 그 사이에 사용자 클릭도 막아야 하고... 직접 해보면 생각보다 손이 많이 갑니다.
+
+View Transitions API는 이 과정을 브라우저에 맡기자는 아이디어에서 시작됐어요.
+
+## 화면이 "뚝" 끊기는 순간
+
+SPA 프레임워크는 라우트 전환 시 DOM을 교체합니다. React라면 컴포넌트 트리가 통째로 언마운트되고 새 트리가 마운트되죠. 이 교체가 한 프레임 안에 끝나면 좋겠지만, 실제로는 이전 DOM이 사라진 뒤 다음 DOM이 그려지기까지 깜빡이는 순간이 생겨요.
+
+직접 전환 애니메이션을 만들려면 신경 쓸 게 많습니다. old 콘텐츠와 new 콘텐츠의 위치를 동시에 관리해야 하고, 전환 도중 포커스와 스크린 리더 접근성을 처리해야 하고, 사용자 인터랙션도 적절히 차단해야 해요.<Cite id="mdn-view-transition" /> 이런 문제를 API 레벨에서 풀어주는 게 View Transitions API입니다.
+
+## 한 줄로 시작하는 전환
+
+가장 단순한 사용법은 `document.startViewTransition()`을 호출하는 것뿐이에요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+
+  function ViewTransitionDemo() {
+    const [page, setPage] = useState("home");
+
+    function navigate(to) {
+      if (!document.startViewTransition) {
+        setPage(to);
+        return;
+      }
+      document.startViewTransition(() => {
+        setPage(to);
+      });
+    }
+
+    return (
+      <div className="container">
+        <nav className="nav">
+          <button
+            className={page === "home" ? "active" : ""}
+            onClick={() => navigate("home")}
+          >
+            Home
+          </button>
+          <button
+            className={page === "about" ? "active" : ""}
+            onClick={() => navigate("about")}
+          >
+            About
+          </button>
+        </nav>
+        <div className="content">
+          {page === "home" ? (
+            <div>
+              <h2>Home</h2>
+              <p>View Transitions API 데모입니다.</p>
+            </div>
+          ) : (
+            <div>
+              <h2>About</h2>
+              <p>전환 효과가 자동으로 적용돼요.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }`}
+  css={`.container {
+    font-family: system-ui, sans-serif;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  .nav {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .nav button {
+    padding: 8px 16px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+  }
+
+  .nav button.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+  }
+
+  .content {
+    padding: 16px;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    min-height: 100px;
+  }`}
+  showPreview={true}
+/>
+
+콜백 안에서 DOM을 업데이트하면, 브라우저가 알아서 이전 화면과 다음 화면 사이에 cross-fade 애니메이션을 넣어줍니다. 기본 전환 시간은 250ms예요. `document.startViewTransition`이 지원되지 않는 브라우저에서는 그냥 콜백만 실행하면 되니까, feature detection도 간단하죠.
+
+## 브라우저가 전환을 만드는 순서
+
+겉으로는 한 줄이지만, 브라우저 안에서는 꽤 정교한 과정이 돌아가고 있어요.
+
+<AnimatedStep steps={[
+  { title: "Old state 캡처", content: "startViewTransition()이 호출되면, 브라우저가 현재 화면의 스냅샷을 찍습니다. 스크린샷처럼 정적 이미지로 저장해두는 거예요." },
+  { title: "DOM 업데이트", content: "콜백 함수가 실행되면서 DOM이 바뀝니다. 이 시점에 렌더링은 억제되어 있어서 사용자 눈에는 아직 이전 화면이 보여요." },
+  { title: "New state 캡처", content: "DOM 업데이트가 끝나면 브라우저가 새 화면의 스냅샷도 찍습니다." },
+  { title: "의사 요소 트리 생성", content: "::view-transition-old(root)에 이전 스냅샷을, ::view-transition-new(root)에 새 스냅샷을 넣은 의사 요소 트리가 문서 위에 올라갑니다." },
+  { title: "애니메이션 실행", content: "old 스냅샷은 opacity 1에서 0으로, new 스냅샷은 0에서 1로. 250ms 동안 cross-fade가 진행됩니다." }
+]} />
+
+여기서 눈여겨볼 건, 전환 중에 실제 DOM이 아니라 **스냅샷 이미지** 위에서 애니메이션이 돈다는 점이에요. [렌더링 파이프라인을 다룬 글](/posts/transform-vs-top-left-rendering-pipeline)에서 합성(composite) 단계가 빠른 이유를 봤죠. View Transitions도 같은 원리입니다. 스냅샷을 GPU 레이어로 올려서 합성만으로 전환을 처리하니까, 메인 스레드를 거의 건드리지 않아요.
+
+그리고 핵심 설계 원칙이 하나 있어요.
+
+<Callout variant="info">
+"A failure to create a visual transition never prevents the state change." - CSS View Transitions Level 1
+
+전환 애니메이션이 어떤 이유로 실패해도, DOM 업데이트 자체는 반드시 실행돼요. 전환은 장식이지 기능이 아니라는 원칙입니다.
+
+</Callout>
+
+이 덕분에 "지원 안 되는 브라우저에서 깨지면 어쩌지?"라는 걱정을 할 필요가 없습니다. 전환이 안 되면 그냥 이전처럼 즉시 교체될 뿐이거든요.
+
+## 요소별로 다르게 움직이기
+
+기본 cross-fade만으로도 꽤 매끄럽지만, 특정 요소를 따로 움직이고 싶을 때가 있어요. 카드 목록에서 카드를 클릭하면 그 카드의 이미지가 상세 페이지 상단으로 슬라이드되는 전환 같은 거요.
+
+이때 쓰는 게 `view-transition-name`이에요.
+
+```css
+.card-image {
+  view-transition-name: hero-image;
+}
+
+.detail-header-image {
+  view-transition-name: hero-image;
+}
+```
+
+같은 이름을 old 화면의 요소와 new 화면의 요소에 부여하면, 브라우저가 둘을 짝지어서 위치와 크기를 부드럽게 보간해줍니다. 전체 페이지는 cross-fade로 전환되면서, hero-image만 슬라이드로 이동하는 효과가 만들어지죠.
+
+카드 목록에서 카드를 클릭하면 썸네일이 상세 영역으로 이동하는 전환을 직접 확인해보세요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+
+  function CardTransitionDemo() {
+    const [selected, setSelected] = useState(null);
+
+    const cards = [
+      { id: 1, title: "산", color: "#3b82f6", emoji: "🏔️" },
+      { id: 2, title: "바다", color: "#06b6d4", emoji: "🌊" },
+      { id: 3, title: "숲", color: "#22c55e", emoji: "🌲" },
+    ];
+
+    function navigate(card) {
+      if (!document.startViewTransition) {
+        setSelected(card);
+        return;
+      }
+      document.startViewTransition(() => setSelected(card));
+    }
+
+    function goBack() {
+      if (!document.startViewTransition) {
+        setSelected(null);
+        return;
+      }
+      document.startViewTransition(() => setSelected(null));
+    }
+
+    if (selected) {
+      return (
+        <div className="demo">
+          <div
+            className="detail-hero"
+            style={{
+              background: selected.color,
+              viewTransitionName: "card-" + selected.id,
+            }}
+          >
+            <span className="emoji-lg">{selected.emoji}</span>
+          </div>
+          <h3 className="detail-title">{selected.title}</h3>
+          <p className="detail-desc">
+            썸네일이 위치와 크기를 보간하며 이동했어요.
+          </p>
+          <button onClick={goBack} className="back-btn">
+            ← 돌아가기
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="demo">
+        <p className="hint">카드를 클릭해보세요</p>
+        <div className="card-list">
+          {cards.map((card) => (
+            <div key={card.id} className="card" onClick={() => navigate(card)}>
+              <div
+                className="card-thumb"
+                style={{
+                  background: card.color,
+                  viewTransitionName: "card-" + card.id,
+                }}
+              >
+                <span>{card.emoji}</span>
+              </div>
+              <p className="card-label">{card.title}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }`}
+  css={`.demo {
+    font-family: system-ui, sans-serif;
+    padding: 16px;
+  }
+
+  .hint {
+    font-size: 13px;
+    color: #888;
+    margin: 0 0 12px;
+  }
+
+  .card-list {
+    display: flex;
+    gap: 12px;
+  }
+
+  .card {
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .card-thumb {
+    width: 100px;
+    height: 80px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+  }
+
+  .card-label {
+    margin: 8px 0 0;
+    font-size: 14px;
+  }
+
+  .detail-hero {
+    width: 100%;
+    height: 160px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .emoji-lg {
+    font-size: 48px;
+  }
+
+  .detail-title {
+    margin: 12px 0 4px;
+  }
+
+  .detail-desc {
+    color: #666;
+    font-size: 14px;
+    margin: 0 0 12px;
+  }
+
+  .back-btn {
+    padding: 8px 16px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+  }`}
+  showPreview={true}
+/>
+
+각 카드에 `card-1`, `card-2`, `card-3`처럼 고유한 `view-transition-name`을 부여했어요. 상세 화면에서도 선택된 카드와 같은 이름을 쓰니까, 브라우저가 둘을 짝지어 위치와 크기를 보간합니다.
+
+의사 요소 트리를 CSS로 커스터마이징할 수도 있습니다.
+
+```css
+::view-transition-old(hero-image) {
+  animation: none;
+}
+
+::view-transition-new(hero-image) {
+  animation: slide-in 300ms ease-out;
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+```
+
+`::view-transition-old()`와 `::view-transition-new()` 의사 요소에 직접 애니메이션을 걸 수 있어요. 기본 cross-fade를 끄고 커스텀 키프레임을 적용하면 됩니다.
+
+셀렉트 박스에서 효과를 바꿔가며 같은 전환에 다른 애니메이션을 적용해보세요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+
+  function CustomAnimationDemo() {
+    const [page, setPage] = useState("A");
+    const [effect, setEffect] = useState("slide-left");
+
+    function navigate(to) {
+      if (!document.startViewTransition) {
+        setPage(to);
+        return;
+      }
+      document.documentElement.dataset.transition = effect;
+      const transition = document.startViewTransition(() => setPage(to));
+      transition.finished.then(() => {
+        delete document.documentElement.dataset.transition;
+      });
+    }
+
+    return (
+      <div className="container">
+        <div className="controls">
+          <select value={effect} onChange={(e) => setEffect(e.target.value)}>
+            <option value="slide-left">← 슬라이드</option>
+            <option value="slide-up">↑ 슬라이드</option>
+            <option value="scale">확대/축소</option>
+          </select>
+          <div className="nav-btns">
+            <button
+              className={page === "A" ? "active" : ""}
+              onClick={() => navigate("A")}
+            >
+              Page A
+            </button>
+            <button
+              className={page === "B" ? "active" : ""}
+              onClick={() => navigate("B")}
+            >
+              Page B
+            </button>
+          </div>
+        </div>
+        <div className="page-content">
+          {page === "A" ? (
+            <div className="page page-a">
+              <h3>Page A</h3>
+              <p>셀렉트 박스에서 효과를 바꿔보세요.</p>
+            </div>
+          ) : (
+            <div className="page page-b">
+              <h3>Page B</h3>
+              <p>같은 API로 다양한 전환이 가능해요.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }`}
+  css={`.container {
+    font-family: system-ui, sans-serif;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .controls select {
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+
+  .nav-btns {
+    display: flex;
+    gap: 6px;
+  }
+
+  .nav-btns button {
+    padding: 6px 14px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .nav-btns button.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+  }
+
+  .page-content {
+    border: 1px solid #eee;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .page {
+    padding: 24px;
+    min-height: 120px;
+  }
+
+  .page-a {
+    background: #eff6ff;
+  }
+
+  .page-b {
+    background: #f0fdf4;
+  }
+
+  [data-transition="slide-left"]::view-transition-old(root) {
+    animation: slide-out-left 300ms ease-in-out;
+  }
+
+  [data-transition="slide-left"]::view-transition-new(root) {
+    animation: slide-in-right 300ms ease-in-out;
+  }
+
+  @keyframes slide-out-left {
+    to {
+      transform: translateX(-100%);
+      opacity: 0;
+    }
+  }
+
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+  }
+
+  [data-transition="slide-up"]::view-transition-old(root) {
+    animation: slide-out-up 300ms ease-in-out;
+  }
+
+  [data-transition="slide-up"]::view-transition-new(root) {
+    animation: slide-in-up 300ms ease-in-out;
+  }
+
+  @keyframes slide-out-up {
+    to {
+      transform: translateY(-30px);
+      opacity: 0;
+    }
+  }
+
+  @keyframes slide-in-up {
+    from {
+      transform: translateY(30px);
+      opacity: 0;
+    }
+  }
+
+  [data-transition="scale"]::view-transition-old(root) {
+    animation: scale-out 300ms ease-in-out;
+  }
+
+  [data-transition="scale"]::view-transition-new(root) {
+    animation: scale-in 300ms ease-in-out;
+  }
+
+  @keyframes scale-out {
+    to {
+      transform: scale(0.9);
+      opacity: 0;
+    }
+  }
+
+  @keyframes scale-in {
+    from {
+      transform: scale(1.1);
+      opacity: 0;
+    }
+  }`}
+  showPreview={true}
+/>
+
+`document.documentElement.dataset.transition`에 효과 이름을 넣고, CSS에서 `[data-transition="slide-left"]::view-transition-old(root)` 같은 선택자로 분기하는 거예요. 하나의 API로 전환 효과를 자유롭게 바꿀 수 있죠.
+
+<Callout variant="warning">
+`view-transition-name`은 같은 시점에 문서 안에서 유일해야 해요. 같은 이름이 두 요소에 동시에 존재하면 전환 자체가 abort됩니다.<Cite id="csswg-spec" /> old 화면에 하나, new 화면에 하나인 건 괜찮지만, 같은 화면 안에서 중복되면 안 돼요.
+
+</Callout>
+
+## 안전하게 도입하기
+
+View Transitions API는 progressive enhancement에 최적화되어 있어요. 지원하지 않는 브라우저에서는 `document.startViewTransition`이 `undefined`니까, 한 줄 체크만 추가하면 돼요.
+
+```javascript
+function navigate(to) {
+  if (!document.startViewTransition) {
+    updateDOM(to);
+    return;
+  }
+  document.startViewTransition(() => updateDOM(to));
+}
+```
+
+SPA(same-document) 전환은 현재 Chrome 111+, Edge 111+, Firefox 144+, Safari 18+에서 지원됩니다.<Cite id="chrome-view-transitions" /> MPA(cross-document) 전환도 `@view-transition { navigation: auto; }` CSS at-rule로 활성화할 수 있는데, 아직 Firefox에서 미지원이라 SPA 전환부터 도입하는 게 안전해요.
+
+`ViewTransition` 객체의 `ready` promise를 쓰면 의사 요소가 생성된 시점을 잡을 수 있어요. Web Animations API와 조합하면 JavaScript에서 전환 애니메이션을 세밀하게 제어할 수 있습니다. `finished` promise는 전환이 완전히 끝난 후 정리 작업에 유용하고요.
+
+`skipTransition()`은 애니메이션만 즉시 종료하고 DOM 변경은 유지해요. 사용자가 빠르게 연속 네비게이션할 때, 이전 전환을 건너뛰고 마지막 전환만 보여주는 데 쓸 수 있습니다.
+
+버튼을 빠르게 연타해보세요. 이전 전환이 skip되고 마지막 상태로 바로 넘어가는 걸 로그에서 확인할 수 있어요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState, useRef } from "react";
+
+  function SkipTransitionDemo() {
+    const [count, setCount] = useState(0);
+    const [log, setLog] = useState([]);
+    const transitionRef = useRef(null);
+
+    function step() {
+      if (transitionRef.current) {
+        transitionRef.current.skipTransition();
+        setLog((prev) => [...prev.slice(-4), "⏭ skip"]);
+      }
+
+      if (!document.startViewTransition) {
+        setCount((c) => c + 1);
+        return;
+      }
+
+      const t = document.startViewTransition(() => {
+        setCount((c) => c + 1);
+      });
+      transitionRef.current = t;
+
+      t.finished.then(() => {
+        transitionRef.current = null;
+        setLog((prev) => [...prev.slice(-4), "✓ 완료"]);
+      });
+    }
+
+    return (
+      <div className="container">
+        <p className="hint">버튼을 빠르게 연타해보세요</p>
+        <div className="counter" style={{ viewTransitionName: "counter" }}>
+          {count}
+        </div>
+        <button onClick={step} className="step-btn">
+          +1
+        </button>
+        <div className="log">
+          {log.map((entry, i) => (
+            <div key={i} className="log-entry">
+              {entry}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }`}
+  css={`.container {
+    font-family: system-ui, sans-serif;
+    text-align: center;
+    padding: 16px;
+  }
+
+  .hint {
+    font-size: 13px;
+    color: #888;
+    margin: 0 0 16px;
+  }
+
+  .counter {
+    font-size: 64px;
+    font-weight: 700;
+    margin: 16px 0;
+    color: #3b82f6;
+  }
+
+  .step-btn {
+    padding: 10px 32px;
+    font-size: 18px;
+    border: 1px solid #3b82f6;
+    border-radius: 8px;
+    background: #3b82f6;
+    color: white;
+    cursor: pointer;
+  }
+
+  .step-btn:active {
+    background: #2563eb;
+  }
+
+  .log {
+    margin-top: 16px;
+    text-align: left;
+    max-width: 200px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .log-entry {
+    font-size: 12px;
+    color: #666;
+    padding: 2px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  ::view-transition-old(counter) {
+    animation: fade-out 400ms ease-out;
+  }
+
+  ::view-transition-new(counter) {
+    animation: fade-in 400ms ease-out;
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+      transform: scale(0.8) translateY(-10px);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: scale(1.2) translateY(10px);
+    }
+  }`}
+  showPreview={true}
+/>
+
+천천히 클릭하면 숫자가 scale 애니메이션과 함께 전환되고, 빠르게 연타하면 `skipTransition()`이 이전 전환을 즉시 끝내서 끊김 없이 다음 전환으로 넘어갑니다.
+
+현재 스펙은 **Candidate Recommendation Draft** 단계라서 큰 틀은 확정됐어요. 브라우저 합성 레이어가 전환 성능의 핵심인 만큼, [will-change 속성이 레이어에 미치는 영향](/posts/css-will-change)도 함께 이해해두면 도움이 됩니다.
+
+<References
+  items={[
+    {
+      id: "mdn-view-transition",
+      title: "MDN - View Transition API",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API",
+      description: "API 전체 개요와 SPA/MPA 전환 사용법",
+    },
+    {
+      id: "csswg-spec",
+      title: "W3C - CSS View Transitions Module Level 1",
+      href: "https://drafts.csswg.org/css-view-transitions-1/",
+      description: "전환 알고리즘, 의사 요소 트리 구조, progressive enhancement 원칙",
+    },
+    {
+      id: "w3c-tr",
+      title: "W3C TR - CSS View Transitions Module Level 1",
+      href: "https://www.w3.org/TR/css-view-transitions-1/",
+      description: "Candidate Recommendation Draft (2024-03-28)",
+    },
+    {
+      id: "chrome-view-transitions",
+      title: "Chrome for Developers - View Transitions",
+      href: "https://developer.chrome.com/docs/web-platform/view-transitions",
+      description: "브라우저 지원 현황과 실전 사용 가이드",
+    },
+  ]}
+/>

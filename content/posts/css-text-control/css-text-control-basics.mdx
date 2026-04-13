@@ -17,13 +17,13 @@ published: true
 <AnimatedStep
   steps={[
     {
-      title: "1. 텍스트 파싱",
+      title: "텍스트 파싱",
       content:
         "HTML에서 텍스트 노드를 읽어들이고, 유니코드 문자들을 식별합니다.",
       code: `<p>Hello 안녕하세요 https://example.com</p>;`,
     },
     {
-      title: "2. 문자 분류",
+      title: "문자 분류",
       content:
         "각 문자를 언어별, 스크립트별로 분류하고 어떤 폰트를 사용할지 결정합니다.",
       code: `// 라틴 문자: H, e, l, l, o
@@ -31,14 +31,14 @@ published: true
   // 기호: :, /, /`,
     },
     {
-      title: "3. 줄바꿈 기회 탐지",
+      title: "줄바꿈 기회 탐지",
       content:
         "텍스트에서 줄바꿈이 가능한 지점(break opportunities)을 찾습니다.",
       code: `Hello |안녕하세요 |https://|example.|com
   // |는 줄바꿈 가능 지점`,
     },
     {
-      title: "4. 레이아웃 계산",
+      title: "레이아웃 계산",
       content:
         "컨테이너 너비와 줄바꿈 기회를 고려해 실제 줄바꿈 위치를 결정합니다.",
     },

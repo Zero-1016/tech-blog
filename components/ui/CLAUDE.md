@@ -37,6 +37,8 @@ interface CalloutProps {
 
 단계별 설명을 번호 카드로 표시. 스크롤 진입 시 순차 애니메이션.
 
+**주의: 컴포넌트가 자동으로 왼쪽에 번호 뱃지(1, 2, 3...)를 렌더링하므로, `title`에 "1.", "2." 같은 번호를 넣지 마세요. 번호가 중복됩니다.**
+
 ```typescript
 interface Step {
   title: string; // 단계 제목

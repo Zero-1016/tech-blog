@@ -15,11 +15,11 @@ published: true
 사용자가 버튼을 누르든, 스크롤을 내리든, CSS 애니메이션이 돌아가든, 브라우저는 16.67ms 안에 한 프레임을 뽑아내야 해요(60fps 기준). 그 짧은 시간 동안 아래 단계를 순서대로 밟습니다.<Cite id="web-dev-rendering" />
 
 <AnimatedStep steps={[
-  { title: "1. JavaScript", content: "이벤트 핸들러, setTimeout, requestAnimationFrame 콜백 등 스타일 변경을 일으키는 코드가 먼저 실행돼요." },
-  { title: "2. Style", content: "어떤 CSS 규칙이 어떤 요소에 적용되는지 매칭하고 최종 computed style을 계산합니다." },
-  { title: "3. Layout", content: "각 요소가 어디에 얼마만큼의 크기로 놓일지를 계산해요. 한 요소가 움직이면 형제·부모까지 연쇄적으로 다시 측정됩니다." },
-  { title: "4. Paint", content: "계산된 geometry 위에 색·그림자·텍스트 같은 픽셀을 채워 넣어요. 한 장의 비트맵이 아니라 여러 레이어로 나눠서 그립니다." },
-  { title: "5. Composite", content: "완성된 레이어들을 GPU에서 올바른 순서로 합쳐 화면에 띄워요. 이 단계는 메인 스레드 밖에서도 돌릴 수 있습니다." }
+  { title: "JavaScript", content: "이벤트 핸들러, setTimeout, requestAnimationFrame 콜백 등 스타일 변경을 일으키는 코드가 먼저 실행돼요." },
+  { title: "Style", content: "어떤 CSS 규칙이 어떤 요소에 적용되는지 매칭하고 최종 computed style을 계산합니다." },
+  { title: "Layout", content: "각 요소가 어디에 얼마만큼의 크기로 놓일지를 계산해요. 한 요소가 움직이면 형제·부모까지 연쇄적으로 다시 측정됩니다." },
+  { title: "Paint", content: "계산된 geometry 위에 색·그림자·텍스트 같은 픽셀을 채워 넣어요. 한 장의 비트맵이 아니라 여러 레이어로 나눠서 그립니다." },
+  { title: "Composite", content: "완성된 레이어들을 GPU에서 올바른 순서로 합쳐 화면에 띄워요. 이 단계는 메인 스레드 밖에서도 돌릴 수 있습니다." }
 ]} />
 
 핵심은 이겁니다. <strong>어떤 CSS 속성을 건드렸냐에 따라 이 파이프라인에서 출발하는 지점이 달라져요.</strong> 어떤 속성은 맨 위 Layout부터 다시 뛰고, 어떤 속성은 맨 아래 Composite만 건드리고 끝납니다.
