@@ -1,0 +1,483 @@
+---
+title: "React에서 View Transitions 쓰기"
+description: "startViewTransition을 React에서 그냥 쓰면 타이밍이 어긋나요. flushSync로 맞추는 법부터 정리했어요."
+date: 2026-04-13
+tags: ["React", "JavaScript", "View Transitions"]
+series: "View Transitions 시리즈"
+seriesOrder: 2
+published: true
+---
+
+[지난 글](/posts/view-transitions-api)에서 `document.startViewTransition()`으로 페이지 전환을 매끄럽게 만드는 법을 봤어요. 브라우저 API 하나로 cross-fade가 되니까, React에서도 그냥 쓰면 될 것 같죠? 근데 막상 해보면 상태는 바뀌었는데 애니메이션이 안 나와요. React의 비동기 렌더링이 타이밍을 어긋나게 만드는 거예요.
+
+## 왜 React에서 바로 안 되나
+
+`startViewTransition(callback)`은 콜백이 끝나는 순간 새 화면의 스냅샷을 찍어요. 근데 React의 `setState`는 비동기예요. 콜백 안에서 `setState`를 호출해도 DOM이 아직 안 바뀐 상태에서 스냅샷이 찍히죠.
+
+```javascript
+document.startViewTransition(() => {
+  setPage("detail");
+});
+```
+
+이 코드는 전환 애니메이션 없이 그냥 즉시 바뀌어요. React가 상태 업데이트를 다음 렌더 사이클로 미루기 때문에, 브라우저가 "새 화면"을 캡처하는 시점에 DOM은 아직 이전 상태거든요.
+
+해결법은 `flushSync`예요. React의 상태 업데이트를 강제로 동기 실행시켜서, 콜백이 끝나기 전에 DOM을 확실히 바꿔놓는 거죠.<Cite id="react-viewtransition-ref" />
+
+```javascript
+import { flushSync } from "react-dom";
+
+document.startViewTransition(() => {
+  flushSync(() => setPage("detail"));
+});
+```
+
+카드를 누르면 새 페이지가 아래에서 올라오는 전환을 직접 확인해보세요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+  import { flushSync } from "react-dom";
+
+  function PageStackDemo() {
+    const [page, setPage] = useState(null);
+
+    const items = [
+      { id: 1, title: "여행 일기", color: "#3b82f6" },
+      { id: 2, title: "맛집 리스트", color: "#8b5cf6" },
+      { id: 3, title: "독서 노트", color: "#06b6d4" },
+    ];
+
+    function openPage(item) {
+      if (!document.startViewTransition) {
+        setPage(item);
+        return;
+      }
+      document.documentElement.dataset.direction = "forward";
+      const t = document.startViewTransition(() => {
+        flushSync(() => setPage(item));
+      });
+      t.finished.then(() => {
+        delete document.documentElement.dataset.direction;
+      });
+    }
+
+    function closePage() {
+      if (!document.startViewTransition) {
+        setPage(null);
+        return;
+      }
+      document.documentElement.dataset.direction = "back";
+      const t = document.startViewTransition(() => {
+        flushSync(() => setPage(null));
+      });
+      t.finished.then(() => {
+        delete document.documentElement.dataset.direction;
+      });
+    }
+
+    if (page) {
+      return (
+        <div className="app">
+          <div className="overlay" style={{ background: page.color }}>
+            <h2 className="overlay-title">{page.title}</h2>
+            <p className="overlay-desc">
+              아래에서 위로 올라오는 전환이 적용됐어요.
+            </p>
+            <button onClick={closePage} className="close-btn">
+              닫기
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="app">
+        <div className="list">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="item"
+              style={{ background: item.color }}
+              onClick={() => openPage(item)}
+            >
+              {item.title}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }`}
+  css={`.app {
+    font-family: system-ui, sans-serif;
+    min-height: 280px;
+  }
+
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+  }
+
+  .item {
+    padding: 16px;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  .overlay {
+    min-height: 280px;
+    padding: 24px;
+    color: white;
+  }
+
+  .overlay-title {
+    margin: 0 0 8px;
+  }
+
+  .overlay-desc {
+    margin: 0 0 16px;
+    opacity: 0.9;
+    font-size: 14px;
+  }
+
+  .close-btn {
+    padding: 8px 16px;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    border-radius: 6px;
+    background: transparent;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  [data-direction="forward"]::view-transition-old(root) {
+    animation: fade-out 250ms ease-out;
+  }
+
+  [data-direction="forward"]::view-transition-new(root) {
+    animation: slide-up 300ms ease-out;
+  }
+
+  [data-direction="back"]::view-transition-old(root) {
+    animation: slide-down 300ms ease-in;
+  }
+
+  [data-direction="back"]::view-transition-new(root) {
+    animation: fade-in 250ms ease-out;
+  }
+
+  @keyframes slide-up {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes slide-down {
+    to {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }`}
+  showPreview={true}
+/>
+
+`flushSync`를 빼면 애니메이션 없이 즉시 전환돼요. `flushSync`가 React의 배치 업데이트를 우회해서 DOM을 즉시 반영시키는 거예요. `data-direction` 속성으로 열기(slide-up)와 닫기(slide-down)의 애니메이션을 분기하는 패턴은 [지난 글의 커스텀 애니메이션 데모](/posts/view-transitions-api)에서도 봤죠.
+
+## 실전 패턴
+
+`flushSync` + `startViewTransition` 조합이면 React에서도 꽤 다양한 전환을 만들 수 있어요. 모바일 앨범 앱처럼 썸네일을 누르면 화면 가득 차는 전환을 만들어볼게요.
+
+핵심은 `view-transition-name`이에요. 썸네일과 풀스크린 뷰에 같은 이름을 부여하면, 브라우저가 위치와 크기를 부드럽게 보간해줍니다.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+  import { flushSync } from "react-dom";
+
+  function AlbumDemo() {
+    const [selected, setSelected] = useState(null);
+
+    const photos = [
+      { id: 1, emoji: "🏔️", color: "#3b82f6" },
+      { id: 2, emoji: "🌊", color: "#06b6d4" },
+      { id: 3, emoji: "🌅", color: "#f59e0b" },
+      { id: 4, emoji: "🌲", color: "#22c55e" },
+      { id: 5, emoji: "🏜️", color: "#ef4444" },
+      { id: 6, emoji: "❄️", color: "#8b5cf6" },
+    ];
+
+    function openPhoto(photo) {
+      if (!document.startViewTransition) {
+        setSelected(photo);
+        return;
+      }
+      document.startViewTransition(() => {
+        flushSync(() => setSelected(photo));
+      });
+    }
+
+    function closePhoto() {
+      if (!document.startViewTransition) {
+        setSelected(null);
+        return;
+      }
+      document.startViewTransition(() => {
+        flushSync(() => setSelected(null));
+      });
+    }
+
+    if (selected) {
+      return (
+        <div className="album">
+          <div
+            className="fullscreen"
+            style={{
+              background: selected.color,
+              viewTransitionName: "photo-" + selected.id,
+            }}
+            onClick={closePhoto}
+          >
+            <span className="full-emoji">{selected.emoji}</span>
+            <p className="full-hint">탭해서 돌아가기</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="album">
+        <p className="album-hint">사진을 탭해보세요</p>
+        <div className="grid">
+          {photos.map((photo) => (
+            <div
+              key={photo.id}
+              className="thumb"
+              style={{
+                background: photo.color,
+                viewTransitionName: "photo-" + photo.id,
+              }}
+              onClick={() => openPhoto(photo)}
+            >
+              <span>{photo.emoji}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }`}
+  css={`.album {
+    font-family: system-ui, sans-serif;
+  }
+
+  .album-hint {
+    font-size: 13px;
+    color: #888;
+    margin: 12px 12px 0;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    padding: 12px;
+  }
+
+  .thumb {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    cursor: pointer;
+  }
+
+  .fullscreen {
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .full-emoji {
+    font-size: 72px;
+  }
+
+  .full-hint {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+    margin-top: 12px;
+  }`}
+  showPreview={true}
+/>
+
+각 썸네일에 `photo-1`, `photo-2` 같은 고유한 `view-transition-name`을 부여했어요. 풀스크린 뷰에서도 선택된 사진과 같은 이름을 쓰니까, 브라우저가 썸네일 위치에서 풀스크린 크기로 자연스럽게 모핑해줍니다. 이 패턴은 모바일 앨범뿐 아니라 상품 목록 → 상세 페이지, 카드 그리드 → 확장 뷰 등 어디서나 쓸 수 있어요.
+
+## 선언적으로 바꾸기
+
+`flushSync`는 잘 동작하지만, 명령형이에요. 어디서 전환을 시작할지, 어떤 상태 업데이트를 동기로 밀어넣을지를 개발자가 직접 관리해야 하죠. React 팀은 이걸 선언적으로 풀고 싶었어요.
+
+React canary 채널에서 실험 중인 `<ViewTransition>` 컴포넌트가 그 답이에요.<Cite id="react-labs-blog" /> 전환 대상을 JSX로 감싸고, `startTransition`으로 상태를 업데이트하면 React가 내부적으로 `startViewTransition`을 호출해줍니다.
+
+```jsx
+import { ViewTransition, startTransition } from "react";
+
+function App() {
+  const [page, setPage] = useState("list");
+
+  return (
+    <ViewTransition>
+      {page === "list" ? (
+        <ListView onSelect={(id) => {
+          startTransition(() => setPage(id));
+        }} />
+      ) : (
+        <DetailView id={page} onBack={() => {
+          startTransition(() => setPage("list"));
+        }} />
+      )}
+    </ViewTransition>
+  );
+}
+```
+
+`startTransition`으로 감싼 상태 업데이트만 전환 애니메이션을 트리거해요. 일반 `setState`로는 전환이 안 걸려서, 의도하지 않은 곳에서 애니메이션이 튀어나오는 걸 막아줍니다.<Cite id="react-viewtransition-ref" />
+
+공유 요소 전환도 선언적이에요. 같은 `name` prop을 가진 `<ViewTransition>` 사이에서 자동으로 모핑 애니메이션이 만들어져요.
+
+```jsx
+<ViewTransition name="hero-image">
+  <img src={thumbnail} />
+</ViewTransition>
+
+<ViewTransition name="hero-image">
+  <img src={fullSize} />
+</ViewTransition>
+```
+
+<Callout variant="warning">
+`<ViewTransition>`은 현재 `react@canary` 채널에서만 사용할 수 있어요. 프로덕션 배포에 canary를 쓰는 건 권장되지 않고, 최종 API가 바뀔 수 있습니다. 지금 당장 프로덕션에서 쓰려면 앞 섹션의 `flushSync` 패턴이 안전해요.
+</Callout>
+
+## 프레임워크에서 쓰기
+
+React 자체의 `<ViewTransition>`은 아직 실험적이지만, 메타 프레임워크들은 이미 통합을 제공하고 있어요.
+
+**Next.js App Router**는 `next.config.ts`에서 실험적 옵션을 켜면 돼요.<Cite id="nextjs-view-transitions" />
+
+```typescript
+const nextConfig = {
+  experimental: {
+    viewTransition: true,
+  },
+};
+```
+
+활성화하면 React의 `<ViewTransition>` 컴포넌트를 `'react'`에서 바로 import해서 쓸 수 있어요. 라우트 전환 시 `enter`, `exit` prop에 전환 유형별 애니메이션을 분기할 수 있고, `share` prop으로 공유 요소 전환도 가능하죠.
+
+**React Router v7**은 다른 접근을 취해요.<Cite id="react-router-view-transitions" /> React의 선언적 컴포넌트 대신, CSS `view-transition-name` 속성을 직접 활용해요.
+
+```jsx
+import { Link, useViewTransitionState } from "react-router";
+
+function Card({ item }) {
+  const isTransitioning = useViewTransitionState(
+    `/detail/${item.id}`
+  );
+
+  return (
+    <Link to={`/detail/${item.id}`} viewTransition>
+      <img
+        src={item.image}
+        style={{
+          viewTransitionName: isTransitioning
+            ? "hero"
+            : "",
+        }}
+      />
+    </Link>
+  );
+}
+```
+
+`<Link viewTransition>`이 내부적으로 `document.startViewTransition()`을 호출하고, `useViewTransitionState`로 현재 전환 중인 경로를 감지해서 `view-transition-name`을 동적으로 할당하는 거예요. React의 `<ViewTransition>` 없이도 동작하니까 canary 의존성이 없어요.
+
+## 지금 쓸 수 있을까
+
+선택지를 정리하면 이래요.
+
+<AnimatedStep steps={[
+  { title: "지금 프로덕션에서", content: "flushSync + document.startViewTransition() 조합을 쓰세요. React 18+면 바로 가능하고, 브라우저 미지원 시 전환 없이 즉시 교체되니까 안전해요." },
+  { title: "Next.js 프로젝트에서", content: "experimental.viewTransition을 켜고 <ViewTransition> 컴포넌트를 써보세요. canary 의존이지만 Next.js가 버전을 관리해줘요." },
+  { title: "React Router 프로젝트에서", content: "Link viewTransition prop과 useViewTransitionState 훅을 쓰세요. canary 없이 동작해요." },
+  { title: "React ViewTransition이 안정화되면", content: "flushSync 패턴을 선언적 <ViewTransition>으로 점진적 마이그레이션하면 돼요." }
+]} />
+
+접근성도 챙겨야 해요. `prefers-reduced-motion` 미디어 쿼리로 애니메이션을 꺼줘야 합니다.<Cite id="react-viewtransition-ref" />
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+```
+
+브라우저 뒤로가기(popstate)에서는 `<ViewTransition>` 애니메이션이 기본적으로 건너뛰어져요.<Cite id="react-viewtransition-ref" /> Navigation API가 보급되면 이 제약도 해소될 가능성이 있어요.
+
+React에서 View Transitions를 쓰는 핵심은 결국 타이밍이에요. React의 비동기 렌더링과 브라우저의 동기 스냅샷 사이의 간극을, `flushSync`로 메우든 `<ViewTransition>` 컴포넌트에 맡기든, 그 타이밍만 맞추면 나머지는 브라우저가 알아서 해줍니다.
+
+<References
+  items={[
+    {
+      id: "react-labs-blog",
+      title: "React Labs - View Transitions, Activity, and more",
+      href: "https://react.dev/blog/2025/04/23/react-labs-view-transitions-activity-and-more",
+      description: "React의 실험적 ViewTransition 컴포넌트 소개와 설계 원칙",
+    },
+    {
+      id: "react-viewtransition-ref",
+      title: "React - ViewTransition API Reference",
+      href: "https://react.dev/reference/react/ViewTransition",
+      description: "ViewTransition props, 이벤트 콜백, flushSync 동기화 제약",
+    },
+    {
+      id: "nextjs-view-transitions",
+      title: "Next.js - View Transitions (App Router)",
+      href: "https://nextjs.org/docs/app/guides/view-transitions",
+      description: "Next.js App Router에서 View Transitions 실험적 설정과 사용법",
+    },
+    {
+      id: "react-router-view-transitions",
+      title: "React Router - View Transitions How-To",
+      href: "https://reactrouter.com/how-to/view-transitions",
+      description: "Link viewTransition prop과 useViewTransitionState 훅 사용법",
+    },
+    {
+      id: "mdn-view-transitions",
+      title: "MDN - View Transition API",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/View_Transition_API",
+      description: "브라우저 View Transitions API 전체 개요",
+    },
+  ]}
+/>

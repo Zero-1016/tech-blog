@@ -94,6 +94,67 @@ published: true
 
 JavaScript 이벤트 리스너 없이 실시간으로 반응해요. 사용자가 타이핑하는 순간 브라우저가 `:invalid` 상태를 재평가하고, `:has()`도 함께 갱신되죠.
 
+직접 입력해보세요. 빈 필드는 빨간색, 유효한 값을 넣으면 초록색으로 바뀌어요.
+
+<CodePlayground
+  template="react"
+  code={`function FormValidationDemo() {
+    return (
+      <div className="demo">
+        <div className="field-group">
+          <label>이메일</label>
+          <input type="email" required placeholder="user@example.com" />
+        </div>
+        <div className="field-group">
+          <label>이름 (3자 이상)</label>
+          <input type="text" minLength={3} required placeholder="홍길동" />
+        </div>
+      </div>
+    );
+  }`}
+  css={`.demo {
+    font-family: system-ui, sans-serif;
+    padding: 16px;
+    max-width: 320px;
+  }
+
+  .field-group {
+    padding: 12px;
+    border-radius: 8px;
+    border-left: 3px solid #e5e7eb;
+    margin-bottom: 12px;
+    background: #fafafa;
+    transition: all 0.2s;
+  }
+
+  .field-group:has(input:invalid) {
+    background-color: #fef2f2;
+    border-left-color: #ef4444;
+  }
+
+  .field-group:has(input:valid) {
+    background-color: #f0fdf4;
+    border-left-color: #22c55e;
+  }
+
+  .field-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .field-group input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }`}
+  showPreview={true}
+/>
+
 ### 빈 상태 처리
 
 리스트에 아이템이 하나도 없을 때 빈 상태 메시지를 보여주는 패턴이에요.
@@ -109,6 +170,134 @@ JavaScript 이벤트 리스너 없이 실시간으로 반응해요. 사용자가
 ```
 
 `:not(:has(li))`는 "li가 하나도 없는 .todo-list"를 선택해요. 정규식의 부정 전방 탐색과 비슷한 느낌이죠.
+
+아이템을 전부 삭제하면 빈 상태 메시지가 나타나요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+
+  function EmptyStateDemo() {
+    const [items, setItems] = useState(["장보기", "운동하기"]);
+    const [input, setInput] = useState("");
+
+    function addItem() {
+      if (!input.trim()) return;
+      setItems([...items, input.trim()]);
+      setInput("");
+    }
+
+    function removeItem(index) {
+      setItems(items.filter((_, i) => i !== index));
+    }
+
+    return (
+      <div className="demo">
+        <div className="add-row">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addItem()}
+            placeholder="할 일 입력"
+          />
+          <button onClick={addItem}>추가</button>
+        </div>
+        <div className="todo-container">
+          <ul className="todo-list">
+            {items.map((item, i) => (
+              <li key={i}>
+                <span>{item}</span>
+                <button className="remove-btn" onClick={() => removeItem(i)}>
+                  x
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="empty-state">할 일이 없어요</div>
+        </div>
+      </div>
+    );
+  }`}
+  css={`.demo {
+    font-family: system-ui, sans-serif;
+    padding: 16px;
+    max-width: 300px;
+  }
+
+  .add-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .add-row input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+
+  .add-row button {
+    padding: 8px 14px;
+    border: 1px solid #3b82f6;
+    border-radius: 6px;
+    background: #3b82f6;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .todo-container {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    min-height: 80px;
+  }
+
+  .todo-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .todo-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .todo-list li:last-child {
+    border-bottom: none;
+  }
+
+  .remove-btn {
+    background: none;
+    border: none;
+    color: #ef4444;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 4px;
+  }
+
+  .empty-state {
+    display: none;
+    text-align: center;
+    padding: 24px;
+    color: #888;
+    font-size: 14px;
+  }
+
+  .todo-container:has(.todo-list li) .empty-state {
+    display: none;
+  }
+
+  .todo-container:not(:has(.todo-list li)) .empty-state {
+    display: block;
+  }`}
+  showPreview={true}
+/>
 
 ### 이미지 유무에 따른 카드 레이아웃
 
@@ -134,6 +323,95 @@ JavaScript 이벤트 리스너 없이 실시간으로 반응해요. 사용자가
 ```
 
 직접 자식(`>`)으로 범위를 좁힌 게 포인트예요. `.card` 안에 중첩된 아이콘 이미지까지 매칭되는 걸 막아주죠.
+
+체크박스를 토글해서 이미지 유무에 따라 카드 레이아웃이 바뀌는 걸 확인해보세요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+
+  function CardLayoutDemo() {
+    const [hasImage, setHasImage] = useState(true);
+
+    return (
+      <div className="demo">
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={hasImage}
+            onChange={(e) => setHasImage(e.target.checked)}
+          />
+          이미지 포함
+        </label>
+        <div className="card">
+          {hasImage && (
+            <img
+              className="card-img"
+              src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 150'%3E%3Crect fill='%236366f1' width='200' height='150'/%3E%3Ctext x='100' y='80' text-anchor='middle' fill='white' font-size='16' font-family='system-ui'%3Eimage%3C/text%3E%3C/svg%3E"
+              alt=""
+            />
+          )}
+          <div className="card-body">
+            <h3>카드 제목</h3>
+            <p>이미지가 있으면 좌우 분할, 없으면 텍스트만 채워요.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }`}
+  css={`.demo {
+    font-family: system-ui, sans-serif;
+    padding: 16px;
+  }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .card {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .card:has(> img) {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 12px;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .card-img {
+    width: 100%;
+    height: 100%;
+    min-height: 100px;
+    display: block;
+    object-fit: cover;
+    border-radius: 8px 0 0 8px;
+  }
+
+  .card:has(> img) .card-body {
+    padding: 12px 12px 12px 0;
+  }
+
+  .card-body h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+  }
+
+  .card-body p {
+    margin: 0;
+    font-size: 14px;
+    color: #666;
+  }`}
+  showPreview={true}
+/>
 
 ## 성능과 주의사항
 

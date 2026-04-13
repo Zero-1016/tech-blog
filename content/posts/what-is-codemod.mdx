@@ -1,0 +1,113 @@
+---
+title: "찾아 바꾸기로는 부족할 때, codemod"
+description: "파일 수백 개에 흩어진 API를 한꺼번에 바꿔야 할 때, 찾아 바꾸기로는 안 돼요."
+date: 2026-04-13
+tags: ["JavaScript", "TypeScript", "codemod", "AST", "리팩토링"]
+published: true
+---
+
+라이브러리를 메이저 업데이트했더니 deprecated API가 300군데에서 터집니다. 에디터에서 `Ctrl+Shift+H`를 누르고 한숨부터 나오죠. 저도 몇 번을 겪었어요. 근데 찾아 바꾸기만으로는 이 문제가 깔끔하게 풀리지 않거든요.
+
+## 찾아 바꾸기가 부족한 이유
+
+에디터의 find-and-replace는 텍스트를 다뤄요. 코드가 아니라요.
+
+예를 들어 `getUser`라는 함수 이름을 `fetchUser`로 바꾸고 싶다고 해볼게요. 단순히 텍스트를 치환하면 주석 안에 있는 `getUser`도 바뀌고, 문자열 `"getUser"`도 바뀌고, `getUserName` 같은 다른 함수까지 잘못 걸립니다.
+
+정규식으로 범위를 좁혀볼 수 있지만 한계가 금방 드러나요. "이게 함수 호출인지 변수 선언인지 import 경로인지" 같은 문맥을 정규식은 구분하지 못해요. 결국 300개 파일을 하나씩 눈으로 확인하게 되죠.
+
+## codemod라는 해법
+
+codemod는 "code modification"의 줄임말이에요. 코드를 텍스트가 아니라 구조로 이해하고, 그 구조를 프로그래밍 방식으로 변환하는 도구입니다.
+
+핵심은 AST(Abstract Syntax Tree)예요. 소스 코드를 파서가 읽어서 트리 구조로 바꾸면, 그 트리에서 원하는 노드만 골라 수정할 수 있거든요.
+
+<AnimatedStep steps={[
+  { title: "Parse", content: "소스 코드를 AST로 변환합니다. 함수 선언, 변수, import 등이 트리의 노드가 돼요." },
+  { title: "Transform", content: "트리를 순회하면서 조건에 맞는 노드를 찾고 수정합니다. getUser 호출만 골라서 fetchUser로 바꾸는 식이에요." },
+  { title: "Generate", content: "수정된 트리를 다시 소스 코드로 변환합니다. 원본 포매팅은 최대한 보존돼요." }
+]} />
+
+find-and-replace와 결정적으로 다른 점은, codemod가 `getUser`라는 텍스트가 아니라 "함수 호출 표현식 중 callee가 `getUser`인 노드"를 찾는다는 거예요. 주석이나 문자열 안의 `getUser`는 애초에 매칭되지 않아요.
+
+## 어떤 도구가 있나
+
+JavaScript/TypeScript 생태계에서 많이 쓰이는 codemod 도구가 몇 가지 있어요.
+
+**jscodeshift** 는 Facebook이 만든 codemod 러너예요. 내부적으로 Recast 라이브러리를 사용해서 AST 파싱과 원본 포매팅 보존을 동시에 처리합니다. transform 함수를 작성하면 여러 파일에 대해 한 번에 실행할 수 있어요. React 생태계에서 가장 널리 쓰이고, jQuery 스타일의 메서드 체이닝으로 AST를 조작하는 Collection API가 특징이에요.
+
+```js
+// jscodeshift transform 예시
+export default function transformer(fileInfo, api) {
+  const j = api.jscodeshift;
+  return j(fileInfo.source)
+    .find(j.CallExpression, { callee: { name: "getUser" } })
+    .forEach((path) => {
+      path.node.callee.name = "fetchUser";
+    })
+    .toSource();
+}
+```
+
+**ts-morph** 는 TypeScript Compiler API를 감싼 래퍼 라이브러리입니다. jscodeshift가 Babel 파서 기반이라면, ts-morph는 TypeScript 컴파일러를 직접 활용하기 때문에 타입 정보까지 활용한 변환이 가능해요. 타입 추론 결과를 보고 "이 변수가 `string` 타입일 때만 변환하겠다" 같은 정교한 조건을 걸 수 있죠.
+
+```ts
+// ts-morph 예시
+import { Project } from "ts-morph";
+
+const project = new Project();
+project.addSourceFilesAtPaths("src/**/*.ts");
+
+for (const sourceFile of project.getSourceFiles()) {
+  sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)
+    .filter((call) => call.getExpression().getText() === "getUser")
+    .forEach((call) => call.getExpression().replaceWithText("fetchUser"));
+}
+
+project.save();
+```
+
+**ast-grep** 은 패턴 매칭 방식의 도구예요. 코드 패턴을 그대로 적어서 매칭하기 때문에 AST 노드 타입을 외울 필요가 없습니다. YAML 규칙 파일로 변환을 정의할 수도 있어서 진입 장벽이 낮은 편이에요.
+
+이 세 도구는 상호 배타적이지 않습니다. jscodeshift는 대규모 마이그레이션 러너로, ts-morph는 타입 정보가 필요한 정교한 리팩토링에, ast-grep은 빠른 패턴 매칭이 필요한 경우에 각각 강점이 있어요.
+
+## 어떤 상황에서 쓸까
+
+codemod가 진짜 빛나는 순간은 "사람이 하면 지루하고 실수하기 쉬운, 반복적인 코드 변환"이에요.
+
+프레임워크 메이저 업그레이드가 대표적입니다. Next.js나 React가 API를 바꿀 때 공식 codemod를 함께 제공하는 이유가 있어요. `npx @next/codemod@latest next-15` 한 줄이면 수백 개 파일의 API가 자동으로 전환됩니다.
+
+deprecated API 교체, `var`를 `const`/`let`으로 바꾸기, optional chaining 적용, import 경로 일괄 변경 같은 작업도 codemod의 영역이에요. 공통점은 규칙이 명확하고, 대상 파일이 많고, 수동으로 하면 실수가 끼어든다는 거죠.
+
+## 마무리
+
+codemod는 결국 "코드를 코드로 고치는 도구"예요. 텍스트가 아니라 구조를 다루기 때문에 정확하고, 한 번 작성하면 파일이 몇 개든 일괄 적용할 수 있습니다. 다음에 대규모 코드 변환이 필요한 순간이 오면 에디터의 찾아 바꾸기 대신 codemod를 떠올려보세요.
+
+<References
+  items={[
+    {
+      id: "codemod-docs",
+      title: "Codemod - 공식 문서",
+      href: "https://github.com/codemod/codemod",
+      description: "transform 함수 구조와 ast-grep 기반 워크플로우 참고",
+    },
+    {
+      id: "jscodeshift",
+      title: "Facebook - jscodeshift",
+      href: "https://github.com/facebook/jscodeshift",
+      description: "Collection API와 Recast 기반 AST 조작 방식 확인",
+    },
+    {
+      id: "ts-morph",
+      title: "ts-morph - 공식 문서",
+      href: "https://ts-morph.com/",
+      description: "TypeScript Compiler API 래퍼의 Project, SourceFile 조작 방식 참고",
+    },
+    {
+      id: "ts-morph-github",
+      title: "dsherret - ts-morph GitHub",
+      href: "https://github.com/dsherret/ts-morph",
+      description: "모노레포 구조와 bootstrap 패키지 참고",
+    },
+  ]}
+/>
