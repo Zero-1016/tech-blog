@@ -282,26 +282,46 @@ function LazyCard({ children, className }: { children: React.ReactNode; classNam
   );
 }
 
+function renderEntry(entry: PostEntry, featured: boolean) {
+  if (isSeriesGroup(entry)) return <SeriesCard group={entry} />;
+  return <PostCard post={entry} featured={featured} />;
+}
+
+function entryKey(entry: PostEntry) {
+  return isSeriesGroup(entry) ? `series:${entry.name}` : entry.slug;
+}
+
 export function PostList({ posts }: { posts: PostEntry[] }) {
+  const [featured, ...rest] = posts;
+  const left: PostEntry[] = [];
+  const right: PostEntry[] = [];
+  rest.forEach((entry, i) => (i % 2 === 0 ? left : right).push(entry));
+
   return (
     <motion.div
       initial="hidden"
       animate="visible"
       variants={{ visible: { transition: { staggerChildren: 0.06 } } }}
-      className="grid min-w-0 gap-4 sm:grid-cols-2"
+      className="flex flex-col gap-4"
     >
-      {posts.map((entry, i) => {
-        const key = isSeriesGroup(entry) ? `series:${entry.name}` : entry.slug;
-        return (
-          <LazyCard key={key} className={`min-w-0 ${i === 0 ? "sm:col-span-2" : ""}`}>
-            {isSeriesGroup(entry) ? (
-              <SeriesCard group={entry} />
-            ) : (
-              <PostCard post={entry} featured={i === 0} />
-            )}
-          </LazyCard>
-        );
-      })}
+      {featured && <LazyCard key={entryKey(featured)}>{renderEntry(featured, true)}</LazyCard>}
+      <div className="hidden gap-4 sm:flex">
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          {left.map((entry) => (
+            <LazyCard key={entryKey(entry)}>{renderEntry(entry, false)}</LazyCard>
+          ))}
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          {right.map((entry) => (
+            <LazyCard key={entryKey(entry)}>{renderEntry(entry, false)}</LazyCard>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-4 sm:hidden">
+        {rest.map((entry) => (
+          <LazyCard key={entryKey(entry)}>{renderEntry(entry, false)}</LazyCard>
+        ))}
+      </div>
     </motion.div>
   );
 }
