@@ -53,24 +53,29 @@ export function MobileToc({ items }: MobileTocProps) {
           <path d="m6 9 6 6 6-6" />
         </svg>
       </button>
-      {open && (
-        <nav className="mt-2 rounded-lg border border-border p-4">
-          <ul className="flex flex-col gap-1.5">
-            {flat.map((item) => (
-              <li key={item.url}>
-                <a
-                  href={item.url}
-                  onClick={() => setOpen(false)}
-                  className="block text-sm text-secondary transition-colors hover:text-accent"
-                  style={{ paddingLeft: item.depth === 2 ? 0 : "1rem" }}
-                >
-                  {item.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      )}
+      <div
+        className="grid transition-[grid-template-rows] duration-300 ease-in-out"
+        style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <nav className="mt-2 rounded-lg border border-border p-4">
+            <ul className="flex flex-col gap-1.5">
+              {flat.map((item) => (
+                <li key={item.url}>
+                  <a
+                    href={item.url}
+                    onClick={() => setOpen(false)}
+                    className="block text-sm text-secondary transition-colors hover:text-accent"
+                    style={{ paddingLeft: item.depth === 2 ? 0 : "1rem" }}
+                  >
+                    {item.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
+      </div>
     </div>
   );
 }
