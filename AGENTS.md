@@ -18,6 +18,7 @@
 | validator 단독 실행    | `/blog-validator content/posts/<slug>.mdx`         |
 | expression-review 단독 | `/blog-expression-review content/posts/<slug>.mdx` |
 | coherence-review 단독  | `/blog-coherence-review content/posts/<slug>.mdx`  |
+| 배너 모티프 추천       | `/blog-banner content/posts/<slug>.mdx`            |
 | writer 실패 로그 확인  | `cat content/tmp/writer-failures.md`               |
 | 글 백업 확인           | `ls content/posts/.backups/`                       |
 | 스킬 백업 확인         | `ls .claude/skills/blog-shared/.backups/`          |
@@ -126,7 +127,7 @@ via: orchestrator
 
 ## 스킬 관계
 
-8개 스킬은 다음과 같이 호출 관계를 맺습니다.
+9개 스킬은 다음과 같이 호출 관계를 맺습니다.
 
 ### 호출 관계 (실선)
 
@@ -150,6 +151,11 @@ blog-rule-editor (메타 관리, 별도)
   ├── SHARED.md
   ├── config/domains.md
   └── 각 스킬의 SKILL.md
+
+blog-banner (배너 모티프 관리, 독립 실행)
+  ├── lib/banner/spec.ts
+  ├── public/banners/motifs/*.svg
+  └── MDX frontmatter (banner 필드만)
 ```
 
 ### 참조 관계 (SHARED.md SSOT)
@@ -418,6 +424,26 @@ tools:
 2. 큰 수정 → 새로 `/blog-write` 호출 (필요하면 기존 파일 삭제 후)
 
 직접 편집은 가능하지만, 이후 검증 사이클을 한 번 돌리는 게 좋습니다.
+
+### .claude/skills/blog-\* 수정은 blog-rule-editor 경유 (블로커급)
+
+`.claude/skills/blog-*` 경로의 파일(SHARED.md, 개별 SKILL.md, config/,
+CHANGELOG 등)을 수정할 때는 **반드시 `blog-rule-editor` 스킬을 `Skill` 툴로
+호출**해서 처리합니다. 직접 Edit/Write 툴로 건드리는 것은 금지.
+
+**이유**: blog-rule-editor 는 백업 + 사용자 승인 + CHANGELOG 자동 기록 +
+영향 범위 분석 + SSOT 검증 레일을 한 번에 실행합니다. "한 줄만 고치는 간단한
+수정" 같은 판단으로 우회하면 안전 장치가 전부 빠져요. 간단해 보일수록 레일을
+타야 합니다.
+
+**예외**:
+
+- `blog-rule-editor/SKILL.md` 자기 자신 수정 (Rail 5 에 따라 직접 Edit 허용)
+- 사용자가 명시적으로 "그냥 Edit 해도 돼" 라고 허가한 경우
+
+**체크 습관**: `Edit` / `Write` 툴 호출 직전에 `file_path` 가
+`.claude/skills/blog-` 로 시작하는지 확인. 맞으면 중단하고
+`Skill(skill="blog-rule-editor", args="...")` 로 전환.
 
 ### content/tmp/ 는 git 무시
 
