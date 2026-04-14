@@ -121,6 +121,7 @@ function PostCard({ post, featured = false }: { post: PostItem; featured?: boole
             fill
             className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(max-width: 768px) 100vw, 672px"
+            priority={featured}
           />
         ) : (
           <Banner
@@ -128,6 +129,7 @@ function PostCard({ post, featured = false }: { post: PostItem; featured?: boole
             slug={post.slug}
             tags={post.tags}
             className="h-full w-full transition-transform duration-300 group-hover:scale-105"
+            priority={featured}
           />
         )}
       </div>
@@ -158,7 +160,7 @@ function PostCard({ post, featured = false }: { post: PostItem; featured?: boole
   );
 }
 
-function SeriesCard({ group }: { group: SeriesGroup }) {
+function SeriesCard({ group, featured = false }: { group: SeriesGroup; featured?: boolean }) {
   const [open, setOpen] = useState(false);
   const latest = group.items[0];
   const panelId = `series-panel-${group.name.replace(/\s+/g, "-")}`;
@@ -181,6 +183,7 @@ function SeriesCard({ group }: { group: SeriesGroup }) {
               fill
               className="object-cover"
               sizes="(max-width: 768px) 100vw, 672px"
+              priority={featured}
             />
           ) : (
             <Banner
@@ -188,6 +191,7 @@ function SeriesCard({ group }: { group: SeriesGroup }) {
               slug={latest.slug}
               tags={latest.tags}
               className="h-full w-full"
+              priority={featured}
             />
           )}
         </div>
@@ -252,7 +256,7 @@ function SeriesCard({ group }: { group: SeriesGroup }) {
 }
 
 function renderEntry(entry: PostEntry, featured: boolean) {
-  if (isSeriesGroup(entry)) return <SeriesCard group={entry} />;
+  if (isSeriesGroup(entry)) return <SeriesCard group={entry} featured={featured} />;
   return <PostCard post={entry} featured={featured} />;
 }
 

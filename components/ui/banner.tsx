@@ -3,9 +3,10 @@ import { buildBannerSpec, type BannerInput } from "@/lib/banner/spec";
 interface BannerProps extends BannerInput {
   className?: string;
   ariaLabel?: string;
+  priority?: boolean;
 }
 
-export function Banner({ className, ariaLabel, ...input }: BannerProps) {
+export function Banner({ className, ariaLabel, priority = false, ...input }: BannerProps) {
   const { palette, motif } = buildBannerSpec(input);
   const motifUrl = `/banners/motifs/${motif}.svg`;
 
@@ -25,7 +26,8 @@ export function Banner({ className, ariaLabel, ...input }: BannerProps) {
         src={motifUrl}
         alt=""
         aria-hidden
-        loading="lazy"
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : "auto"}
         decoding="async"
         style={{
           position: "absolute",
