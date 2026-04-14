@@ -89,14 +89,14 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
           <>
             <div
               aria-hidden
-              className={`${overlayAnim} fixed inset-0 z-[100] bg-black/30`}
+              className={`${overlayAnim} fixed inset-0 z-100 bg-black/30`}
               onClick={handleClose}
             />
             <div
               role="dialog"
               aria-modal="true"
               aria-label="사이트 검색"
-              className={`${panelAnim} fixed inset-x-0 top-24 z-[100] mx-auto w-full max-w-lg px-4`}
+              className={`${panelAnim} fixed inset-x-0 top-24 z-100 mx-auto w-full max-w-lg px-4`}
             >
               <div className="overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
                 <div className="flex items-center gap-3 border-b border-border px-4">
@@ -179,7 +179,7 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
         <span className="hidden sm:inline">검색</span>
         {!isMobile && (
           <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[10px] font-medium sm:inline">
-            {isMac ? "⌘K" : "Ctrl K"}
+            {isMac ? "⌘ K" : "Ctrl K"}
           </kbd>
         )}
       </button>

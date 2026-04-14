@@ -2,7 +2,7 @@ export function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-border">
       {/* gradient bg */}
-      <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-accent/5" />
+      <div className="absolute inset-0 bg-linear-to-br from-accent/5 via-transparent to-accent/5" />
       <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-accent/10 blur-3xl" />
       <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-accent/5 blur-3xl" />
 
