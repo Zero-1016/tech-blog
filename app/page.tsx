@@ -140,7 +140,7 @@ export default function Home() {
                   className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs leading-none text-secondary transition-colors hover:border-accent/30 hover:text-accent dark:bg-[#111113] dark:text-white"
                 >
                   <span className="leading-none">#{tag}</span>
-                  <span className="text-[10px] leading-none tabular-nums opacity-60">{count}</span>
+                  <span className="text-[10px] leading-none tabular-nums">{count}</span>
                 </Link>
               ))}
             </div>
