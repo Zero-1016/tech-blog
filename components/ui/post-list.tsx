@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { formatCardDate } from "@/lib/utils";
 import { readingTime } from "@/lib/reading-time";
+import { Banner } from "@/components/ui/banner";
 
 export interface PostItem {
   slug: string;
@@ -113,8 +114,8 @@ function PostCard({ post, featured = false }: { post: PostItem; featured?: boole
       href={`/posts/${post.slug}`}
       className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background transition-all hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 dark:bg-[#111113]"
     >
-      {post.cover && (
-        <div className="relative aspect-[2/1] overflow-hidden bg-code-bg">
+      <div className="relative aspect-[2/1] overflow-hidden bg-code-bg">
+        {post.cover ? (
           <Image
             src={post.cover}
             alt={post.title}
@@ -122,8 +123,15 @@ function PostCard({ post, featured = false }: { post: PostItem; featured?: boole
             className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(max-width: 768px) 100vw, 672px"
           />
-        </div>
-      )}
+        ) : (
+          <Banner
+            title={post.title}
+            slug={post.slug}
+            tags={post.tags}
+            className="h-full w-full transition-transform duration-300 group-hover:scale-105"
+          />
+        )}
+      </div>
       <div className="flex flex-1 flex-col p-5">
         <h2
           className={`font-semibold tracking-tight group-hover:text-accent ${
@@ -166,11 +174,18 @@ function SeriesCard({ group }: { group: SeriesGroup }) {
         aria-label={`${group.name} 시리즈 ${group.items.length}편 ${open ? "접기" : "펼치기"}`}
         className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-card-hover"
       >
-        {latest.cover && (
-          <div className="relative hidden h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-code-bg sm:block">
+        <div className="relative hidden h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-code-bg sm:block">
+          {latest.cover ? (
             <Image src={latest.cover} alt={group.name} fill className="object-cover" sizes="64px" />
-          </div>
-        )}
+          ) : (
+            <Banner
+              title={group.name}
+              slug={latest.slug}
+              tags={latest.tags}
+              className="h-full w-full"
+            />
+          )}
+        </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="rounded-md bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium text-accent">
@@ -227,13 +242,7 @@ function SeriesCard({ group }: { group: SeriesGroup }) {
                       {post.tags.length > 0 && (
                         <>
                           <span aria-hidden>·</span>
-                          <div className="flex gap-1">
-                            {post.tags.map((tag) => (
-                              <span key={tag} className={CHIP_CLASS}>
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
+                          <TagChips tags={post.tags} />
                         </>
                       )}
                     </div>

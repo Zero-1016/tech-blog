@@ -14,6 +14,7 @@ import { RelatedPosts } from "@/components/ui/related-posts";
 import { Comments } from "@/components/ui/comments";
 import { OverflowTags } from "@/components/ui/overflow-tags";
 import { CopyArticle } from "@/components/ui/copy-article";
+import { Banner } from "@/components/ui/banner";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -32,7 +33,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const post = getPost(slug);
   if (!post) return {};
 
-  const ogUrl = `/og?title=${encodeURIComponent(post.title)}&description=${encodeURIComponent(post.description)}`;
+  const ogUrl = `/og/${post.slug}`;
   const canonical = `/posts/${post.slug}`;
   const publishedTime = new Date(post.date).toISOString();
 
@@ -154,6 +155,16 @@ export default async function PostPage({ params }: Props) {
                 )}
               </div>
             </PostHeader>
+            {!post.cover && (
+              <div className="mt-8 mb-10 overflow-hidden rounded-xl">
+                <Banner
+                  title={post.title}
+                  slug={post.slug}
+                  tags={post.tags}
+                  className="aspect-[2/1] w-full"
+                />
+              </div>
+            )}
             {toc.length > 0 && <MobileToc items={toc} />}
             <div className="prose">
               <MDXContent code={post.body} />
