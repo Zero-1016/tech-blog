@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-04-14 16:17
+
+### SHARED.md §RULE-LINK-PATH · blog-validator 4-3 · blog-writer Step 5
+
+**변경**: 내부 링크 URL 형식에서 `/posts/<seriesSlug>/<partSlug>` 제거. slug 는
+**파일명 단일 세그먼트**임을 명시.
+
+- `SHARED.md` §RULE-LINK-PATH: "시리즈 편: `/posts/<partSlug>`" 로 수정. 금지 패턴에
+  `/posts/<folder>/<slug>` 추가. 검출 전략 5번 `\]\(/posts/[^)/]+/[^)]+\)` 추가.
+- `blog-validator/SKILL.md` 4-3-a: 폴더 경로 URL 검출 grep 추가, 자동 수정
+  (마지막 세그먼트만 유지) 추가. 4-3-b 선행 조건 명시.
+- `blog-writer/SKILL.md` Step 5 원칙: "시리즈 편 간 링크도 파일명 slug 만" 명시.
+
+**이유**: compound-pattern-rsc 시리즈 3편 간 링크 5개 + use-client-boundary 1개가
+전부 404. 원인은 velite.config.ts 의 slug 가 `parts[parts.length - 1]` 로 파일명만
+추출하는데, SHARED.md L485 가 `/posts/<seriesSlug>/<partSlug>` 를 유효 URL 로
+명시해 writer 가 폴더 경로 URL 을 생성. validator 의 실존 체크는 디스크 파일
+경로(`content/posts/*/<slug>.mdx`)로만 매칭돼서 오탐 없이 통과됨.
+
+**수정 유형**: 기존 규칙 수정 (버그 픽스)
+
+**영향 범위**:
+
+- blog-writer: SHARED.md 참조 + Step 5 원칙 명시 추가 (즉시 반영)
+- blog-validator: 4-3-a 에 확정 에러 grep 추가, 4-3-b 선행 조건 추가 (즉시 반영)
+- 기존 글: 6건 수정 완료 (`compound-pattern-three-costs`, `compound-pattern-module-graph`,
+  `compound-pattern-tradeoff-choice`, `use-client-boundary-and-overuse`)
+
+**백업**:
+
+- `.backups/SHARED-20260414-161734.md`
+- `.backups/blog-validator-SKILL-20260414-161734.md`
+- `.backups/blog-writer-SKILL-20260414-161734.md`
+
+**재검증 결과**: 링크 수정 직접 완료. 추가 validator 호출 불필요.
+
+---
+
 ## 2026-04-14 17:15
 
 ### AGENTS.md · README.md (blog-banner 반영)

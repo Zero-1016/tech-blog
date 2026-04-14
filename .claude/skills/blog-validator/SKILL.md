@@ -560,6 +560,9 @@ grep -nE '\]\([^)]*\.mdx\)' <file>
 
 # 파일 경로
 grep -nE '\]\(content/posts/' <file>
+
+# slug 에 `/` 포함 (폴더 경로 URL — velite slug 는 파일명 단일 세그먼트)
+grep -nE '\]\(/posts/[^)/]+/[^)]+\)' <file>
 ```
 
 검출된 링크는 **전부 에러**. 자동 수정:
@@ -567,10 +570,15 @@ grep -nE '\]\(content/posts/' <file>
 - `/blog/slug` → `/posts/slug` (접두사만 교체)
 - `/posts/slug.mdx` → `/posts/slug` (확장자 제거)
 - `content/posts/slug.mdx` → `/posts/slug` (경로 변환)
+- `/posts/<folder>/<slug>` → `/posts/<slug>` (마지막 세그먼트만 유지)
 
 **단, 교체 후 slug가 실제 파일과 매칭되는지 4-3-b에서 반드시 재확인**.
 
 **4-3-b. 실존 확인** (Glob 필수)
+
+**선행 조건**: 4-3-a 에서 slug 내 `/` 를 전부 제거한 뒤에만 진입. 이 단계에서
+slug 는 반드시 단일 세그먼트여야 함. `/` 포함 슬러그가 4-3-b 까지 내려오면
+기계 오류 (4-3-a 누락).
 
 각 `/posts/<slug>` 링크에 대해:
 

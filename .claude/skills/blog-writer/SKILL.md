@@ -259,6 +259,8 @@ H2 하나씩 순차적으로 채웁니다.
 **원칙** (`§RULE-LINK-PATH`):
 
 - 경로는 반드시 `/posts/<slug>` 또는 `/series/<seriesSlug>`
+- 시리즈 편 간 링크도 **파일명 slug 만** 사용 (`/posts/<partSlug>`).
+  디렉토리 경로 금지: `/posts/<seriesSlug>/<partSlug>` 는 404 (velite slug 는 파일명 단일 세그먼트).
 - `.mdx` 확장자 금지, `/blog/`, `/post/` 등 임의 접두사 금지
 - 한 글에 2~4개 정도. 남발 금지.
 - 문장 안에 녹이기. "관련 글" 박스 금지.
