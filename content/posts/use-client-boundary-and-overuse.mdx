@@ -6,7 +6,7 @@ tags: ["Next.js", "React", "React Server Components", "App Router"]
 published: true
 ---
 
-App Router 프로젝트에서 에러가 뜨면 반사적으로 `use client`를 한 줄 붙이게 돼요. 저도 한동안 그랬어요. `useState`가 안 돈다고 하면 붙이고, [CSS-in-JS 라이브러리가 서버에서 막힌다](/posts/emotion-to-zero-runtime/zero-runtime-css-variables)고 하면 또 붙이고. 근데 어느 순간 번들 사이즈를 열어보니 생각보다 훨씬 뚱뚱해져 있었거든요. 범인을 따라가 보니 `use client` 한 줄이 혼자서 끌고 온 것들이 많았어요.
+App Router 프로젝트에서 에러가 뜨면 반사적으로 `use client`를 한 줄 붙이게 돼요. 저도 한동안 그랬어요. `useState`가 안 돈다고 하면 붙이고, [CSS-in-JS 라이브러리가 서버에서 막힌다](/posts/zero-runtime-css-variables)고 하면 또 붙이고. 근데 어느 순간 번들 사이즈를 열어보니 생각보다 훨씬 뚱뚱해져 있었거든요. 범인을 따라가 보니 `use client` 한 줄이 혼자서 끌고 온 것들이 많았어요.
 
 ## `use client`가 실제로 하는 일
 
@@ -58,7 +58,7 @@ export default function Navbar() {
 
 </Callout>
 
-`Search`만 필요했는데 `UserMenu`까지, 그리고 `UserMenu`가 내부에서 끌어오는 포맷터, 날짜 라이브러리, 헬퍼 함수까지 전부 클라이언트로 같이 넘어가요. 이 전파는 [모듈 그래프 차원에서 일어나는 일](/posts/compound-pattern-rsc/compound-pattern-module-graph)이라, import 한 줄만 새로 생겨도 범위가 넓어질 수 있어요.
+`Search`만 필요했는데 `UserMenu`까지, 그리고 `UserMenu`가 내부에서 끌어오는 포맷터, 날짜 라이브러리, 헬퍼 함수까지 전부 클라이언트로 같이 넘어가요. 이 전파는 [모듈 그래프 차원에서 일어나는 일](/posts/compound-pattern-module-graph)이라, import 한 줄만 새로 생겨도 범위가 넓어질 수 있어요.
 
 ## 남발이 돌려받는 비용
 
