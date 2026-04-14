@@ -1,5 +1,6 @@
 export type MotifKey =
   | "typescript"
+  | "nextjs"
   | "react"
   | "css"
   | "design-system"
@@ -40,6 +41,7 @@ export interface BannerInput {
 
 const TAG_TO_MOTIF: Array<[RegExp, MotifKey]> = [
   [/^TypeScript$/i, "typescript"],
+  [/^(Next\.js|App Router|React Server Components|RSC)$/i, "nextjs"],
   [/^React$/i, "react"],
   [/^(디자인 시스템|디자인 토큰|Atomic Design|Design System)$/i, "design-system"],
   [/^(CSS-in-JS|Emotion|Vanilla Extract|Panda CSS|Linaria|Tailwind|CSS Modules)$/i, "styling"],
@@ -57,6 +59,7 @@ const TAG_TO_MOTIF: Array<[RegExp, MotifKey]> = [
 
 const MOTIF_PRIORITY: MotifKey[] = [
   "typescript",
+  "nextjs",
   "react",
   "design-system",
   "accessibility",
@@ -86,6 +89,13 @@ const PALETTES: Record<MotifKey, BannerPalette> = {
     primary: "#61dafb",
     accent: "#f87171",
     text: "#e0f2fe",
+  },
+  nextjs: {
+    bg: "#08090d",
+    bgAccent: "#1a1d29",
+    primary: "#ededed",
+    accent: "#3b82f6",
+    text: "#e5e7eb",
   },
   css: {
     bg: "#0f1a33",
