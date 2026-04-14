@@ -1,0 +1,105 @@
+---
+title: "namespace 전환에 숨은 세 가지 비용"
+description: "Object.assign을 namespace로 고치면 RSC는 풀려요. 근데 API와 Context, 번들 쪽이 동시에 흔들려요."
+date: 2026-04-14
+tags: ["React", "디자인 시스템", "React Server Components", "Compound Component", "Next.js"]
+series: "Compound 컴포넌트가 RSC를 만났을 때"
+seriesOrder: 2
+published: true
+---
+
+[1편](/posts/compound-pattern-rsc/compound-pattern-module-graph)에서 `Object.assign`이 번들러 모듈 그래프에 잡히지 않는다는 걸 봤어요. namespace 패턴으로 바꾸면 그 문제는 풀린다는 것도 정리했고요. PR을 올리고 리뷰를 기다리던 시점엔 "이제 끝"이라고 생각했는데, 리뷰어들의 질문이 쌓이면서 비용 세 개가 하나씩 드러났어요.
+
+## API가 바뀐다는 첫 번째 비용
+
+`Object.assign` 방식에서는 `Card` 자체가 루트 컴포넌트였어요. `<Card>...</Card>`로 썼죠. 그런데 namespace 방식에서 `Card`는 함수가 아니라 객체예요. `export * as Card from './namespace'`의 결과물은 "네임스페이스 객체"지 렌더 가능한 컴포넌트가 아니거든요.
+
+```jsx
+// 바뀌기 전
+<Card>
+  <Card.Header />
+  <Card.Body />
+</Card>
+
+// 바뀐 후
+<Card.Root>
+  <Card.Header />
+  <Card.Body />
+</Card.Root>
+```
+
+소비자 쪽의 모든 `<Card>`를 `<Card.Root>`로 고쳐야 해요. 메이저 버전 업그레이드 수준의 breaking change죠. 라이브러리라면 마이그레이션 가이드를 써야 하고, 내부 디자인 시스템이라도 실사용 코드를 전부 찾아서 바꿔야 해요.
+
+대안이 아예 없진 않아요. `<Card>` 이름을 유지하면서 하위 부품을 제공하려면 결국 `Card`라는 함수에 프로퍼티를 붙이는 Object.assign 방식으로 돌아가요. 그럼 원점이죠. 그래서 "namespace로 바꾼다"와 "기존 API를 유지한다"가 양립하기 어려워요.
+
+우리 팀은 이 지점에서 꽤 오래 논의했어요. 한 리뷰어가 과거 논의를 꺼냈거든요. Nested compound 패턴을 나중에 지원할 때 `<Card.Root>`처럼 Root를 접미사로 두면 `<Card.BodyRoot>` 같은 중첩 이름이 지저분해진다는 이유로 "Root를 붙이지 않는다"가 이미 합의돼 있었어요. 과거의 설계 결정이 RSC 전환의 발목을 잡은 셈이죠.
+
+## Context를 쓰는 compound는 여전히 Client
+
+두 번째 비용은 Context 때문에 생겨요. Compound component의 핵심 가치는 부모와 자식 사이의 암묵적 상태 공유잖아요. `<RadioGroup>`이 선택 상태를 `<RadioGroup.Item>`에 넘기거나, `<Accordion>`이 열린 패널 정보를 `<Accordion.Content>`에 넘기는 식이죠. React에서 이를 구현하는 표준 수단이 Context예요.
+
+그런데 RSC에서는 Context를 서버에서 못 써요.
+
+<Callout variant="warning">
+"React context is not supported in Server Components." - Next.js
+
+createContext와 useContext는 클라이언트 전용이에요. 둘 중 하나를 쓰는 순간 그 컴포넌트는 'use client' 아래로 내려가야 하고, Server에서는 렌더될 수 없어요.
+
+</Callout>
+
+말인즉, namespace 패턴으로 모듈 그래프를 깔끔히 정리해도 Context를 쓰는 compound는 결국 Client Component 트리 안에서만 동작해요. "RSC에서도 동작한다"의 의미가 좁아지는 거죠.
+
+Server에서 렌더할 수 있는 compound는 Context 없이 구조만 조합하는 순수 조합형이에요. 예를 들어 단순히 div와 slot을 감싸는 정도의 부품. 근데 그런 부품은 디자인 시스템의 재미있는 부분이 아니에요. 정말 값이 있는 건 상태를 공유하는 쪽이거든요.
+
+즉 RSC 호환을 "모듈 그래프가 추적된다"로 읽으면 namespace로 해결되지만, "서버에서 실제로 렌더된다"로 읽으면 Context 기반 compound는 어쨌든 Client에 머물러요.
+
+## dot-notation과 tree-shaking의 이상한 관계
+
+세 번째 비용은 번들 크기에서 나와요. Webpack 같은 주요 번들러는 `import { Card } from './card'` 이후 `Card.Body`만 쓰더라도, `Card` 네임스페이스 아래 전체 부품을 번들에 포함시키는 경향이 있어요. dot-notation 접근은 static analysis 관점에서 "어떤 하위를 쓰는지" 판단하기가 까다롭거든요.
+
+tree-shaking을 제대로 받으려면 결국 이렇게 써야 해요.
+
+```jsx
+import { CardRoot, CardBody } from 'our-ds';
+
+<CardRoot>
+  <CardBody />
+</CardRoot>
+```
+
+하위 부품을 네임스페이스 객체가 아니라 <strong>named export</strong>로 끌어다 쓰는 거예요. 번들러가 "이 파일에서 CardRoot, CardBody만 쓴다"를 명확히 보니까, 나머지는 떨군 채 번들링해요.
+
+그래서 여기서 선택이 생겨요. dot-notation의 탐색성(`Card.`만 치면 자동완성이 쫙)을 유지하면서 `CardBody`만 가져다 쓸 수는 없어요. 둘 중 하나를 포기하거나, 두 경로를 동시에 열어두거나. Rollup 쪽 번들러는 상황이 다를 수 있지만, Webpack 기반 프로젝트를 지원해야 한다면 무시하기 어려운 제약이에요.
+
+## 세 비용이 서로 얽혀 있다
+
+정리하면 namespace 전환으로 풀고 싶은 건 RSC 호환이었는데, 그 해결이 세 지점에서 다시 비용을 만들어요.
+
+API를 breaking으로 바꿔야 하고, Context를 쓰는 이상 "서버에서 렌더"는 어차피 안 되고, dot-notation을 유지하는 한 tree-shaking은 안 붙어요. 비용이 독립적이면 하나씩 해결하면 되는데, 서로 얽혀 있어서 한쪽을 누르면 다른 쪽이 튀어나와요.
+
+전형적인 트레이드오프 문제인 거예요. "namespace로 바꾸면 끝"이 아니라 "어떤 축을 우선할 것인가"의 문제. 리뷰 과정에서 이 사실을 받아들이고 나서야 의사결정이 시작됐어요.
+
+[다음 편](/posts/compound-pattern-rsc/compound-pattern-tradeoff-choice)에서 다른 라이브러리들은 이 비용을 어떻게 나눠 지고 있는지, 우리 팀이 최종적으로 어떤 선택을 했는지 풀어볼게요.
+
+<References
+  items={[
+    {
+      id: "nextjs-server-client",
+      title: "Next.js - Server and Client Components",
+      href: "https://nextjs.org/docs/app/getting-started/server-and-client-components",
+      description: "Server에서 Context가 지원되지 않는 이유",
+    },
+    {
+      id: "nextjs-auth-context",
+      title: "Next.js - Authentication (Context Providers)",
+      href: "https://nextjs.org/docs/app/guides/authentication",
+      description: "Provider 아래 Server Component가 context에 접근할 수 없다는 주의",
+    },
+    {
+      id: "radix-composition",
+      title: "Radix UI - Composition guide",
+      href: "https://www.radix-ui.com/primitives/docs/guides/composition",
+      description: "namespace 패턴과 Part 분리 구조",
+    },
+  ]}
+/>

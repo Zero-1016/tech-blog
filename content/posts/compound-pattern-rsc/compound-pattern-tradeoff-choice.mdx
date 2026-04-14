@@ -1,0 +1,115 @@
+---
+title: "dot-notation과 named export를 함께 내보내기"
+description: "세 비용을 한 번에 풀 순 없어요. 대신 기본 API와 대안 경로를 같이 둘 수는 있었죠."
+date: 2026-04-14
+tags: ["React", "디자인 시스템", "React Server Components", "Compound Component", "Next.js"]
+series: "Compound 컴포넌트가 RSC를 만났을 때"
+seriesOrder: 3
+published: true
+---
+
+[2편](/posts/compound-pattern-rsc/compound-pattern-three-costs)에서 namespace 전환의 비용 세 개가 서로 얽혀 있다는 걸 봤어요. 그렇다면 이미 만들어진 디자인 시스템들은 이 얽힘을 어떻게 나눠 지고 있을까요. 팀 내부 논의에 영향을 준 관찰부터 정리해볼게요.
+
+## 다른 라이브러리들은 어떻게 감수했나
+
+우리가 참고한 라이브러리는 [Chakra UI v3](https://chakra-ui.com), [Radix Primitives](https://www.radix-ui.com/primitives), [Base UI](https://base-ui.com), [Ark UI](https://ark-ui.com), 그리고 [seed-design](https://seed-design.io)이었어요. 패턴이 두 갈래로 갈리더라고요.
+
+첫 번째 갈래는 <strong>대부분의 부품을 Client로 두고 namespace 패턴을 채택</strong>하는 쪽이에요. Radix와 Base UI, Chakra v3가 여기 해당하죠. 각 Part 파일에 `'use client'`를 붙이고 `Dialog.Root`, `Dialog.Trigger` 같은 dot-notation을 제공해요. "Server 렌더"는 포기하되, 모듈 그래프 추적과 소비자 경험은 확보한 거죠. Radix의 `asChild`처럼 소비자가 최상위 DOM 요소를 바꿀 수 있게 열어두는 합성 장치가 공통이에요.
+
+두 번째 갈래는 <strong>prefix-named flat export</strong>예요. seed-design이 대표적이에요. `ActionSheet.Root` 대신 `ActionSheetRoot`, `ActionSheetTrigger`, `ActionSheetContent`처럼 개별 export로 내놔요. dot-notation을 포기하는 대신 tree-shaking과 모듈 경계의 명시성을 얻는 선택이죠. [shadcn/ui](https://ui.shadcn.com)처럼 소스를 복사해 가져다 쓰는 방식도 비슷한 결이고요.
+
+두 갈래가 말하는 트레이드오프는 사실 같아요. dot-notation의 탐색성이냐, named export의 번들 효율성이냐. 앞 편에서 본 세 번째 비용에서 바로 이 선택이 갈리는 거예요.
+
+## 세 가지 선택지
+
+우리 팀 앞에도 같은 갈래가 놓여 있었어요.
+
+<AnimatedStep steps={[
+  {
+    title: "dot-notation과 named export 병행",
+    content: "Card.Header와 CardHeader를 둘 다 제공해요. DX를 원하는 소비자는 dot-notation을, RSC 호환과 tree-shaking이 필요한 소비자는 named export를 쓰도록 열어둬요. 대신 문서와 예제 관리 비용이 커져요."
+  },
+  {
+    title: "named export만 제공",
+    content: "Card, CardHeader, CardBody를 각각 독립 export로만 내놔요. RSC 호환과 tree-shaking은 자연스럽지만, Card. 만 치면 부품이 쫙 나오던 탐색 경험은 사라져요."
+  },
+  {
+    title: "dot-notation만 유지",
+    content: "현행처럼 Object.assign 기반을 그대로 둬요. 자동완성 탐색과 단일 import의 감각은 지킬 수 있어요. 대신 RSC 경계 추적은 포기해야 하고, Webpack tree-shaking도 약해져요."
+  }
+]} />
+
+어느 쪽이 정답인지는 라이브러리 성격에 달렸어요. 소비자가 App Router 프로젝트로만 구성돼 있으면 두 번째가 자연스럽고, 기존 DX를 지키는 게 최우선이면 세 번째, 두 종류의 소비자를 모두 지원해야 하면 첫 번째죠.
+
+## 기본 API는 유지, 대안 경로는 따로
+
+우리 팀은 첫 번째를 골랐어요. `<Card>`를 기본 API로 유지하면서, RSC 호환이 필요할 때를 위한 named export 경로를 같이 내보내는 방식이에요.
+
+```jsx
+// 기본 API, 공식 문서와 예제의 primary
+import { Card } from 'our-ds';
+
+<Card>
+  <Card.Header />
+  <Card.Body />
+</Card>
+
+// 대안 경로, RSC 호환이나 번들 최적화가 필요할 때
+import { Card, CardHeader, CardBody } from 'our-ds';
+
+<Card>
+  <CardHeader />
+  <CardBody />
+</Card>
+```
+
+이 선택에는 세 가지 근거가 있었어요. 기존 소비자의 코드를 건드리지 않고 배포할 수 있다는 점이 가장 컸고요. breaking change 없이 새 경로를 추가하는 형태라서 마이그레이션 부담이 없거든요. 그리고 `<Card>`를 기본으로 유지하면 과거 논의에서 정리했던 Nested compound의 네이밍 문제도 재발하지 않아요. 마지막으로, 공식 문서의 primary 예제는 dot-notation으로 두고 대안 경로는 "RSC 환경이면 named export를 쓸 수 있어요" 정도로 안내하면 "어느 쪽을 써야 하지" 혼선도 줄일 수 있었어요.
+
+물론 공짜는 아니에요. 두 경로를 같이 유지하려면 테스트, 타입, 문서 예제를 두 벌로 관리해야 해요. 다만 기존 API를 깨지 않고 RSC 소비자를 위한 출구를 만든다는 가치가 그 비용을 넘는다고 판단한 거예요.
+
+## dot-notation을 어디까지 쓸까
+
+선택지와 별개로, dot-notation을 어느 컴포넌트까지 적용할지도 논의했어요. "모든 컴포넌트를 `X.Y.Z` 꼴로"는 오히려 표면적만 넓히거든요. 두 가지 기준으로 좁혔어요.
+
+하나는 <strong>슬롯이 많은가</strong>. `Card`처럼 Title, Body, Description 같은 여러 하위 부품을 받는 경우엔 dot-notation의 탐색성이 값을 해요. 슬롯이 하나뿐인 컴포넌트라면 굳이 네임스페이스로 묶을 이유가 적어요.
+
+다른 하나는 <strong>부모와 자식이 상태를 공유하는가</strong>. `CheckboxGroup`이 선택 상태를 Item에 내려주거나, `Accordion`이 열린 패널을 Content에 알려주는 것처럼 Context가 끼어드는 경우. 이건 compound 패턴의 본래 의도가 드러나는 자리라서 dot-notation이 어울려요.
+
+반대로 단순히 DOM 구조를 묶는 wrapper 성격이라면 named export로 충분해요. `Button`과 `ButtonIcon`을 `Button.Icon`으로 합칠 필요는 없어요.
+
+## 시리즈를 돌아보며
+
+돌아보면 이 시리즈는 "해결책 하나를 찾는 과정"이 아니라 "해결책이라 믿었던 것이 트레이드오프로 바뀌는 과정"이었어요. `Object.assign`이 모듈 그래프에서 보이지 않는다는 기술적 사실은 분명해요. 근데 그걸 고치는 방법이 API 호환, 상태 공유 모델, 번들 최적화라는 여러 축에 동시에 비용을 얹어요.
+
+제가 가장 크게 배운 건 "하나를 고치면 끝"이라는 선형적 사고가 디자인 시스템 수준에서는 잘 안 먹힌다는 거였어요. 부품 하나하나가 모듈 그래프, 상태 공유, 번들링, 소비자 DX까지 여러 축에 동시에 걸쳐 있거든요. 축 하나를 흔들면 다른 축이 되돌아와요.
+
+그래서 요즘은 새 컴포넌트를 만들 때도 "이게 어느 축에 무게가 실린 컴포넌트지?"부터 물어보게 됐어요. [스타일링 도구도 각자 다른 문제를 푼다는 관점](/posts/css-styling-tradeoffs)과 비슷한 접근이죠. 도구 선택이든 API 설계든, 결국 "어떤 축을 우선할 것인가"의 문제예요.
+
+<References
+  items={[
+    {
+      id: "nextjs-server-client",
+      title: "Next.js - Server and Client Components",
+      href: "https://nextjs.org/docs/app/getting-started/server-and-client-components",
+      description: "라이브러리 진입점에 'use client'를 배치하는 전략",
+    },
+    {
+      id: "radix-composition",
+      title: "Radix UI - Composition guide",
+      href: "https://www.radix-ui.com/primitives/docs/guides/composition",
+      description: "namespace와 asChild 합성의 원형",
+    },
+    {
+      id: "radix-slot",
+      title: "Radix UI - Slot utility",
+      href: "https://www.radix-ui.com/primitives/docs/utilities/slot",
+      description: "Slot이 child에 props를 머지하는 방식",
+    },
+    {
+      id: "react-children",
+      title: "React - Children API",
+      href: "https://react.dev/reference/react/Children",
+      description: "children 자료구조와 namespace 분리 권장",
+    },
+  ]}
+/>

@@ -1,0 +1,129 @@
+---
+title: "Object.assign compound가 RSC에서 안 보이는 이유"
+description: "Card.Body를 평범하게 썼을 뿐인데 App Router에서 에러가 났어요. 범인은 번들러가 못 보는 연결이었습니다."
+date: 2026-04-14
+tags: ["React", "디자인 시스템", "React Server Components", "Compound Component", "Next.js"]
+series: "Compound 컴포넌트가 RSC를 만났을 때"
+seriesOrder: 1
+published: true
+---
+
+팀 디자인 시스템의 `Card` 컴포넌트를 Next.js App Router 프로젝트에 붙였는데, 엉뚱한 곳에서 에러가 났어요. `<Card.Body>`를 평범하게 쓴 것뿐이었거든요. 처음엔 버전 문제인가 싶었는데, 파고들수록 이야기가 달라졌어요. [디자인 시스템의 세 축](/posts/team-design-system-guide)을 맞추는 것과는 또 다른 층위의 문제였죠.
+
+## 모든 부품을 `Card.` 뒤에 달던 시절
+
+우리 `Card`는 compound component 패턴으로 구현돼 있었어요. API만 보면 깔끔하죠.
+
+```jsx
+<Card>
+  <Card.Header />
+  <Card.Body />
+  <Card.Footer />
+</Card>
+```
+
+내부 구현은 아래처럼 `Object.assign`으로 루트 함수에 하위 부품을 붙이는 방식이었어요. 오래된 React 레포에서 자주 보는 모양이에요.
+
+```jsx
+function CardRoot(props) { /* ... */ }
+function CardHeader(props) { /* ... */ }
+function CardBody(props) { /* ... */ }
+function CardFooter(props) { /* ... */ }
+
+export const Card = Object.assign(CardRoot, {
+  Header: CardHeader,
+  Body: CardBody,
+  Footer: CardFooter,
+});
+```
+
+`Card`라는 이름 하나로 루트도 되고 네임스페이스도 되니까 DX가 편해요. `import { Card } from 'our-ds'` 한 줄이면 끝이고, 에디터에서 `Card.`만 치면 자동완성으로 하위 부품이 쫙 나와요. 여기까지는 아무 불만이 없었어요.
+
+## 서버 트리 아래에서 뭐가 멈췄나
+
+Next.js App Router로 옮기면서 같은 `Card`를 Server Component 트리 아래에서 썼어요. 그랬더니 번들링은 조용히 넘어갔는데 렌더 단계에서 이상한 에러가 떴어요. Server 경계에서 `Card.Body`가 제대로 인식되지 않는 거였죠.
+
+범인을 좁혀 보니, `Card.Body` 파일 안에서 `useState`를 쓰고 있었어요. 상태 가진 client-only 부품이었던 거예요. 그래서 "`Card.Body`가 있는 파일에 `'use client'`만 올리면 되지 않나?" 싶었는데, 그게 먹히지 않았어요. 번들러가 그 경계를 제대로 인식하지 못하는 것처럼 보였거든요.
+
+## `'use client'`는 빌드 타임에 그어지는 선
+
+React Server Components에서 서버와 클라이언트의 구분은 모듈 단위로 이루어져요. 번들러가 프로젝트의 import 관계를 따라가면서 모듈 그래프를 만들고, 그 위에 `'use client'`라는 지시어가 경계를 긋는 구조죠.
+
+<Callout variant="info">
+"Once a file is marked with `"use client"`, all its imports and child components are considered part of the client bundle." - Next.js
+
+'use client'가 붙은 파일과 그 파일이 import하는 모든 모듈은 클라이언트 번들에 포함된다는 얘기예요. 경계가 모듈 경로를 타고 전파되는 거죠.
+
+</Callout>
+
+여기서 중요한 건, 이 전파가 <strong>빌드 타임에 정적으로</strong> 결정된다는 점이에요. 번들러는 소스 코드의 `import` / `export` 구문을 읽어서 "이 모듈이 저 모듈을 쓴다"는 관계를 파악해요. 그런데 `Object.assign`은 런타임에 객체를 만들어 프로퍼티를 붙이는 연산이거든요.
+
+```jsx
+// 번들러가 보기엔 Card 객체에 뭐가 붙는지 추적할 수 없음
+export const Card = Object.assign(CardRoot, {
+  Header: CardHeader,
+  Body: CardBody,
+});
+```
+
+번들러 입장에서 `Card`라는 export는 `CardRoot` 함수라는 것만 알 수 있어요. `Card.Body`가 어느 파일에서 온 건지, 그 파일에 `'use client'`가 있는지 없는지는 모듈 그래프에서 보이지 않아요. 런타임에 합성되는 정보니까요.
+
+그래서 소비자가 Server Component에서 `<Card.Body>`를 써도, 번들러는 "이건 Client 컴포넌트다"라는 신호를 따라가지 못해요. `'use client'` 전파가 끊기는 거예요. 제 에러가 바로 이 지점에서 터졌던 거죠.
+
+## namespace 패턴이 해결책처럼 보이는 이유
+
+그래서 다음 패턴을 시도해봤어요. 흔히 namespace 패턴 또는 dot-notation 패턴이라고 부르는 방식이에요.
+
+```jsx
+// Card.part.tsx
+export function CardRoot(props) { /* ... */ }
+export function CardHeader(props) { /* ... */ }
+export function CardBody(props) { /* ... */ }
+
+// namespace.ts
+export {
+  CardRoot as Root,
+  CardHeader as Header,
+  CardBody as Body,
+} from './Card.part';
+
+// index.ts
+export * as Card from './namespace';
+```
+
+소비자 쪽 API는 거의 그대로 유지돼요. 루트 이름이 `<Card.Root>`로 바뀌긴 하지만, `Card.Header`, `Card.Body` 같은 모양은 그대로죠. 중요한 건 내부 구현이 ESM의 정적 `import` / `export` 구문으로만 연결된다는 점이에요.
+
+번들러가 이 코드를 보면 "Card라는 네임스페이스 아래 Header, Body라는 export가 있고, 각각 어느 파일에서 오는지"까지 전부 추적할 수 있어요. 그래서 `Card.Body`가 있는 파일에 `'use client'`를 올리면 그 경계가 소비자 쪽까지 제대로 전파돼요.
+
+요약하면 이래요. `Object.assign`은 런타임 합성이라 모듈 그래프에서 연결이 보이지 않고, namespace 패턴은 정적 re-export라서 그래프가 그대로 보존돼요.
+
+## 근데 이게 진짜 해결책일까
+
+여기까지 확인하고 저는 이슈를 올리고 PR까지 작성했어요. "namespace 패턴으로 바꾸면 RSC에서 문제없이 동작한다"는 내용으로요. 리뷰가 올라올 때까지는 이게 깔끔한 해결이라 믿었죠.
+
+근데 리뷰어들의 질문이 올라오면서 이야기가 달라졌어요. 기존 소비자의 API가 깨지지 않겠냐는 지적이 먼저 왔고, 뒤이어 Context를 쓰는 compound는 어차피 Client 아니냐는 반문과 tree-shaking 문제가 줄줄이 따라왔거든요. 정답인 줄 알았던 전환에 세 가지 비용이 숨어 있었어요.
+
+[다음 편](/posts/compound-pattern-rsc/compound-pattern-three-costs)에서 그 비용을 하나씩 열어볼게요.
+
+<References
+  items={[
+    {
+      id: "nextjs-server-client",
+      title: "Next.js - Server and Client Components",
+      href: "https://nextjs.org/docs/app/getting-started/server-and-client-components",
+      description: "'use client'가 모듈 경계를 따라 전파되는 방식",
+    },
+    {
+      id: "react-children",
+      title: "React - Children API",
+      href: "https://react.dev/reference/react/Children",
+      description: "children 자료구조가 opaque하다는 React 공식 경고",
+    },
+    {
+      id: "radix-composition",
+      title: "Radix UI - Composition guide",
+      href: "https://www.radix-ui.com/primitives/docs/guides/composition",
+      description: "namespace 패턴과 Part 단위 분리의 원형",
+    },
+  ]}
+/>
