@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-04-14 16:28
+
+### SHARED.md §RULE-CITE · blog-writer Step 6 · Step 8
+
+**변경**: Cite 권고 수준 상향. "선택 사항" → "References items 각 항목에
+본문 Cite를 하나 이상 붙이는 것을 기본으로 한다 (SHOULD)".
+
+- `SHARED.md` §RULE-CITE: "선택 사항. 안 써도 되고…" 항목을 삭제하고 "기본 원칙
+  (권고, SHOULD)" 항목으로 치환. 자연스러운 문장 흐름을 깨뜨리면 생략 가능 단서 포함.
+- `blog-writer/SKILL.md` Step 6 `<Cite>` 사용: "선택 사항, 핵심 주장 한두 군데에만"
+  → "References items 각 항목마다 본문 대응 Cite 하나 이상 (권고)".
+- `blog-writer/SKILL.md` Step 8 미루는 항목: "References items 각 항목에 본문 Cite가
+  하나 이상 붙었는지 (§RULE-CITE, 권고)" 체크 추가.
+
+**이유**: 최근 두 글(use-client-boundary-and-overuse, virtual-list-dom-cost)에서
+writer 가 하단 References 블록만 만들고 본문 Cite 를 0개 배치. 기존 §RULE-CITE 는
+"선택 사항" 으로 쓰여 있어 writer 가 합법적으로 생략 가능. 필수까지는 아니고,
+자연스러우면 붙이도록 SHOULD 수준으로 끌어올림.
+
+**수정 유형**: 기존 규칙 강화 (완전 재작성 아님, 권고 조항 추가)
+
+**영향 범위**:
+
+- blog-writer: 명시적으로 Step 6, Step 8 수정 반영
+- blog-validator / blog-expression-review: 손대지 않음 (강제 아니므로 검증 규칙 추가 없음)
+- 기존 글: 사용자가 수동으로 use-client-boundary-and-overuse, virtual-list-dom-cost
+  두 글에 Cite 인라인을 이미 추가함 (blog-rule-editor 호출 전 처리). 나머지
+  기존 글은 기 작성분 기준이므로 소급 적용 대상 아님.
+
+**백업**:
+
+- `.backups/SHARED-20260414-162819.md`
+- `.backups/blog-writer-SKILL-20260414-162819.md`
+
+**재검증 결과**: 해당 없음 (validator 규칙 변경 아님).
+
+---
+
 ## 2026-04-14 16:17
 
 ### SHARED.md §RULE-LINK-PATH · blog-validator 4-3 · blog-writer Step 5

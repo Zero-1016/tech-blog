@@ -248,6 +248,7 @@ H2 하나씩 순차적으로 채웁니다.
 - 자기 목소리 존재 (전체 글 톤 잡힌 후 판단)
 - 내부 링크 실존 (저장 직전 마지막에 Glob 검증)
 - References 1순위 출처 (Step 6에서 작성하므로 Step 8에서 재확인)
+- References items 각 항목에 본문 Cite가 하나 이상 붙었는지 (§RULE-CITE, 권고)
 
 **원칙**: Step 4 미니 체크는 **그 섹션 범위 안에서만** 봅니다. 글 전체를 다시
 읽지 않아요. 섹션 작성 흐름을 끊지 않는 게 목적이에요.
@@ -316,7 +317,7 @@ ls content/posts/<slug>.mdx 2>/dev/null || ls content/posts/*/<slug>.mdx 2>/dev/
 
 - 본문 주장 뒤에 공백 없이: `...지원됩니다.<Cite id="mdn-word-break" />`
 - **한 문단에 최대 1개**
-- 선택 사항, 핵심 주장 한두 군데에만
+- **기본 원칙 (권고)**: References items 각 항목마다 본문에 대응 Cite를 하나 이상 붙이는 것을 기본으로 합니다. 해당 사실·인용을 처음 언급하는 지점에 배치. 자연스러운 문장 흐름을 깨뜨리면 생략 가능 (SHOULD, §RULE-CITE).
 
 ### Step 7: 마무리
 
