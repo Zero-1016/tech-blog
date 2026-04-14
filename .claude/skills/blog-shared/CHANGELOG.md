@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-04-14 16:30
+
+### blog-banner (신규 skill)
+
+**변경**: 포스트 자동 배너 모티프를 추천하고, 부적합 시 새 모티프 SVG를 자동 생성하는 skill 추가. `lib/banner/spec.ts` 매핑/팔레트와 `public/banners/motifs/` SVG 라이브러리를 관리하며, frontmatter `banner` 필드로 수동 override도 지원.
+
+**역할 경계**:
+
+- blog-write 파이프라인에는 자동 연결하지 않음 (독립 실행만: `/blog-banner <파일>`)
+- MDX 본문 수정 금지, frontmatter의 `banner` 한 줄 추가만 허용
+- 한 실행에 새 모티프 1개 생성 제한
+
+**수정 유형**: 신규 skill 파일 생성
+
+**파일**: `.claude/skills/blog-banner/SKILL.md`
+
+**영향 범위**:
+
+- 기존 blog-\* skill: 없음 (독립 실행)
+- 프로젝트 코드: skill 실행 시 `lib/banner/spec.ts`, `public/banners/motifs/*.svg`, `velite.config.ts`, MDX frontmatter 편집 가능
+
+---
+
 ## 2026-04-14 00:47
 
 ### SHARED.md §MDX-ANIMATEDSTEP (신규 섹션)
