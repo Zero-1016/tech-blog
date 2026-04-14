@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { formatCardDate } from "@/lib/utils";
 import { readingTime } from "@/lib/reading-time";
@@ -172,11 +171,17 @@ function SeriesCard({ group }: { group: SeriesGroup }) {
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={`${group.name} 시리즈 ${group.items.length}편 ${open ? "접기" : "펼치기"}`}
-        className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-card-hover"
+        className="flex w-full flex-col text-left transition-colors hover:bg-card-hover"
       >
-        <div className="relative hidden h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-code-bg sm:block">
+        <div className="relative aspect-[2/1] w-full overflow-hidden bg-code-bg">
           {latest.cover ? (
-            <Image src={latest.cover} alt={group.name} fill className="object-cover" sizes="64px" />
+            <Image
+              src={latest.cover}
+              alt={group.name}
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 672px"
+            />
           ) : (
             <Banner
               title={group.name}
@@ -186,111 +191,61 @@ function SeriesCard({ group }: { group: SeriesGroup }) {
             />
           )}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="rounded-md bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium text-accent">
-              시리즈
-            </span>
-            <span className="text-xs text-secondary">{group.items.length}편</span>
-          </div>
-          <h2 className="mt-1.5 font-semibold tracking-tight">{group.name}</h2>
-          <p className="mt-1 text-sm text-secondary line-clamp-2">{latest.description}</p>
-        </div>
-        <motion.svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="mt-1 shrink-0 text-secondary"
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </motion.svg>
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            id={panelId}
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-border px-5 py-3">
-              {group.items.map((post, i) => (
-                <Link
-                  key={post.slug}
-                  href={`/posts/${post.slug}`}
-                  className="group -mx-2 flex items-baseline gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-card-hover"
-                >
-                  <span className="shrink-0 text-xs tabular-nums text-secondary">{i + 1}</span>
-                  <div className="min-w-0">
-                    <span className="text-sm font-medium group-hover:text-accent">
-                      {post.title}
-                    </span>
-                    <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-secondary">
-                      <time dateTime={post.date}>{formatCardDate(post.date)}</time>
-                      <span aria-hidden>·</span>
-                      <span>{readingTime(post.charCount)}</span>
-                      {post.tags.length > 0 && (
-                        <>
-                          <span aria-hidden>·</span>
-                          <TagChips tags={post.tags} />
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              ))}
+        <div className="flex items-start gap-4 p-5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="rounded-md bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium text-accent">
+                시리즈
+              </span>
+              <span className="text-xs text-secondary">{group.items.length}편</span>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-const CARD_VARIANTS = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35 } },
-};
-
-function LazyCard({ children, className }: { children: React.ReactNode; className?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          io.disconnect();
-        }
-      },
-      { rootMargin: "200px" }
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
-  return (
-    <div ref={ref} className={className}>
-      {visible ? (
-        <motion.div className="h-full" variants={CARD_VARIANTS}>
-          {children}
-        </motion.div>
-      ) : (
-        <div className="h-40" />
+            <h2 className="mt-1.5 font-semibold tracking-tight">{group.name}</h2>
+            <p className="mt-1 text-sm text-secondary">{latest.description}</p>
+          </div>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`mt-1 shrink-0 text-secondary transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+      </button>
+      {open && (
+        <div id={panelId}>
+          <div className="border-t border-border px-5 py-3">
+            {group.items.map((post, i) => (
+              <Link
+                key={post.slug}
+                href={`/posts/${post.slug}`}
+                className="group -mx-2 flex items-baseline gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-card-hover"
+              >
+                <span className="shrink-0 text-xs tabular-nums text-secondary">{i + 1}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="text-sm font-medium group-hover:text-accent">{post.title}</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-secondary">
+                    <time dateTime={post.date}>{formatCardDate(post.date)}</time>
+                    <span aria-hidden>·</span>
+                    <span>{readingTime(post.charCount)}</span>
+                    {post.tags.length > 0 && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <TagChips tags={post.tags} />
+                      </>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -312,30 +267,25 @@ export function PostList({ posts }: { posts: PostEntry[] }) {
   rest.forEach((entry, i) => (i % 2 === 0 ? left : right).push(entry));
 
   return (
-    <motion.div
-      initial="hidden"
-      animate="visible"
-      variants={{ visible: { transition: { staggerChildren: 0.06 } } }}
-      className="flex flex-col gap-4"
-    >
-      {featured && <LazyCard key={entryKey(featured)}>{renderEntry(featured, true)}</LazyCard>}
+    <div className="flex flex-col gap-4">
+      {featured && <div key={entryKey(featured)}>{renderEntry(featured, true)}</div>}
       <div className="hidden gap-4 sm:flex">
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           {left.map((entry) => (
-            <LazyCard key={entryKey(entry)}>{renderEntry(entry, false)}</LazyCard>
+            <div key={entryKey(entry)}>{renderEntry(entry, false)}</div>
           ))}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           {right.map((entry) => (
-            <LazyCard key={entryKey(entry)}>{renderEntry(entry, false)}</LazyCard>
+            <div key={entryKey(entry)}>{renderEntry(entry, false)}</div>
           ))}
         </div>
       </div>
       <div className="flex flex-col gap-4 sm:hidden">
         {rest.map((entry) => (
-          <LazyCard key={entryKey(entry)}>{renderEntry(entry, false)}</LazyCard>
+          <div key={entryKey(entry)}>{renderEntry(entry, false)}</div>
         ))}
       </div>
-    </motion.div>
+    </div>
   );
 }
