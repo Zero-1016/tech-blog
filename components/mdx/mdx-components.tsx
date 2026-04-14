@@ -10,11 +10,9 @@ import { CodeBlock } from "@/components/mdx/code-block";
 
 function slugify(text: string): string {
   return text
-    .replace(/[^a-zA-Z0-9가-힣\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
     .toLowerCase()
-    .trim();
+    .replace(/[^\p{L}\p{N} -]/gu, "")
+    .replace(/ /g, "-");
 }
 
 function extractText(children: ReactNode): string {

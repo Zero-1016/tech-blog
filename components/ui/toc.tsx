@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 interface TocEntry {
@@ -30,6 +30,8 @@ function flattenToc(
 export function Toc({ items }: TocProps) {
   const [activeId, setActiveId] = useState("");
   const flat = useMemo(() => flattenToc(items), [items]);
+  const lockRef = useRef(false);
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const headings = flat
@@ -40,6 +42,7 @@ export function Toc({ items }: TocProps) {
 
     const observer = new IntersectionObserver(
       (entries) => {
+        if (lockRef.current) return;
         for (const entry of entries) {
           if (entry.isIntersecting) {
             setActiveId(`#${entry.target.id}`);
@@ -52,6 +55,12 @@ export function Toc({ items }: TocProps) {
     for (const el of headings) observer.observe(el);
     return () => observer.disconnect();
   }, [flat]);
+
+  useEffect(() => {
+    return () => {
+      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+    };
+  }, []);
 
   if (flat.length === 0) return null;
 
@@ -68,8 +77,21 @@ export function Toc({ items }: TocProps) {
                   e.preventDefault();
                   const el = document.getElementById(decodeURIComponent(item.url.slice(1)));
                   if (el) {
-                    el.scrollIntoView({ behavior: "smooth" });
+                    lockRef.current = true;
                     setActiveId(item.url);
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+                    if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+                    const unlock = () => {
+                      lockRef.current = false;
+                      window.removeEventListener("scrollend", unlock);
+                      if (lockTimerRef.current) {
+                        clearTimeout(lockTimerRef.current);
+                        lockTimerRef.current = null;
+                      }
+                    };
+                    window.addEventListener("scrollend", unlock, { once: true });
+                    lockTimerRef.current = setTimeout(unlock, 1000);
                   }
                 }}
                 className={cn(
