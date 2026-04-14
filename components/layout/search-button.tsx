@@ -39,6 +39,7 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
   const handleOpen = () => {
     lastFocusRef.current = document.activeElement as HTMLElement | null;
     setQuery("");
+    setActiveIndex(0);
     setOpen(true);
     setVisible(true);
     setClosing(false);
@@ -64,10 +65,6 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
   );
 
   const results = query.length > 0 ? fuse.search(query, { limit: 5 }) : [];
-
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [query]);
 
   useEffect(() => {
     const list = listRef.current;
@@ -141,7 +138,10 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
                     type="text"
                     placeholder="글 제목, 설명, 태그로 검색..."
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setActiveIndex(0);
+                    }}
                     onKeyDown={(e) => {
                       if (results.length === 0) return;
                       if (e.key === "ArrowDown") {
