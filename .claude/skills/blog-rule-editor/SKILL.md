@@ -1,13 +1,27 @@
 ---
 name: blog-rule-editor
 description: |
-  블로그 스킬 패밀리(blog-*, blog-shared)를 안전하게 관리하는 메타 스킬. SHARED.md 규칙
-  수정, config/domains.md 편집, 개별 skill 파일 수정, 새 skill 추가, writer-failures.md
-  패턴 분석 등을 대화로 처리한다. 모든 수정은 백업 + 사용자 승인 + CHANGELOG 자동 기록
-  + 영향 범위 분석 + 재검증 제안을 거친다.
+  블로그 스킬 패밀리(blog-*, blog-shared)를 안전하게 관리하는 **필수 경유 메타 스킬**.
+  SHARED.md 규칙 수정, config/domains.md 편집, 개별 skill 파일 수정, 새 skill 추가,
+  writer-failures.md 패턴 분석 등을 대화로 처리한다. 모든 수정은 백업 + 사용자 승인
+  + CHANGELOG 자동 기록 + 영향 범위 분석 + 재검증 제안을 거친다.
 
-  사용 트리거: "이 규칙 고치고 싶어", "새 규칙 추가해줘", "writer 실패 로그 봐줘",
-  "domains.md 에 X 추가", "새 blog-* 스킬 만들자", "SHARED.md 손보자", "/blog-rule-editor".
+  **필수 경유 원칙 (블로커급)**: `.claude/skills/blog-*` 경로의 어떤 파일이든
+  수정이 필요하면 **반드시** 이 스킬을 호출해야 한다. 직접 Edit/Write 툴로 접근하는
+  것은 금지. "한 줄만 고치는 간단한 수정"이라는 판단도 금지 (간단해 보여도 SSOT
+  위반, 다른 skill 참조 손상, CHANGELOG 누락 등의 리스크가 있음). 유일한 예외는
+  blog-rule-editor SKILL.md 자기 자신 수정 (Rail 5).
+
+  사용 트리거 (다음 중 하나라도 맞으면 즉시 이 스킬 호출):
+  - "이 규칙 고치고 싶어", "새 규칙 추가해줘"
+  - "SHARED.md 에 X 추가/수정/삭제"
+  - "writer 실패 로그 봐줘"
+  - "domains.md 에 X 추가"
+  - "새 blog-* 스킬 만들자"
+  - "blog-writer/validator/research SKILL.md 에 X 추가"
+  - "스킬에 ~ 언급되면 ~ 해달라고 추가"
+  - 모든 `.claude/skills/blog-*` 경로 편집 요청
+  - `/blog-rule-editor` 슬래시 커맨드
 
   절대 하지 않는 것: 블로그 글 직접 작성 (blog-write 몫), 글 검증 (blog-validator 몫),
   자기 자신(blog-rule-editor SKILL.md) 수정, content/posts/* 편집, 사용자 승인 없는

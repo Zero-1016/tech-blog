@@ -35,6 +35,7 @@ Read로 로드하세요:
 - `§RULE-BARE-LIST` — 본문 bare 리스트 금지
 - `§RULE-ENGLISH-QUOTE` — 영어 인용 한글 풀이
 - `§RULE-LINK-PATH` — 내부 링크 경로
+- `§RULE-EXTERNAL-MENTION` — 외부 라이브러리/도구/공식 문서 인라인 링크
 - `§RULE-REFERENCES`, `§RULE-CITE` — References 컴포넌트
 - `§META-TITLE`, `§META-DESCRIPTION` — 제목/설명 품질
 - `§COMPLEXITY` — 분량, H2 개수

@@ -53,6 +53,30 @@
 
 ---
 
+## 2026-04-14 14:57
+
+### SHARED.md §RULE-EXTERNAL-MENTION (신규 섹션)
+
+**변경**: 본문에서 공식 라이브러리·도구·공식 문서를 처음 언급할 때 해당 공식 사이트로 인라인 마크다운 링크를 달도록 하는 규칙 추가. §RULE-LINK-PATH 뒤, §RULE-REFERENCES 앞에 배치.
+
+**함께 수정한 파일**:
+
+- `blog-writer/SKILL.md` — 참조 섹션 목록에 §RULE-EXTERNAL-MENTION 등록
+
+**이유**: compound-pattern-rsc 시리즈 작성 시 Chakra UI v3, Radix, Base UI, Ark UI, seed-design, shadcn/ui 같은 라이브러리 이름에 링크가 빠져 있어 사용자가 후속 요청으로 보강함. 앞으로 같은 누락이 재발하지 않도록 규칙화. References(자료 출처)와의 차이도 명시.
+
+**수정 유형**: 신규 섹션 추가 + 참조 목록 등록
+
+**영향 범위**:
+
+- blog-writer: 참조 목록에 추가됨 (작성 단계에서 내재화)
+- blog-validator: 자동 검증 대상 아님 (의미 판단 필요) → 수정 없음
+- 기존 글: 라이브러리/도구 첫 언급에 링크 누락이 있을 수 있으나, 일괄 재검증 대상 아님 (앞으로 작성하는 글부터 적용)
+
+**백업**: `.backups/SHARED-20260414-145756.md`, `.backups/blog-writer-SKILL-20260414-145756.md`
+
+---
+
 ## 2026-04-14 00:47
 
 ### SHARED.md §MDX-ANIMATEDSTEP (신규 섹션)
