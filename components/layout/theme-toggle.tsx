@@ -43,7 +43,8 @@ export function ThemeToggle() {
     <button
       onClick={toggle}
       className="group rounded-lg p-2 text-secondary transition-colors hover:bg-card-hover"
-      aria-label="Toggle theme"
+      aria-label={dark ? "라이트 모드로 전환" : "다크 모드로 전환"}
+      aria-pressed={dark}
       data-theme={dark ? "dark" : "light"}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" className="theme-icon overflow-visible">

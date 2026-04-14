@@ -154,12 +154,16 @@ function PostCard({ post, featured = false }: { post: PostItem; featured?: boole
 function SeriesCard({ group }: { group: SeriesGroup }) {
   const [open, setOpen] = useState(false);
   const latest = group.items[0];
+  const panelId = `series-panel-${group.name.replace(/\s+/g, "-")}`;
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background dark:bg-[#111113]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label={`${group.name} 시리즈 ${group.items.length}편 ${open ? "접기" : "펼치기"}`}
         className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-card-hover"
       >
         {latest.cover && (
@@ -197,6 +201,7 @@ function SeriesCard({ group }: { group: SeriesGroup }) {
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
+            id={panelId}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}

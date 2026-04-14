@@ -30,8 +30,10 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const lastFocusRef = useRef<HTMLElement | null>(null);
 
   const handleOpen = () => {
+    lastFocusRef.current = document.activeElement as HTMLElement | null;
     setQuery("");
     setOpen(true);
     setVisible(true);
@@ -44,6 +46,7 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
       setOpen(false);
       setVisible(false);
       setClosing(false);
+      lastFocusRef.current?.focus();
     }, 150);
   };
 
@@ -85,10 +88,14 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
       ? createPortal(
           <>
             <div
+              aria-hidden
               className={`${overlayAnim} fixed inset-0 z-[100] bg-black/30`}
               onClick={handleClose}
             />
             <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="사이트 검색"
               className={`${panelAnim} fixed inset-x-0 top-24 z-[100] mx-auto w-full max-w-lg px-4`}
             >
               <div className="overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
@@ -113,12 +120,14 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
                     onChange={(e) => setQuery(e.target.value)}
                     className="flex-1 bg-transparent py-4 text-base outline-none placeholder:text-secondary"
                   />
-                  <kbd
-                    onClick={() => setOpen(false)}
-                    className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-[10px] text-secondary"
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    aria-label="검색 닫기"
+                    className="cursor-pointer rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-secondary hover:border-accent/50"
                   >
                     ESC
-                  </kbd>
+                  </button>
                 </div>
                 {results.length > 0 && (
                   <ul className="max-h-72 overflow-y-auto p-2">
@@ -126,7 +135,7 @@ export function SearchButton({ isMac, isMobile }: { isMac: boolean; isMobile: bo
                       <li key={item.slug}>
                         <Link
                           href={`/posts/${item.slug}`}
-                          onClick={() => setOpen(false)}
+                          onClick={handleClose}
                           className="block rounded-lg px-3 py-2.5 transition-colors hover:bg-card-hover"
                         >
                           <p className="text-sm font-medium">{item.title}</p>
