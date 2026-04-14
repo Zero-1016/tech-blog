@@ -9,7 +9,7 @@ export function Cite({ id, label = "참고자료로 이동" }: CiteProps) {
       href={`#ref-${id}`}
       aria-label={label}
       title={label}
-      className="not-prose mx-[1px] inline-block leading-none text-accent no-underline transition-transform [vertical-align:calc(0.15em+0.1rem)] hover:scale-110"
+      className="not-prose mx-px inline-block leading-none text-accent no-underline transition-transform align-[calc(0.15em+0.1rem)] hover:scale-110"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"

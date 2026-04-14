@@ -45,7 +45,7 @@ export function References({ title = "참고 자료", items }: ReferencesProps) 
                         strokeWidth="2.25"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        className="h-3 w-3 flex-shrink-0 text-secondary transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-accent"
+                        className="h-3 w-3 shrink-0 text-secondary transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-accent"
                       >
                         <path d="M7 17L17 7" />
                         <path d="M7 7h10v10" />

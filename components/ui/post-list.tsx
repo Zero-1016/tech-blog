@@ -113,7 +113,7 @@ function PostCard({ post, featured = false }: { post: PostItem; featured?: boole
       href={`/posts/${post.slug}`}
       className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background transition-all hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 dark:bg-[#111113]"
     >
-      <div className="relative aspect-[2/1] overflow-hidden bg-code-bg">
+      <div className="relative aspect-2/1 overflow-hidden bg-code-bg">
         {post.cover ? (
           <Image
             src={post.cover}
@@ -175,7 +175,7 @@ function SeriesCard({ group, featured = false }: { group: SeriesGroup; featured?
         aria-label={`${group.name} 시리즈 ${group.items.length}편 ${open ? "접기" : "펼치기"}`}
         className="flex w-full flex-col text-left transition-colors hover:bg-card-hover"
       >
-        <div className="relative aspect-[2/1] w-full overflow-hidden bg-code-bg">
+        <div className="relative aspect-2/1 w-full overflow-hidden bg-code-bg">
           {latest.cover ? (
             <Image
               src={latest.cover}
