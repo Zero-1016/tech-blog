@@ -1,0 +1,125 @@
+---
+title: "코드를 텍스트가 아닌 트리로 읽기"
+description: "같은 이름의 함수가 300군데에 쏟아져 있을 때, grep으로는 뭘 놓칠까요?"
+date: 2026-04-15
+tags: ["JavaScript", "TypeScript", "AST", "codemod", "리팩토링"]
+series: "AST로 코드베이스 들여다보기"
+seriesOrder: 1
+published: true
+---
+
+회사 레포에서 `getUser` 호출부를 찾아야 했어요. `grep -rn "getUser"` 한 줄로 끝낼 생각이었거든요. 매칭 결과가 312줄. 막상 열어보니 주석 안에도 있고, 문자열 리터럴로도 있고, `getUserName` 같은 엉뚱한 함수까지 딸려 나옵니다. "이게 함수 호출인지 변수 선언인지 import 경로인지" 텍스트 매칭은 구분을 못 해요.
+
+## grep이 놓치는 장면
+
+첫째, **이름이 같은 서로 다른 함수**. 서비스 A의 `getUser`와 서비스 B의 `getUser`가 공존하는 모노레포에서는 단순 치환이 재앙이에요. import 경로가 어디서 왔는지 봐야 진짜 같은 함수인지 알 수 있거든요.
+
+둘째, **주석·문자열에 섞여 있는 식별자**. 로그 메시지 `"getUser failed"` 까지 같이 바꾸면 런타임은 멀쩡한데 Sentry 알림 집계가 이상해져요. 저도 실제로 당해봤어요.
+
+셋째, **구조가 다른데 텍스트는 비슷한 경우**. `obj.getUser()` 와 `getUser(obj)` 는 호출 형태가 완전히 다르지만 grep 한 줄로는 둘 다 잡힙니다. 어느 쪽만 골라 바꾸려면 결국 눈으로 확인해야 하죠.
+
+찾아 바꾸기로 해결이 막히는 지점은 이미 [codemod 글](/posts/what-is-codemod)에서도 한 번 짚었어요. 그 밑바닥에는 공통된 도구가 있습니다. AST예요.
+
+## AST라는 트리
+
+AST는 Abstract Syntax Tree, 추상 구문 트리의 줄임말이에요. 소스 코드를 파서가 읽어서 트리 구조로 바꿔놓은 표현이죠.
+
+JavaScript 생태계에서는 [ESTree](https://github.com/estree/estree) 라는 커뮤니티 표준이 있어요. SpiderMonkey의 Parser API에서 출발해서 지금은 ESLint, Acorn, Babel 세 프로젝트가 공동으로 끌고 가는 명세예요. 예를 들어 `const x = 1;` 이라는 짧은 코드를 ESTree 규격으로 파싱하면 이런 구조가 나옵니다.
+
+```json
+{
+  "type": "VariableDeclaration",
+  "kind": "const",
+  "declarations": [
+    {
+      "type": "VariableDeclarator",
+      "id": { "type": "Identifier", "name": "x" },
+      "init": { "type": "Literal", "value": 1 }
+    }
+  ]
+}
+```
+
+각 노드에는 `type` 필드가 있고, 그 밑으로 자식 노드가 붙어 내려가요. 여기서 주의할 점 하나. ESTree는 **노드에 부모 정보를 두지 않습니다**. 설계 원칙으로 "맥락 없음(no context)"을 박아놨어요. 트리에서 위로 올라가려면 방문자(visitor)가 스택을 따로 들고 다니거나, 순회 라이브러리가 path 객체로 부모를 주입해줘야 해요. 이 제약은 [codemod 글](/posts/what-is-codemod)에서 본 `path.parent` 같은 게 왜 필요한지 이해하는 열쇠가 됩니다.
+
+## 직접 열어보기
+
+말로만 들으면 와닿지 않아요. [astexplorer.net](https://astexplorer.net) 에 들어가서 `const x = 1;` 을 왼쪽에 붙여 넣어보세요. 오른쪽에 트리가 펼쳐져요. 상단 드롭다운에서 파서를 바꾸면 같은 코드가 서로 다른 모양으로 쪼개지는 것도 보이고요.
+
+<Callout variant="tip">
+astexplorer에서 꼭 해볼 실습 두 가지.
+
+첫째, `const x = 1` 에서 `1` 노드를 클릭해보세요. 파서에 따라 `Literal` 로 뜨는 곳과 `NumericLiteral` 로 뜨는 곳이 나뉩니다.
+
+둘째, JSX 조각(`<div className="a" />`)을 붙여넣고 파서를 Acorn 기본값으로 두면 에러가 나요. Babel이나 SWC로 바꾸면 멀쩡히 파싱되죠. 왜 그런지는 다음 문단에서 이어집니다.
+
+</Callout>
+
+## 파서마다 다르게 쪼갠다
+
+같은 JavaScript인데 파서가 네 군데서 만든 트리는 조금씩 달라요.
+
+[@babel/parser](https://babeljs.io/docs/babel-parser) 는 Acorn 기반 포크예요. 공식 문서에도 그렇게 적혀 있어요.
+
+<Callout variant="info">
+<Cite id="babel-parser" />"@babel/parser is heavily based on acorn and acorn-jsx." - Babel 공식 문서
+
+Acorn을 뿌리로 두고 있지만 ESTree를 그대로 쓰지는 않아요. `Literal` 을 `StringLiteral` / `NumericLiteral` / `RegExpLiteral` 로 쪼개놓는 식으로 살짝 비틀었거든요. JSX, TypeScript, Flow 같은 확장 문법도 플러그인으로 붙습니다.
+
+</Callout>
+
+Acorn은 가볍고 ESTree 규격에 가장 가까워요. ESLint가 내부적으로 쓰는 espree가 Acorn 기반이라 린트 플러그인 생태계는 Acorn 모양의 트리에 익숙해요. 다만 JSX나 TypeScript는 기본으로 못 읽고 플러그인을 끼워야 해요.
+
+[SWC](https://swc.rs/docs/usage/core) 는 Rust로 짜인 JS/TS 컴파일러예요. 공식 문서는 용도를 이렇게 못 박아놨어요.
+
+<Callout variant="info">
+<Cite id="swc-core" />"Core SWC APIs mainly useful for build tool authors." - SWC 공식 문서
+
+번들러나 빌드 도구를 만드는 사람이 주요 사용자라는 뜻이에요. transform / parse / minify API가 전부 Rust 바인딩을 거쳐서 빠른 대신, 트리 구조가 ESTree와는 미묘하게 달라요. 타깃을 es3부터 es2022까지 선택할 수 있고 소스맵도 지원해요.
+
+</Callout>
+
+마지막으로 TypeScript Compiler API가 있어요. TS 파서가 만드는 트리는 이름부터 ESTree와 달라요. `Identifier` 대신 `SyntaxKind.Identifier` 같은 enum을 쓰고, 타입 정보를 가진 Symbol 그래프가 트리에 붙어 다니거든요. 타입 추론이 필요한 리팩터링에는 이쪽 말고는 답이 없어요.
+
+## 언제 어느 파서를 쓰나
+
+실무에서 고르는 기준은 의외로 단순해요.
+
+ESLint 규칙을 쓰거나 만들 거면 espree(Acorn 계열)로 갑니다. 생태계 호환이 제일 깔끔해요. React 코드에 대규모 변환을 돌릴 거면 Babel이 무난해요. JSX·TS·Flow 플러그인이 전부 갖춰져 있고 <Cite id="babel-parser" />`errorRecovery` 옵션으로 파싱 에러가 나도 일단 트리를 돌려주거든요. 빌드 체인의 성능이 중요하거나 CI에서 수만 파일을 스캔해야 하면 SWC. 타입 정보를 보면서 심볼 단위로 추적해야 하면 TypeScript Compiler API.
+
+저는 개인 프로젝트에서는 Babel로 시작하고, 리팩터링 규모가 커지면 그때 TS Compiler API나 SWC로 옮겨가는 편이에요. 처음부터 "제일 빠른 거" 를 고르면 디버깅이 지옥이 되거든요.
+
+## 마무리
+
+grep이 놓치는 걸 AST는 왜 잡아내는지, 그리고 같은 AST라도 파서마다 쪼개는 방식이 다르다는 점만 오늘 가져가시면 돼요. 트리로 코드를 보기 시작하면 "이름이 같은데 다른 함수"나 "주석 안에 섞인 식별자" 같은 문제가 자연스럽게 풀립니다.
+
+다음 편에서는 이 트리를 가지고 영향 반경을 재보는 법을 다뤄요. 라이브러리 메이저 업그레이드 전에 "얼마나 깨질까" 를 숫자로 먼저 뽑아보는 과정이에요.
+
+<References
+  items={[
+    {
+      id: "babel-parser",
+      title: "Babel - @babel/parser 공식 문서",
+      href: "https://babeljs.io/docs/babel-parser",
+      description: "Acorn 기반 포크, ESTree 변형, JSX/TS/Flow 플러그인, errorRecovery 옵션 확인",
+    },
+    {
+      id: "swc-core",
+      title: "SWC - Core API 사용 가이드",
+      href: "https://swc.rs/docs/usage/core",
+      description: "빌드 도구 저자 대상 transform/parse/minify API와 지원 타깃 범위",
+    },
+    {
+      id: "estree-spec",
+      title: "ESTree - JavaScript AST 커뮤니티 표준",
+      href: "https://github.com/estree/estree",
+      description: "노드 설계 원칙(하위호환/맥락없음/유일성/확장성)과 ESLint·Acorn·Babel 공동 관리",
+    },
+    {
+      id: "astexplorer",
+      title: "AST Explorer",
+      href: "https://astexplorer.net",
+      description: "여러 파서를 드롭다운으로 비교하며 AST를 시각적으로 확인하는 웹 도구",
+    },
+  ]}
+/>

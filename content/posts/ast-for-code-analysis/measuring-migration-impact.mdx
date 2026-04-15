@@ -1,0 +1,156 @@
+---
+title: "바꾸기 전에 얼마나 바뀔지 재보기"
+description: "라이브러리 메이저 업그레이드, 얼마나 깨질지 감이 안 잡힐 때 AST가 도와줘요."
+date: 2026-04-15
+tags: ["JavaScript", "TypeScript", "AST", "codemod", "리팩토링"]
+series: "AST로 코드베이스 들여다보기"
+seriesOrder: 2
+published: true
+---
+
+"다음 스프린트에 디자인 시스템 v2 올릴 건데, 얼마 걸려요?" 라는 질문을 받았을 때 저는 한참을 못 답했어요. 색상 토큰 이름이 바뀌고, 아이콘 패키지가 쪼개지고, 일부 컴포넌트 prop이 deprecated 됩니다. 파일이 몇 개나 영향을 받는지 감이 안 잡히거든요. 그냥 GitHub 검색으로 키워드를 몇 개 쳐보다가, 이게 과소집계라는 걸 깨달았어요.
+
+## 범위 파악이 먼저다
+
+마이그레이션에서 제일 먼저 해야 하는 건 변환 스크립트 작성이 아니에요. "얼마나 깨지는가" 를 재는 일이에요.
+
+범위가 안 잡히면 스프린트 견적이 안 나오고, 견적이 없으면 매니저가 일정을 깎을 명분이 없고, 그러면 또 주말에 출근합니다. 저는 두 번 당하고 나서야 배웠어요. 변환 로직 짜기 전에 **영향 파일 수·파일당 평균 변경 건수·의심되는 엣지 케이스 개수** 이 셋은 무조건 숫자로 먼저 뽑아두기.
+
+이 숫자들은 AST 없이도 대충 추정은 가능해요. 다만 "대충" 이 위험해요. 예를 들어 `import { IconArrow } from "@daangn/react-icon"` 이라는 문장만 grep 해도 변경 지점은 잡히는데, 이 import 가 실제 JSX에서 쓰이는지 아니면 선언만 되어있는지는 트리를 봐야 알거든요.
+
+## 심볼을 따라가는 ts-morph
+
+[ts-morph](https://github.com/dsherret/ts-morph) 는 TypeScript Compiler API를 감싼 래퍼 라이브러리예요. 저장소 README에 정의가 이렇게 적혀 있어요.
+
+<Callout variant="info">
+<Cite id="ts-morph" />"TypeScript Compiler API wrapper. Provides an easier way to programmatically navigate and manipulate TypeScript and JavaScript code." - ts-morph README
+
+TS Compiler API를 그대로 쓰면 enum과 Node interface 지옥인데, ts-morph 는 Project / SourceFile 같은 추상으로 한 단계 덮어놓은 거예요. 심볼을 추적하거나 이름을 바꾸는 API도 따로 있어서 마이그레이션 분석에 쓰기 좋아요.
+
+</Callout>
+
+`Project` 로 tsconfig를 읽어오면 프로젝트 전체 타입 그래프가 생겨요. 여기서 `findReferences` 를 부르면 어떤 함수가 어디서 호출되는지 "심볼 단위로" 돌려줍니다. grep과 결정적으로 다른 지점이에요. 같은 이름의 다른 함수는 자동으로 빠지고, re-export 된 경로까지 따라가요.
+
+```ts
+import { Project } from "ts-morph";
+
+const project = new Project({ tsConfigFilePath: "tsconfig.json" });
+const source = project.getSourceFileOrThrow("packages/ui/Button.tsx");
+const symbol = source.getFunctionOrThrow("Button").getNameNode();
+
+const refs = symbol.findReferencesAsNodes();
+console.log(`${refs.length}개 지점에서 Button을 참조 중`);
+```
+
+타입 정보가 필요한 마이그레이션, 예를 들어 `Props` 인터페이스가 extends 체인으로 여러 곳에 퍼져 있는 경우에는 ts-morph 말고는 답이 잘 안 나와요.
+
+## jscodeshift의 드라이런
+
+타입 그래프까지 필요하지 않고 "바뀔 파일이 몇 개인가" 만 빠르게 세고 싶으면 [jscodeshift](https://github.com/facebook/jscodeshift) 의 `--dry` 옵션이 제일 편해요. transform 스크립트를 작성하되 실제 파일에는 쓰지 않고, 몇 개가 수정될지만 보고하거든요.
+
+<AnimatedStep steps={[
+  { title: "transform 작성", content: "fileInfo, api, options 시그니처로 transform 함수를 만들어요. find → filter → forEach 로 대상 노드만 골라내요." },
+  { title: "--dry 로 실행", content: "`jscodeshift --dry -t transform.js src/` 로 돌리면 파일을 건드리지 않고 'N files changed' 요약만 찍어줘요." },
+  { title: "결과로 견적", content: "변경 파일 수·에러 수·skipped 수가 한눈에 나와요. 이 숫자로 스프린트 견적을 잡아요." }
+]} />
+
+드라이런이 편한 이유는, 같은 transform 을 그대로 프로덕션에서 실행할 수 있다는 점이에요. 분석용 스크립트와 변환용 스크립트를 따로 쓰지 않아도 돼요.
+
+## 모노레포·다국어는 ast-grep
+
+회사 저장소가 TS·Kotlin·Swift 세 언어로 쪼개져 있고, 각 언어마다 같은 디자인 토큰을 참조한다면 위의 두 도구로는 커버가 안 돼요. [ast-grep](https://ast-grep.github.io/) 을 꺼낼 타이밍이에요.
+
+ast-grep 공식 사이트는 도구의 포지션을 이렇게 설명해요.
+
+<Callout variant="info">
+<Cite id="ast-grep" />"Fast and polyglot tool for code structural search, lint, rewriting at large scale." - ast-grep 공식 문서
+
+Rust와 Tree-sitter를 깔고 있어서 20개가 넘는 언어를 같은 인터페이스로 스캔할 수 있어요. YAML로 룰을 쓰고, `sg scan` 으로 일괄 검사, `sg run` 으로 재작성. 공식 사이트 Users 섹션에 SWC, Shopify Hydrogen, Vue Macros 같은 프로젝트가 채택 사례로 실려 있어서 "연구용 장난감" 은 넘어섰어요.
+
+</Callout>
+
+룰 종류는 네 가지예요. 단일 패턴을 매칭하는 atomic, 부모·자식 관계를 엮는 relational, 여러 룰을 조합하는 composite, 공통 조각을 재사용하는 utility. YAML 한 덩어리로 "import 문이면서 `@legacy-ui` 경로인 것" 같은 쿼리를 짤 수 있어요.
+
+## 당근 seed-design 사례
+
+실전 예시로 하나 들여다볼 만한 저장소가 [daangn/seed-design codemod](https://github.com/daangn/seed-design/tree/dev/packages/codemod) 예요. jscodeshift 기반이고 기본 파서는 tsx로 맞춰져 있어요. 디자인 시스템 마이그레이션용으로 19개의 transform이 모여 있습니다.
+
+이름만 훑어봐도 뭘 하는지 감이 와요. `replace-alpha-color`, `replace-css-seed-design-color-variable`, `replace-tailwind-color`, `replace-tailwind-typography`, `replace-stitches-styled-color`, `replace-react-icon` 이런 식이에요. CLI도 간단해서 `npx @seed-design/codemod@latest <transform> <path> --log --extensions=ts,tsx` 로 한 번에 돌릴 수 있어요.
+
+실제 마이그레이션은 이 transform 들을 순서대로 엮어 쓰는 경우가 많아요. 단계별 bash 스크립트로 풀어보면 흐름이 또렷해져요.
+
+```bash
+#!/usr/bin/env bash
+set -e
+
+TARGET="packages/web/src"
+
+# 1단계: 영향 범위부터 재기 — 실제 파일은 건드리지 않는 드라이런
+npx jscodeshift --dry --print \
+  --transform node_modules/@seed-design/codemod/dist/transforms/replace-tailwind-color.js \
+  --parser=tsx --extensions=ts,tsx "$TARGET" | tee dry-run.log
+
+# 로그를 보고 매칭 건수·깨질 만한 케이스부터 확인
+
+# 2단계: 토큰 계열을 안에서 밖으로 순서대로
+npx @seed-design/codemod@latest replace-alpha-color "$TARGET" --log
+npx @seed-design/codemod@latest replace-tailwind-color "$TARGET" --log
+npx @seed-design/codemod@latest replace-tailwind-typography "$TARGET" --log
+npx @seed-design/codemod@latest replace-react-icon "$TARGET" --log
+
+# 3단계: 워닝 로그만 남겨 수동으로 마무리
+grep -E '^\[warning\]' migrate-icons-warnings.log > manual-todo.log
+```
+
+`--dry` 로 범위를 먼저 재고, 작은 transform 부터 큰 transform 순으로 적용한 뒤, 로그의 워닝 케이스만 사람 손으로 정리하는 구조예요. 이 흐름을 거치지 않고 19개를 한꺼번에 돌렸다면 중간에 깨진 타입을 역추적하기 어려웠을 거예요.
+
+흥미로운 건 `replace-react-icon` 폴더 구조예요. `identifier-match.ts` 가 42KB, `replace-node.ts` 가 17KB, 그리고 `__testfixtures__` 와 `__tests__` 가 따로 있어요. 왜 파일을 이렇게 쪼갰을까 생각해보면, <strong>매칭(영향 분석)과 치환(실제 변환)이 별개의 관심사</strong>이기 때문이에요. identifier-match 가 "이 import 가 진짜 교체 대상인가" 를 판별하고, replace-node 는 매칭된 노드를 어떻게 다시 쓸지만 담당해요. 두 단계가 섞이면 디버깅이 안 되거든요.
+
+19개 transform을 다 합치면 몇 천 파일 단위 리팩터링인데, 이걸 수동으로 했다면 버그가 줄줄 났을 거예요. codemod 로 묶었기 때문에 드라이런으로 미리 숫자를 뽑고, 실패한 케이스만 손으로 마무리하는 구조가 성립합니다.
+
+## 한 걸음 더
+
+분석이 끝나야 변환이 시작됩니다. 오늘 얘기한 도구들은 전부 "바뀔 범위를 재는" 용도로 썼어요. 숫자가 손에 잡히면 그 다음에 변환 스크립트를 짤 수 있고, 변환 스크립트까지 가는 흐름은 [찾아 바꾸기로는 부족할 때, codemod](/posts/what-is-codemod) 에서 한 번 정리해뒀어요. 이어서 읽어보시면 "분석 → 변환" 이 어떻게 이어지는지 감이 잡힐 거예요.
+
+이번 시리즈는 두 편으로 닫아요. 1편에서는 코드를 트리로 보는 관점을, 2편에서는 그 트리로 영향 반경을 재는 법을 다뤘어요. 트리로 한번 보기 시작하면 grep 으로 되돌아가기 어려워져요.
+
+<References
+  items={[
+    {
+      id: "babel-parser",
+      title: "Babel - @babel/parser 공식 문서",
+      href: "https://babeljs.io/docs/babel-parser",
+      description: "jscodeshift 의 babel 파서 옵션 근거와 errorRecovery 동작 확인",
+    },
+    {
+      id: "swc-core",
+      title: "SWC - Core API 사용 가이드",
+      href: "https://swc.rs/docs/usage/core",
+      description: "대규모 스캔 시 Rust 기반 파서의 성능과 타깃 범위 비교 근거",
+    },
+    {
+      id: "ts-morph",
+      title: "ts-morph - TypeScript Compiler API wrapper",
+      href: "https://github.com/dsherret/ts-morph",
+      description: "Project·SourceFile 추상과 findReferences 기반 심볼 추적",
+    },
+    {
+      id: "jscodeshift",
+      title: "facebook/jscodeshift",
+      href: "https://github.com/facebook/jscodeshift",
+      description: "transform 시그니처, Collection API, --dry 드라이런, 파서 선택 옵션",
+    },
+    {
+      id: "ast-grep",
+      title: "ast-grep - 구조 기반 코드 검색·재작성",
+      href: "https://ast-grep.github.io/",
+      description: "Tree-sitter 기반 다국어 룰 타입(atomic/relational/composite/utility)과 CLI",
+    },
+    {
+      id: "daangn-seed-codemod",
+      title: "daangn/seed-design - codemod 패키지",
+      href: "https://github.com/daangn/seed-design/tree/dev/packages/codemod",
+      description: "19개 transform 구성과 replace-react-icon 의 매칭·치환 분리 구조",
+    },
+  ]}
+/>
