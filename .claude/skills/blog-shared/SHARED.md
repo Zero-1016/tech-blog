@@ -777,6 +777,11 @@ published: true
 - `title`, `description`, `date`, `tags`, `published` 필드 존재
 - `date`는 `YYYY-MM-DD` 형식
 - `tags`는 배열이고 비어있지 않음
+- `tags` 항목은 약어가 있으면 약어형 사용 (§META-TITLE 허용 1·2 기준 재사용)
+  - 예: "React Server Components" → `"RSC"`, "Server-Side Rendering" → `"SSR"`
+  - 이유: 태그는 식별 라벨이라 짧고 일관된 형태가 검색·중복 방지에 유리
+  - §META-TITLE 에서 "풀어쓰기 권장"으로 분류된 성능 지표 약어(`LCP`, `CLS` 등)도 tags 에서는 약어형 허용 — 태그는 검색 키워드성이 우선
+  - 판단 기준: 대상 독자가 해당 약어를 식별자로 인지하는가
 - `published: true`
 - `title`/`description`에 콜론 구조 금지 (§RULE-COLON-HEADING)
 - `title`/`description`에 em-dash 금지 (§RULE-EMDASH)
