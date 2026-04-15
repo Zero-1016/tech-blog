@@ -1,0 +1,104 @@
+---
+title: "Suspense 경계는 어디에 그어야 하나"
+description: "Suspense를 fallback 넣는 스위치로 썼다면, 경계 한 번쯤 다시 봐야 해요."
+date: 2026-04-15
+tags: ["React", "Next.js", "React Server Components", "성능", "Suspense"]
+series: "Suspense 경계로 설계하는 Streaming SSR"
+seriesOrder: 1
+published: true
+---
+
+[Next.js](https://nextjs.org) App Router 로 작업하다가 로딩이 길어지는 구간에 `<Suspense>` 를 감싸둔 적이 있어요. 스피너는 뜨긴 뜨는데, 정작 원하는 부분이 단독으로 먼저 보이지 않고 페이지 전체가 한꺼번에 나타나더라고요. fallback 을 바꿔봐도 소용이 없었어요. 범인은 컴포넌트가 아니라 **경계 위치** 였거든요. 비슷한 고민을 [`use client` 한 줄이 끌고 오는 것들](/posts/use-client-boundary-and-overuse)에서 번들 경계로 풀었던 기억이 나는데, 그거랑 다른 층위의 경계가 하나 더 있어요.
+
+## Suspense가 감지하는 것, 감지하지 못하는 것
+
+Suspense 를 "로딩 스피너 스위치" 로만 보면 자주 빗나가요. `useEffect` 안에서 fetch 를 돌려놓고 `<Suspense fallback={<Spinner/>}>` 로 감싼다고 스피너가 뜨지 않거든요.<Cite id="react-suspense" />
+
+<Callout variant="warning">
+"Suspense does not detect when data is fetched inside an Effect or event handler." - React 공식 문서
+
+Effect 나 이벤트 핸들러 안에서 한 fetch 는 Suspense 입장에서는 "렌더가 끝난 다음 벌어지는 일" 이에요. 이미 한 번 렌더가 나가버린 이후라서 감지 대상이 아니거든요.
+
+</Callout>
+
+Suspense 가 실제로 잡아내는 건 렌더 **도중에** suspend 를 트리거하는 신호예요. React 공식은 세 가지만 인정해요. [Relay](https://relay.dev) 나 [Next.js](https://nextjs.org) 같은 Suspense 지원 프레임워크, `React.lazy()` 로 지연 로드한 컴포넌트, 그리고 `use()` 로 소비하는 캐시된 Promise. 이 셋 바깥에서 일어나는 비동기는 아무리 `await` 이 끼어 있어도 Suspense 눈에 안 보여요.
+
+그래서 "경계를 어디 두느냐" 이전에, **경계가 감지할 수 있는 방식으로 데이터를 가져오는가** 를 먼저 봐야 해요. 서버 컴포넌트에서 `await fetch(...)` 를 쓰면 자연스럽게 잡히지만, 클라이언트 측 훅 안에 들어간 fetch 는 라이브러리 도움 없이는 못 잡아요.
+
+## 경계는 한 묶음으로 나타난다
+
+경계 한 개는 내부 트리를 하나의 덩어리로 다뤄요. 자식이 다섯 개 있고 그중 하나만 느려도, 나머지 넷이 먼저 보이지 않아요. 경계 전체가 fallback 이다가, 전부 준비된 순간에 한꺼번에 **"pop in"** 해요.<Cite id="react-suspense" />
+
+그래서 목록 + 사이드바 + 필터가 나란히 있는 페이지에서 하나의 `<Suspense>` 로 전체를 감싸면 제일 느린 쿼리가 끝날 때까지 아무것도 안 보여요. 이건 스트리밍을 켰을 때 오히려 체감이 나빠지는 전형적인 패턴이에요. "스트리밍이니까 자동으로 빨라지겠지" 하고 경계 하나만 얹어둔 경우거든요.
+
+반대로 각 컴포넌트를 독립 경계로 쪼개면, 각자 준비되는 순서대로 나타나요. [Next.js](https://nextjs.org) Streaming 가이드가 이 지점을 짧게 짚어둬요.<Cite id="nextjs-streaming" />
+
+<Callout variant="info">
+"Each `<Suspense>` boundary is an independent streaming point. Components inside different boundaries resolve and stream in independently." - Next.js Streaming
+
+형제 경계는 서로 막지 않아요. 각자의 자료가 준비되는 순서대로 나타나요. 페이지를 하나의 큰 "로딩 중" 으로 묶느냐, 여러 개의 작은 조각으로 풀어주느냐가 여기서 갈려요.
+
+</Callout>
+
+## 중첩으로 점진적 시퀀스 만들기
+
+경계는 중첩해서 쓸 수도 있어요. 바깥 경계는 먼저, 안쪽 경계는 나중에. 이러면 "대략적인 레이아웃 먼저 채우고, 안쪽 디테일은 천천히" 같은 시퀀스를 구성할 수 있거든요.
+
+```tsx
+<Suspense fallback={<PageSkeleton />}>
+  <Header />
+  <Suspense fallback={<SidebarSkeleton />}>
+    <Sidebar />
+  </Suspense>
+  <Suspense fallback={<FeedSkeleton />}>
+    <Feed />
+  </Suspense>
+</Suspense>
+```
+
+바깥 `PageSkeleton` 이 먼저 걷히면서 Header 가 보이고, 그 다음 Sidebar 와 Feed 가 각자 타이밍에 떠요. 독자는 "페이지가 점점 차오르는" 느낌을 받아요. 하나의 큰 스피너가 사라지면서 한 번에 전부 쏟아지는 것보다 훨씬 자연스럽죠.
+
+주의할 함정이 하나 있어요. fallback 자체가 suspend 하면 가장 가까운 **상위 경계** 가 활성화돼요. 그래서 `SidebarSkeleton` 안에 `lazy()` 로 로드한 컴포넌트를 넣으면, 로딩되는 동안 `PageSkeleton` 이 뜨게 돼요. fallback 은 가볍게 정적으로 두는 게 원칙이에요.
+
+## startTransition 이 막아주는 것
+
+경계 설계가 끝나도 한 가지 문제가 남아요. 이미 페이지가 그려진 상태에서 사용자가 탭을 바꾸거나 쿼리를 변경하면, 해당 영역의 데이터가 다시 로딩되면서 fallback 이 뜨거든요. 방금 보고 있던 콘텐츠가 스피너로 돌아가는 경험은 꽤 거슬러요.
+
+React 는 이걸 막는 유일한 경로로 `startTransition` 을 줘요.<Cite id="react-suspense" />
+
+```tsx
+import { startTransition } from "react";
+
+function FilterButton({ next }) {
+  return (
+    <button onClick={() => startTransition(() => setFilter(next))}>
+      {next}
+    </button>
+  );
+}
+```
+
+`startTransition` 으로 감싼 상태 변경은 "non-urgent" 로 표시돼요. 이미 보이는 콘텐츠는 그대로 두고, 새 데이터가 준비될 때까지 이전 화면을 유지해요. 준비되면 소리 없이 교체돼요. 스피너 깜빡임이 사라지는 이유예요.
+
+다만 첫 마운트 직전에 suspend 된 렌더는 상태가 보존되지 않아요. 이건 React 가 의도적으로 정한 동작이에요. 처음부터 다시 시도하는 쪽이 일관성이 높거든요. 그래서 "경계가 처음 그려질 때" 와 "이미 그려진 경계가 업데이트될 때" 를 구분해서 생각하면 설계가 편해져요.
+
+## 다음 편 예고
+
+여기까지는 경계를 어디 둘지, 어떻게 중첩할지, 어떻게 갈아낄지 까지 봤어요. 다음 편에서는 이 경계가 실제 **HTML 스트림** 위에서 어떻게 chunk 가 되고, 상위에서 `await` 한 줄이 어떻게 워터폴을 만드는지 따라가볼게요. 경계 위치를 잘 그어놔도 데이터 fetch 순서가 꼬이면 스트리밍 이득이 통째로 사라지거든요.
+
+<References
+  items={[
+    {
+      id: "react-suspense",
+      title: "React - `<Suspense>`",
+      href: "https://react.dev/reference/react/Suspense",
+      description: "경계 동작, 중첩, startTransition 과의 관계 원문",
+    },
+    {
+      id: "nextjs-streaming",
+      title: "Next.js - Streaming",
+      href: "https://nextjs.org/docs/app/guides/streaming",
+      description: "형제 경계가 독립 스트리밍 지점이라는 설명 출처",
+    },
+  ]}
+/>

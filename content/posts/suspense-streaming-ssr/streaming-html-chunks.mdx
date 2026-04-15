@@ -1,0 +1,130 @@
+---
+title: "스트리밍 HTML은 어디서 끊기는가"
+description: "스트리밍이 켜져 있어도 첫 바이트는 한참 안 와요. 범인은 상위 await 한 줄이에요."
+date: 2026-04-15
+tags: ["React", "Next.js", "React Server Components", "성능", "Suspense"]
+series: "Suspense 경계로 설계하는 Streaming SSR"
+seriesOrder: 2
+published: true
+---
+
+[1편](/posts/suspense-boundary-where)에서 Suspense 경계를 어디 둘지 봤어요. 막상 설계대로 경계를 쪼개놨는데, DevTools Network 탭을 열어보면 첫 바이트가 한참 안 와요. "분명 스트리밍인데 왜 전통 SSR 처럼 기다리지?" 하고 코드를 뒤집어보면 범인은 거의 매번 상위 `layout.tsx` 안의 `await` 한 줄이에요. 경계는 제대로 그었지만, 상위에서 이미 페이지가 발목을 잡혀 있었거든요.
+
+## 전통 SSR이 멈춰 있던 이유
+
+전통적인 서버 렌더는 전체 HTML 이 완성된 후에야 응답을 시작해요. 느린 쿼리 하나가 페이지 전체를 붙잡아두는 구조죠. [Next.js](https://nextjs.org) 공식 Streaming 가이드가 이 배경을 짚어줘요.<Cite id="nextjs-streaming" />
+
+스트리밍 SSR 은 이걸 **chunked transfer encoding** 으로 바꿔요. 서버가 준비된 부분부터 먼저 내보내고, 뒷부분은 같은 응답 스트림 위에 이어붙여요. 브라우저는 받은 chunk 부터 파싱하고 렌더하기 시작해요. "데이터 다 나올 때까지 흰 화면" 이 아니라 "레이아웃 먼저, 데이터는 나중" 이 되는 거예요.
+
+중요한 건 이 chunk 경계가 **임의의 지점에서** 끊기지 않는다는 거예요. React 서버 렌더러는 `<Suspense>` 경계를 기준으로 HTML 을 쪼개요. 경계 없이 한 덩어리로 쓴 트리는 여전히 전통 SSR 처럼 한꺼번에 렌더돼요.
+
+## Suspense가 chunk 를 쪼갠다
+
+React DOM 서버 API 를 잠깐 보면 동작이 더 선명해요. `renderToPipeableStream` (Node) 이나 `renderToReadableStream` (Web) 에는 `onShellReady` 와 `onAllReady` 라는 두 이벤트가 있어요.
+
+`onShellReady` 는 "shell 이 준비됐다" 는 신호예요. shell 은 `await` 없이 바로 렌더 가능한 부분 (레이아웃, 네비게이션, 그리고 **Suspense fallback 들**) 이에요. 이게 준비되는 순간 첫 HTML chunk 가 클라이언트로 나가요. 그 다음 Suspense 안쪽 데이터가 resolve 될 때마다 작은 chunk 가 추가로 스트림에 실려요.
+
+<Callout variant="info">
+"The response body starts streaming when a Suspense fallback renders (for example, a `loading.tsx`) or when a Server Component suspends under a Suspense boundary." - Next.js 공식 문서
+
+"스트리밍이 시작되는 타이밍" 이 애매할 때가 있거든요. 정답은 fallback 이 렌더되는 순간이에요. 경계가 없으면 스트리밍이 안 시작돼요.
+
+</Callout>
+
+[Next.js](https://nextjs.org) App Router 의 `loading.tsx` 는 내부적으로 `page.tsx` 와 그 하위를 자동으로 `<Suspense>` 로 감싸요. 그래서 이 파일 하나만 추가해도 스트리밍이 켜진 것처럼 보여요. 다만 이건 "최상위 한 개 경계" 라는 뜻이라, 세분화된 경계를 쓰고 싶으면 본문 안에 별도 `<Suspense>` 를 또 둬야 해요.<Cite id="nextjs-loading" />
+
+## 워터폴은 await 한 줄에서 시작된다
+
+여기까지 오면 "그런데 왜 첫 바이트가 안 오지?" 라는 원래 질문으로 돌아가요. 답은 상위에서 일어난 `await` 에 있어요.
+
+`layout.tsx` 에서 `await cookies()` 나 `await headers()` 를 쓰면, 또는 캐시되지 않은 `fetch` 를 `await` 하면, 그게 끝날 때까지 **shell 자체가 렌더되지 않아요**. shell 이 안 나오면 첫 chunk 도 안 나가요. `loading.tsx` 가 있어도 fallback 이 뜨질 않죠. `loading.tsx` 는 `page` 아래만 감싸주지 `layout` 의 await 까지 커버하지 않거든요.<Cite id="nextjs-loading" />
+
+그리고 같은 페이지 안에 서로 독립적인 fetch 가 여러 개 있을 때, 다음처럼 순차로 `await` 하면 워터폴이 만들어져요.
+
+```tsx
+export default async function Page() {
+  const user = await getUser();        // 150ms
+  const orders = await getOrders();    // 180ms
+  const messages = await getMessages();// 120ms
+  // 총 450ms 직렬 대기
+  return <Dashboard {...} />;
+}
+```
+
+세 쿼리가 서로를 기다릴 이유가 없는데, 코드 상에서 앞 `await` 이 끝나야 다음 `await` 이 시작돼요. 이걸 병렬로 바꾸면 가장 느린 하나의 시간 (180ms) 만 기다리면 돼요.
+
+```tsx
+const [user, orders, messages] = await Promise.all([
+  getUser(),
+  getOrders(),
+  getMessages(),
+]);
+```
+
+`Promise.all` 은 하나라도 reject 되면 전체가 실패해요. 부분 실패를 허용하고 싶으면 `Promise.allSettled` 가 있고, 실패한 카드만 에러 UI 로 보여주는 구성을 만들 수 있어요.<Cite id="nextjs-fetching" />
+
+## "Push dynamic access down" 패턴
+
+워터폴을 근본적으로 피하는 방법은 `await` 을 상위에서 하지 않는 거예요. Promise 를 상위에서 **시작만** 하고, 실제 `await` 은 필요한 컴포넌트 안에서 해요. [Next.js](https://nextjs.org) 공식은 이 원칙을 "Push dynamic access down" 이라고 불러요.<Cite id="nextjs-streaming" />
+
+```tsx
+export default function Page() {
+  const userPromise = getUser();
+  const ordersPromise = getOrders();
+
+  return (
+    <>
+      <Suspense fallback={<UserSkeleton />}>
+        <UserCard promise={userPromise} />
+      </Suspense>
+      <Suspense fallback={<OrdersSkeleton />}>
+        <OrdersList promise={ordersPromise} />
+      </Suspense>
+    </>
+  );
+}
+```
+
+Page 자체는 `async` 지만 `await` 을 쓰지 않아요. shell 은 즉시 렌더되고, 두 Suspense 경계가 각자의 Promise 가 resolve 되는 순서대로 chunk 를 스트리밍해요. 서버가 Page 를 벗어난 뒤에도 `userPromise`, `ordersPromise` 는 background 에서 계속 돌거든요. React 서버 렌더러가 이 두 경계를 별도로 처리해요.
+
+Client Component 에 Promise 를 prop 으로 넘겨서 `use(promise)` 로 읽는 것도 같은 패턴이에요. 서버에서 시작하고 클라이언트에서 기다리는 거죠.
+
+## React.cache 와 fetch memoization
+
+이렇게 "상위에서 시작, 하위에서 소비" 로 풀면 한 가지 걱정이 생겨요. **같은 데이터를 여러 컴포넌트에서 fetch 하면 중복되지 않을까?** React 는 이 부분을 `cache` 로 해결해요. 같은 요청 안에서는 동일한 인자의 호출이 자동으로 memoize 되거든요.<Cite id="nextjs-fetching" />
+
+<Callout variant="tip">
+"Identical `fetch` requests in a React component tree are memoized by default, so you can fetch data in the component that needs it instead of drilling props." - Next.js 공식 문서
+
+props 로 데이터를 내려보내는 대신, 필요한 컴포넌트에서 다시 fetch 해도 돼요. 같은 요청 맥락 안이라면 실제 네트워크 호출은 한 번만 나가거든요.
+
+</Callout>
+
+범위는 **요청 단위** 예요. 요청 사이에는 공유되지 않아요. Next.js 의 `fetch` 는 이 memoization 이 기본이고, 일반 함수도 `React.cache` 로 감싸면 동일한 동작을 얻어요. 결과적으로 [compound 컴포넌트의 모듈 그래프](/posts/compound-pattern-module-graph)처럼 번들러 시야에서만 문제가 풀리는 게 아니라, **런타임 요청 그래프** 에서도 중복이 사라져요.
+
+## 다음 편 예고
+
+여기까지가 "경계 + chunk + 워터폴 회피" 의 메커니즘이에요. 마지막 편에서는 이 스트리밍 구조가 실제 로딩 UX 와 Core Web Vitals 에 어떻게 반영되는지 봐요. LCP 요소를 경계 안에 두면 벌어지는 일, 스켈레톤이 CLS 를 일으키는 순간, 그리고 리버스 프록시와 Safari 가 스트리밍을 막는 지점까지요.
+
+<References
+  items={[
+    {
+      id: "nextjs-streaming",
+      title: "Next.js - Streaming",
+      href: "https://nextjs.org/docs/app/guides/streaming",
+      description: "chunked transfer encoding, static shell, push dynamic access down 원칙",
+    },
+    {
+      id: "nextjs-fetching",
+      title: "Next.js - Fetching Data",
+      href: "https://nextjs.org/docs/app/getting-started/fetching-data",
+      description: "순차 vs 병렬 fetch, fetch memoization, React.cache 동작",
+    },
+    {
+      id: "nextjs-loading",
+      title: "Next.js - `loading.js`",
+      href: "https://nextjs.org/docs/app/api-reference/file-conventions/loading",
+      description: "loading.tsx 가 감싸는 범위와 layout await 의 한계",
+    },
+  ]}
+/>

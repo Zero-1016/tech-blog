@@ -1,0 +1,107 @@
+---
+title: "스켈레톤은 왜 껌뻑거리는가"
+description: "fallback 하나 추가했더니 LCP가 뒤로 밀렸어요. 경계 위치를 다시 재봐야 해요."
+date: 2026-04-15
+tags: ["React", "Next.js", "React Server Components", "성능", "Suspense"]
+series: "Suspense 경계로 설계하는 Streaming SSR"
+seriesOrder: 3
+published: true
+---
+
+[2편](/posts/streaming-html-chunks)까지 경계 설계와 스트리밍 메커니즘을 정리했어요. 실제 프로덕션에 올려놓고 [Lighthouse](https://developer.chrome.com/docs/lighthouse) 돌려보면 의외의 숫자가 나와요. TTFB 는 확실히 좋아졌는데 LCP 는 오히려 뒤로 밀리고, 스켈레톤이 본 콘텐츠로 바뀌는 순간 CLS 가 튀는 거예요. 경계를 잘 그었다고 Web Vitals 가 자동으로 좋아지진 않거든요. 오히려 악화되는 축이 있어요.
+
+## 스트리밍이 Web Vitals 를 바꾸는 방식
+
+[Next.js](https://nextjs.org) Streaming 가이드의 "Streaming and Web Vitals" 섹션이 각 지표가 어떻게 영향받는지 하나씩 짚어놨어요.<Cite id="nextjs-streaming" /> 핵심을 요약하면 이래요.
+
+**TTFB 와 FCP** 는 거의 항상 좋아져요. 데이터 fetch 지연이 shell 전송과 분리되면서, 첫 바이트가 빨리 나가요. 브라우저도 첫 페인트를 빨리 그릴 수 있고요. 스트리밍이 "무조건 잘해주는" 축이에요.
+
+**INP** 도 개선 쪽이에요. 각 Suspense 경계는 하이드레이션 단위거든요. 경계 없이 한 덩어리면 전체 페이지가 한 번에 블로킹 pass 로 하이드레이트되는데, 경계가 있으면 "selective hydration" 으로 사용자가 상호작용하는 영역이 먼저 상호작용 가능해져요.
+
+반면 **LCP 와 CLS** 는 경계 배치에 따라 오히려 나빠질 수 있어요. 이 둘이 튜닝의 실제 주제예요.
+
+## LCP 요소를 경계 안에 두지 말 것
+
+LCP 는 뷰포트에서 가장 큰 페인트 요소가 그려진 시점이에요. 이게 보통 히어로 이미지나 첫 화면의 제목이죠.
+
+문제는 간단해요. **LCP 요소가 Suspense 경계 내부에 있으면, 그 경계가 resolve 될 때까지 페인트가 일어나지 않아요.** 경계 내부는 fallback (스켈레톤) 으로 그려지고, 데이터가 도착한 다음에야 본 콘텐츠가 그려지니까요. LCP 시점이 통째로 뒤로 밀려요.
+
+<Callout variant="warning">
+히어로 이미지를 `<Suspense>` 로 감싼 상품 상세 페이지에서 LCP 가 2.4s -> 4.1s 로 악화된 사례가 흔해요. 스트리밍이 켜져 있어서 TTFB 는 400ms 였는데, 히어로 경계가 resolve 되는 시간이 통째로 LCP 에 얹혔거든요.
+
+</Callout>
+
+해법은 두 가지예요. 하나는 **LCP 요소를 shell 바깥으로 빼는 것**. fetch 와 독립적으로 렌더할 수 있는 정적 이미지라면, `<Suspense>` 바깥에 두면 shell 의 첫 chunk 에 포함돼서 즉시 페인트돼요. 다른 하나는 **preload 힌트를 first chunk 에 주입**하는 거예요. `next/image` 에 `priority` 를 달면 `<link rel="preload">` 가 HTML 첫 chunk 에 들어가서, 이미지가 경계 안에 있더라도 브라우저가 다운로드를 미리 시작해요.
+
+어느 쪽이든 원칙은 하나예요. **LCP 요소는 경계의 "확실히 바깥" 이나 "즉시 preload 가능한 위치" 에 놓아야 해요**. 경계 안쪽에 두고 방치하면 스트리밍이 LCP 를 악화시키는 구조예요.
+
+## 스켈레톤과 CLS
+
+CLS 는 레이아웃이 예기치 않게 흔들리는 양이에요. 스켈레톤 fallback 이 본 콘텐츠로 교체되는 순간이 CLS 를 만들 최적의 조건이거든요.
+
+스켈레톤을 작게 그려놓고 본 콘텐츠가 훨씬 크면 교체 시점에 아래 요소들이 밀려요. 반대로 너무 크게 잡으면 공백 영역이 보이다가 쑥 줄어들고요. 어느 쪽이든 reflow 가 발생해요.
+
+```tsx
+function FeedSkeleton() {
+  return (
+    <div className="min-h-[640px]">
+      <div className="h-40 bg-neutral-200 rounded" />
+      <div className="mt-4 h-40 bg-neutral-200 rounded" />
+      <div className="mt-4 h-40 bg-neutral-200 rounded" />
+    </div>
+  );
+}
+```
+
+`min-h` 로 컨테이너 높이를 고정하는 게 제일 간단한 방어예요. 본 콘텐츠가 이 범위 안에 들어오면 교체 시점에 바깥 요소가 안 밀리거든요. 각 스켈레톤 카드의 높이도 실제 데이터 카드와 비슷하게 맞추는 게 이상적이에요.
+
+하나 더 있어요. 스켈레톤이 "너무 잘 만들어져서" 본 콘텐츠처럼 보이면, 독자가 짧은 순간이지만 실제 UI 라고 착각하다가 바뀌어버려요. 껌뻑이는 느낌의 정체가 이거예요. 실제 콘텐츠와 **시각적으로 구분되는** 스켈레톤이 UX 적으로는 더 편해요. 색 대비를 낮추고, 실제 폰트·아이콘은 빼고, "이건 로딩 중" 이라는 신호를 시각적으로 남기는 거죠.
+
+## 스트리밍을 막는 인프라
+
+코드를 다 맞춰놓고도 스트리밍이 안 먹을 때가 있어요. 이건 애플리케이션 레이어가 아니라 그 아래 인프라에서 버퍼링이 일어나는 경우예요. [Next.js](https://nextjs.org) 공식도 이 지점을 별도로 경고해요.<Cite id="nextjs-streaming" />
+
+대표적인 원인들은 이런 것들이에요. [nginx](https://nginx.org) 같은 리버스 프록시는 기본적으로 응답을 버퍼링하는데, `X-Accel-Buffering: no` 헤더를 응답에 붙이거나 `proxy_buffering off` 로 꺼야 해요. CDN 도 동일한 버퍼링이 있고, 제공자별로 설정이 달라요. 서버리스 환경 (특히 [AWS Lambda](https://aws.amazon.com/lambda)) 은 response streaming 모드를 명시적으로 켜야 하고, gzip/brotli 압축도 버퍼 크기에 따라 chunk 경계가 섞일 수 있어요.
+
+<Callout variant="info">
+Safari 와 WebKit 기반 브라우저는 첫 **1024 바이트** 가 도착할 때까지 렌더를 미루는 경향이 있어요. 개발 중에 "왜 Safari 에서만 스트리밍 효과가 안 보이지?" 싶으면 이 버퍼가 원인일 가능성이 커요. shell 이 1024 바이트를 확실히 넘도록 하면 도와줘요.
+
+</Callout>
+
+그리고 한 가지 주의할 게 있어요. **스트리밍이 시작되면 HTTP 상태 코드를 바꿀 수 없어요.** 첫 chunk 가 나간 시점에 이미 200 으로 응답이 시작된 거라, 중간에 `notFound()` 나 `redirect()` 가 일어나도 상태 코드는 200 이에요. Next.js 는 이 경우 `<meta name="robots" content="noindex">` 를 inline 으로 주입하거나 클라이언트 사이드 리다이렉트로 처리해요. SEO 가 중요한 페이지라면 데이터를 shell 단계에서 먼저 검증하는 쪽이 안전해요. 이런 식의 렌더 비용 트레이드오프는 [가상 리스트가 DOM에서 덜어내는 것들](/posts/virtual-list-dom-cost)처럼, 어떤 비용을 어디로 옮기느냐의 문제로 돌아와요.
+
+## 시리즈를 마치며
+
+경계를 어디 둘지 (1편), 그 경계가 어떻게 chunk 가 되는지 (2편), 그리고 이 모든 게 실제 UX 에 어떻게 반영되는지 (3편) 까지 봤어요. 스트리밍 SSR 은 "켜면 빨라지는 스위치" 가 아니에요. 경계 위치·데이터 시작 시점·fallback 크기·인프라 설정 이 네 가지가 같이 맞아야 이득이 나와요. 반대로 하나만 어긋나도 스트리밍이 있는 쪽이 없던 쪽보다 느리게 느껴질 수 있거든요.
+
+[Next.js](https://nextjs.org) 공식이 시리즈 전체를 관통하는 한 문장을 남겨뒀어요.
+
+<Callout variant="tip">
+"The key decisions are what to cache and where to place Suspense boundaries." - Next.js 공식 문서
+
+무엇을 캐시할지, 그리고 경계를 어디 둘지. 이 두 결정이 스트리밍 SSR 의 거의 모든 걸 결정해요. 나머지는 그 결정이 실제로 구현되게 만드는 세부예요.
+
+</Callout>
+
+<References
+  items={[
+    {
+      id: "nextjs-streaming",
+      title: "Next.js - Streaming",
+      href: "https://nextjs.org/docs/app/guides/streaming",
+      description: "Streaming and Web Vitals 섹션과 인프라 주의사항 원문",
+    },
+    {
+      id: "nextjs-loading",
+      title: "Next.js - `loading.js`",
+      href: "https://nextjs.org/docs/app/api-reference/file-conventions/loading",
+      description: "스트리밍 중 상태 코드 200 고정과 notFound/redirect 처리",
+    },
+    {
+      id: "react-suspense",
+      title: "React - `<Suspense>`",
+      href: "https://react.dev/reference/react/Suspense",
+      description: "경계 내부의 fallback 동작과 selective hydration 전제",
+    },
+  ]}
+/>
