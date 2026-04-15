@@ -52,7 +52,7 @@ export function OverflowTags({ tags }: OverflowTagsProps) {
       <div
         ref={measureRef}
         aria-hidden
-        className="pointer-events-none invisible absolute flex gap-1.5"
+        className="pointer-events-none invisible absolute flex gap-1.5 max-w-full overflow-hidden"
       >
         {tags.map((tag) => (
           <span key={tag} className="whitespace-nowrap rounded-md bg-code-bg px-2 py-0.5 text-xs">
