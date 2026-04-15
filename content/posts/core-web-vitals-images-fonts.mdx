@@ -1,0 +1,163 @@
+---
+title: "이미지와 폰트만 잡아도 점수가 돌아온다"
+description: "이미지에 치수만 적어도 레이아웃이 안 밀려요. 웹폰트 교체는 조금 더 까다롭고요."
+date: 2026-04-15
+tags: ["성능", "CSS", "웹폰트"]
+published: true
+---
+
+로컬에선 Lighthouse 점수가 다 초록색이었어요. 배포한 다음 실제 모바일에서 같은 페이지를 열어봤더니 LCP 3.8초에 CLS 0.22, 초록색이 주황색으로 바뀌는 순간이 옵니다. Network 탭을 뒤지다 보면 범인은 거의 둘 중 하나예요. 이미지 아니면 폰트.
+
+## LCP와 CLS가 같은 자리에서 무너진다
+
+정의부터 짧게요. LCP(Largest Contentful Paint)는 뷰포트에 나타난 가장 큰 콘텐츠가 렌더된 시점이에요. Chrome은 2.5초를 기준으로 두고, 4초가 넘어가면 Poor로 분류해요.<Cite id="web-dev-lcp" /> 여기서 "가장 큰 콘텐츠"의 후보는 대부분 이미지예요. `<img>`, `<svg>` 안의 `<image>`, 포스터가 달린 비디오, `background-image`로 들어간 `url()`, 그리고 이미지가 없을 때 비로소 가장 큰 텍스트 블록이 후보가 돼요.
+
+CLS(Cumulative Layout Shift)는 페이지가 살아있는 동안 발생한 가장 큰 레이아웃 이동 burst의 점수예요. 0.1 이하면 Good, 0.25를 넘으면 Poor. 갑자기 요소가 밀려나서 사용자가 다른 버튼을 누르는 상황을 잡는 지표예요.<Cite id="web-dev-cls" />
+
+두 지표가 다른 문제를 보는 것 같지만, 실제로 점수를 떨어뜨리는 범인은 겹쳐요. 히어로 이미지가 늦게 오면 LCP가 나빠지죠. 그 이미지에 `width`/`height`가 없으면 뒤에 있던 콘텐츠가 밀려서 CLS도 같이 나빠져요. 웹폰트가 나중에 교체될 때 줄 높이가 달라지면 CLS가 한 번 더 튀어요.
+
+## LCP 이미지는 늦게 와서 늦는다
+
+LCP 이미지가 늦는 가장 흔한 원인은 발견(discovery)이 늦는 거예요. 브라우저가 HTML을 파싱하다 `<img src>`를 만나야 요청이 나가는데, 그 이미지가 CSS에서만 참조되거나 JS로 나중에 삽입되면 발견 시점이 몇백 ms씩 밀려요. 프리로드 스캐너가 `src`/`srcset`은 잡아주지만, CSS `background-image`는 못 잡아요.
+
+여기서 쓸 수 있는 게 `fetchpriority="high"`입니다. 이 이미지가 LCP 후보임을 브라우저에 미리 알리는 속성이에요.<Cite id="web-dev-optimize-lcp" />
+
+```html
+<img src="/hero.webp" alt="..." fetchpriority="high" width="1200" height="630" />
+```
+
+렌더 파이프라인이 왜 이런 우선순위까지 챙겨야 하는지는 [렌더링 단계를 풀어낸 글](/posts/transform-vs-top-left-rendering-pipeline)에서 짚어봤어요. Paint는 리소스가 제때 도착한 뒤에야 의미 있는 단계거든요.
+
+CSS에서만 참조되는 히어로 이미지이거나, JS로 삽입되지만 확실히 LCP가 될 게 뻔한 경우엔 `preload`까지 같이 씁니다.
+
+```html
+<link
+  rel="preload"
+  as="image"
+  href="/hero.webp"
+  type="image/webp"
+  fetchpriority="high"
+/>
+```
+
+반대로 절대 하면 안 되는 실수가 하나 있어요. LCP 이미지에 `loading="lazy"`를 다는 것. 리스트 아래쪽 이미지에 `lazy`를 기본으로 붙이는 습관이 생기면, 첫 화면 안쪽 히어로 이미지에까지 `lazy`가 따라붙는 사고가 자주 일어나요.
+
+<Callout variant="warning">
+"Never lazy-load your LCP image." (web.dev Optimize LCP)
+
+뷰포트 안쪽 이미지에 `lazy`를 달면 브라우저가 "지금 당장 안 불러도 되는 리소스구나" 하고 우선순위를 낮춰요. 그 한 줄짜리 속성 때문에 LCP가 1~2초 뒤로 밀리는 게 드물지 않아요.
+</Callout>
+
+여기에 AVIF/WebP로 포맷을 바꿔 바이트 수를 줄이고, `srcset`/`sizes`로 뷰포트마다 적정 크기만 내려주면 LCP는 대체로 기준선 아래로 내려갑니다.
+
+## CLS의 절반은 이미지 치수 누락
+
+CLS를 만드는 건 대체로 공간을 예약하지 않은 요소예요. 이미지가 로드되기 전까지 브라우저는 그 자리가 얼마나 차지할지 모르니 0x0으로 그려뒀다가, 이미지가 도착하면 그 자리를 갑자기 벌립니다. 아래에 있던 문단이 쭉 밀리고, CLS는 그 밀린 거리에 비례해서 쌓여요.
+
+그래서 `<img>`에는 `width`와 `height`를 적어둡니다.
+
+```html
+<img src="/thumb.webp" alt="..." width="640" height="360" />
+```
+
+픽셀이 정확히 맞아야 하는 건 아니에요. 현대 브라우저는 이 두 값에서 기본 aspect ratio를 계산해 공간을 먼저 잡아두거든요.<Cite id="web-dev-optimize-cls" /> 그 다음 CSS에서 실제 크기를 맞추면 비율이 유지된 채로 자리가 비어 있다가, 이미지가 도착해도 레이아웃이 움직이지 않아요.
+
+```css
+img {
+  height: auto;
+  width: 100%;
+}
+```
+
+광고 슬롯이나 iframe 임베드처럼 사전에 고정 치수를 못 정하는 경우엔 `aspect-ratio`로 최소 공간을 잡아둡니다.
+
+```css
+.embed-slot {
+  aspect-ratio: 16 / 9;
+  min-height: 200px;
+}
+```
+
+빈 공간이 보기 흉하다고 그냥 비워둘 이유가 없어요. 로딩 스켈레톤을 깔든, 배경색만 두든, 공간 자체는 먼저 잡아두는 게 CLS에는 정답이에요.
+
+## 폰트가 바꾸는 건 글자 모양만이 아니다
+
+CLS의 나머지 절반은 폰트가 만들어요. 시스템 폰트로 한 번 그린 다음 웹폰트가 도착하면 다시 그리는데, 두 폰트의 x-height와 줄 높이가 다르면 문단 전체가 미세하게 밀려요. 이게 모이면 CLS 0.1~0.2까지도 쉽게 올라가요.
+
+첫 번째 레버는 `font-display`입니다. `block`, `swap`, `fallback`, `optional` 네 가지가 있어요.<Cite id="mdn-font-display" /> `block`은 짧은 시간 글자를 아예 감추는 FOIT 방식이에요. 중요 타이포그래피가 있는 화면에 씁니다. `swap`은 fallback을 바로 보여주고 웹폰트가 오면 갈아끼우는 FOUT 방식이고요. 제일 빨라 보이지만 갈아끼우는 순간 CLS가 잘 생겨요. `fallback`은 짧은 block 다음에 짧은 swap 창이 있어서 그 창 안에 못 오면 영구 fallback으로 가요. 마지막으로 `optional`은 아주 짧은 block 뒤에 swap 창 자체가 없어요. 첫 페인트에 못 맞추면 이번 방문에는 웹폰트를 포기하는 대신, CLS는 거의 0이에요.
+
+직관적으로는 `swap`이 제일 안전해 보이지만, Core Web Vitals 관점에서 CLS를 우선 잡아야 한다면 `optional`이 현실적인 선택일 때가 많아요. 웹폰트가 첫 방문에선 안 뜨더라도, 캐시에 올라간 다음 방문부터는 정상적으로 적용되거든요.
+
+두 번째 레버는 메트릭 오버라이드예요. `swap`을 쓰면서도 CLS를 거의 없애는 방법입니다. fallback 폰트의 x-height와 라인 메트릭을 웹폰트에 맞춰 미리 조정하면, 교체가 일어나도 레이아웃이 안 밀려요.
+
+```css
+@font-face {
+  font-family: "Pretendard-fallback";
+  src: local("Apple SD Gothic Neo"), local("Noto Sans KR");
+  size-adjust: 103%;
+  ascent-override: 90%;
+  descent-override: 22%;
+  line-gap-override: 0%;
+}
+```
+
+`size-adjust`는 fallback 폰트 전체를 비율로 늘이거나 줄이는 디스크립터예요. 웹폰트의 ex-height에 맞추는 용도입니다.<Cite id="mdn-size-adjust" /> `ascent-override`와 `descent-override`는 라인 상단/하단 여백을 강제로 맞춰줘요. 이렇게 fallback을 웹폰트 모양에 가깝게 깎아두면, swap이 일어나도 독자가 "뭔가 움직였다"고 느끼지 못해요.
+
+세 번째는 폰트 preload예요. 핵심 폰트 파일 하나를 초기 HTML에서 미리 받아두면, 첫 페인트 안에 웹폰트가 도착할 확률이 올라갑니다.
+
+```html
+<link
+  rel="preload"
+  as="font"
+  href="/fonts/Pretendard.woff2"
+  type="font/woff2"
+  crossorigin
+/>
+```
+
+한 파일만 preload하는 게 중요해요. 여러 weight를 전부 preload하면 초기 대역폭을 과하게 먹어서 오히려 LCP를 늦춰요. 본문에서 가장 많이 쓰이는 weight 하나만 끌어올리는 걸 기본으로 두세요.
+
+## 이미지와 폰트를 잡고 나면
+
+여기까지 손을 대면 Lighthouse 점수의 상당 부분은 되돌아와요. 남는 건 대체로 렌더링 비용이에요. 수천 행짜리 리스트가 DOM을 눌러서 인터랙션을 막는 문제는 [가상 리스트로 DOM을 덜어내는 방법](/posts/virtual-list-dom-cost)에서 짚어봤고, 애니메이션이 매 프레임 레이아웃을 다시 계산할 때 [`will-change`로 레이어를 올리는 대가](/posts/css-will-change)도 공짜는 아니에요.
+
+LCP와 CLS는 측정 전에 습관이에요. 이미지 치수를 적어두는 것만으로 CLS는 눈에 띄게 줄어들고, LCP 이미지에 `lazy`가 따라붙지 않았는지 점검하고 나면 LCP도 함께 내려와요. 여기에 웹폰트 메트릭을 맞춰두는 한 블록만 더하면, 배포 직후 Lighthouse가 갑자기 주황색이 되는 일은 드물어집니다.
+
+<References items={[
+  {
+    id: "mdn-font-display",
+    title: "MDN - @font-face font-display",
+    href: "https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face/font-display",
+    description: "block, swap, fallback, optional 네 전략의 타임라인 정의"
+  },
+  {
+    id: "mdn-size-adjust",
+    title: "MDN - @font-face size-adjust",
+    href: "https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face/size-adjust",
+    description: "fallback 폰트 메트릭을 웹폰트에 맞추는 디스크립터"
+  },
+  {
+    id: "web-dev-lcp",
+    title: "web.dev - Largest Contentful Paint",
+    href: "https://web.dev/articles/lcp",
+    description: "LCP 정의, 기준값 2.5초/4초, 후보 요소 규칙"
+  },
+  {
+    id: "web-dev-optimize-lcp",
+    title: "web.dev - Optimize LCP",
+    href: "https://web.dev/articles/optimize-lcp",
+    description: "fetchpriority, preload, lazy 금지 등 실전 최적화"
+  },
+  {
+    id: "web-dev-cls",
+    title: "web.dev - Cumulative Layout Shift",
+    href: "https://web.dev/articles/cls",
+    description: "CLS 정의, 기준값 0.1/0.25, burst 계산 방식"
+  },
+  {
+    id: "web-dev-optimize-cls",
+    title: "web.dev - Optimize CLS",
+    href: "https://web.dev/articles/optimize-cls",
+    description: "이미지 width/height 속성, aspect-ratio, 폰트 preload 구체 처방"
+  }
+]} />
