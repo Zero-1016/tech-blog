@@ -317,6 +317,13 @@ ls content/posts/<slug>.mdx 2>/dev/null || ls content/posts/*/<slug>.mdx 2>/dev/
 
 - 본문 주장 뒤에 공백 없이: `...지원됩니다.<Cite id="mdn-word-break" />`
 - **한 문단에 최대 1개**
+- **JSX 컴포넌트 직후 단독 라인에 두지 말 것** (확정 위반, §RULE-CITE):
+  Callout/AnimatedStep/CodePlayground 같은 JSX 블록을 인용 근거로 쓸 때,
+  Cite 는 그 JSX 블록 **앞 본문 단락의 문장 끝**에 인라인으로 붙입니다.
+  JSX 닫는 태그 + 빈 줄 + `<Cite />` 단독 라인 패턴은 렌더링 시 ⓘ 아이콘이
+  외롭게 떠서 시각적으로 끊겨요.
+  - ❌ `</Callout>` + 빈 줄 + `<Cite id="..." />` (단독 라인, 확정 위반)
+  - ✅ `본문 문장.<Cite id="..." />` + 빈 줄 + `<Callout>...</Callout>`
 - **기본 원칙 (권고)**: References items 각 항목마다 본문에 대응 Cite를 하나 이상 붙이는 것을 기본으로 합니다. 해당 사실·인용을 처음 언급하는 지점에 배치. 자연스러운 문장 흐름을 깨뜨리면 생략 가능 (SHOULD, §RULE-CITE).
 
 ### Step 7: 마무리

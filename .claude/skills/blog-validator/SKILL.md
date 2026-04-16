@@ -542,7 +542,40 @@ grep -oE '<Cite\s+id="([^"]+)"' <file> | sed 's/.*id="//;s/"//'
 - **한 문단에 `<Cite>` 2개 이상?** 한 문단을 빈 줄 기준으로 나누고 각 문단에
   `<Cite>` 개수 세기. 2 이상이면 에러.
 
-**자동 수정 불가** — id 오타는 의미 판단 필요, 한 문단에 2개는 내용 재구성 필요.
+- **JSX 컴포넌트 직후 단독 라인 Cite?** (§RULE-CITE 확정 위반) — `</Callout>`,
+  `</AnimatedStep>`, `</CodePlayground>`, 또는 self-closing `<AnimatedStep ... />`,
+  `<CodePlayground ... />` 같은 JSX 블록이 닫힌 다음 빈 줄 1~2개를 사이에 두고
+  `<Cite ... />` 가 단독으로 한 줄에 있으면 위반. 렌더링 시 ⓘ 아이콘만 외롭게
+  떠서 본문 맥락에서 끊겨 보임.
+
+  검출:
+
+  ```bash
+  awk '/<\/Callout>|<\/AnimatedStep>|<\/CodePlayground>|<AnimatedStep[^>]*\/>|<CodePlayground[^>]*\/>/{flag=1;next}
+       flag && /^$/{next}
+       flag && /^<Cite[^>]*\/>$/{print FILENAME":"NR":"$0; flag=0; next}
+       flag{flag=0}' <file>
+  ```
+
+  매칭되면 **사용자 확인 카테고리** 로 분류 (자동 수정 불가 — 어느 본문 단락 끝에
+  옮길지 의미 판단 필요). 제안 형식:
+
+  ```
+  [§RULE-CITE 단독 라인] L90 <Cite id="mdn-ssg" />
+
+  문제: Callout 닫는 태그 직후 단독 라인에 Cite 가 있어요. 렌더 시 ⓘ 아이콘만
+  외롭게 떠요.
+
+  수정 옵션:
+  A) 직전 JSX 블록(Callout) 위의 본문 단락 마지막 문장 끝에 인라인으로 이동
+     예: "...정적 파일로 저장해둬요. 이후 모든 요청자에게 같은 HTML을 CDN
+     edge에서 그대로 서빙해요.<Cite id="mdn-ssg" />"
+  B) Cite 제거 (References items 의 다른 곳에서 이미 인용된 경우)
+  C) 유지 (일부러 둔 경우)
+  ```
+
+**자동 수정 불가** — id 오타는 의미 판단 필요, 한 문단에 2개는 내용 재구성 필요,
+단독 라인 Cite 는 어느 본문 단락 끝에 붙일지 위치 판단 필요.
 
 ### 4-3. 내부 링크 grep + glob 실존 검증 (§RULE-LINK-PATH)
 

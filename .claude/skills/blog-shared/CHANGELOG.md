@@ -5,6 +5,49 @@
 
 ---
 
+## 2026-04-16 15:36
+
+### SHARED.md §RULE-CITE · blog-validator Phase 4-2 · blog-writer Step 6
+
+**변경**: `<Cite />` 가 JSX 컴포넌트 직후 단독 라인에 오는 패턴을 확정 위반으로
+명시하고, validator 검출 로직 + writer 가이드를 보강.
+
+- `SHARED.md` §RULE-CITE: "본문 단락의 문장 끝에 인라인" 명시 + "JSX 컴포넌트
+  직후 단독 라인 금지" 조항 추가 + 올바른/잘못된 예시 mdx 블록 추가.
+- `blog-validator` Phase 4-2: Callout/AnimatedStep/CodePlayground 닫힘 → 빈 줄
+  → 단독 `<Cite />` 패턴을 awk 로 검출, 사용자 확인 카테고리로 분류 (자동 수정
+  불가 — 어느 본문 단락 끝에 옮길지 의미 판단 필요).
+- `blog-writer` Step 6: `<Cite>` 사용 가이드에 "JSX 컴포넌트 직후 단독 라인에
+  두지 말 것" 항목 + ❌/✅ 예시 추가.
+
+**이유**: writer 가 `content/posts/rendering-strategies-map.mdx` 작성 시 4개 섹션
+(CSR/SSR/SSG/Hydration) 에서 모두 Callout 닫고 빈 줄 + `<Cite />` 단독 라인
+패턴을 만듦. 렌더링 시 ⓘ 아이콘이 본문 텍스트 없이 외롭게 떠서 어색함. 기존
+§RULE-CITE 의 "텍스트 바로 뒤 공백 없이" 표현이 모호해서 writer 가 "Callout
+인용문 = 텍스트" 로 해석할 여지가 있었음. 본문 단락의 문장과 JSX 블록을 명확히
+구분.
+
+**수정 유형**: 기존 규칙 강화 (예시 mdx 블록 추가) + validator 검출 1건 추가 +
+writer 가이드 1건 추가.
+
+**영향 범위**:
+
+- `SHARED.md` 참조하는 다른 skill 들은 자동 반영 (blog-validator, blog-writer 가
+  각자 영역에서 새 규칙 인지).
+- 기존 글 영향: `content/posts/rendering-strategies-map.mdx` L90, L157 두 곳
+  (이번 세션에서 사용자가 글 수정 진행 중). 다른 글 7건은 정상 패턴 (텍스트 끝
+  인라인) 사용 중이라 영향 없음.
+
+**백업**: `.backups/SHARED-20260416-153614.md`,
+`.backups/blog-validator-SKILL-20260416-153614.md`,
+`.backups/blog-writer-SKILL-20260416-153614.md`
+
+**재검증 결과**: rendering-strategies-map.mdx 의 단독 라인 Cite 2건 (L90, L157)
+은 사용자가 직접 본문 단락 끝으로 이동 예정. 다른 글은 재검증 불필요 (기존 패턴
+이미 정상).
+
+---
+
 ## 2026-04-15 20:17
 
 ### SHARED.md §FRONTMATTER
