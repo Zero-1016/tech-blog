@@ -69,3 +69,9 @@ content/posts/.tmp/
 
 # blog-validator 백업
 .claude/skills/blog-shared/.backups/
+# blog-write 로컬 로그
+content/tmp/*
+!content/tmp/.gitkeep
+
+# blog-write 의 blog-revise 호출 시 임시 저장
+content/posts/.tmp/
