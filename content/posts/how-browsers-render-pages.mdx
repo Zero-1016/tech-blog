@@ -1,0 +1,160 @@
+---
+title: "브라우저는 어떻게 화면을 그릴까"
+description: "HTML을 받은 브라우저는 바이트 덩어리부터 픽셀까지 여섯 단계를 거쳐요."
+date: 2026-04-16
+tags: ["브라우저", "렌더링", "성능"]
+published: true
+---
+
+DevTools Performance 탭을 열어보면 알록달록한 막대가 한가득 쌓여 있어요. 파란 막대는 Loading, 노란 막대는 Scripting, 보라색은 Rendering, 초록색은 Painting. 처음엔 이게 뭘 뜻하는지 감이 안 잡혔거든요. "왜 CSS 하나 바꿨는데 노란 막대 밑에 보라색 막대까지 깔리지?" 싶었죠. 알고 보면 각 색깔이 브라우저가 한 프레임을 그리는 단계에 대응해요. 그래서 단계를 알면 막대가 읽히기 시작합니다.
+
+## 바이트 한 덩어리가 화면이 되기까지
+
+서버가 보낸 HTML은 사실 문자열도 아니에요. TCP 패킷에 담겨 오는 **바이트(byte) 묶음** 입니다. 브라우저는 이 바이트를 받아 문자로 디코딩하고, 토큰으로 쪼개고, 노드로 만들고, 노드들을 묶어 DOM 트리를 세워요. 여기까지가 HTML 쪽 흐름이고, CSS도 거의 똑같은 경로를 병렬로 밟습니다.<Cite id="web-dev-object-model" /> DOM과 CSSOM이 합쳐져 Render Tree가 되고, 그 위에 Layout이 크기와 위치를 계산하고, Paint가 픽셀을 채우고, 마지막으로 Composite가 레이어를 합쳐 화면에 올려요.
+
+<AnimatedStep steps={[
+  { title: "Parsing", content: "HTML 바이트를 문자, 토큰, 노드 순으로 변환해 DOM 트리로 세워요. CSS도 나란히 파싱돼 CSSOM이 됩니다." },
+  { title: "Render Tree", content: "DOM과 CSSOM을 합쳐 화면에 실제로 그려질 노드만 모은 트리를 만들어요. display: none 은 여기서 빠집니다." },
+  { title: "Layout", content: "각 노드가 뷰포트의 어디에, 얼마만큼의 크기로 놓일지 계산해요. reflow라고도 불러요." },
+  { title: "Paint", content: "계산된 geometry 위에 색, 그림자, 텍스트 같은 픽셀을 채워 넣어요. 여러 레이어로 나눠서 그립니다." },
+  { title: "Composite", content: "완성된 레이어들을 GPU에서 올바른 순서로 합쳐 화면에 띄워요. 메인 스레드 밖에서도 돌 수 있습니다." }
+]} />
+
+이게 [MDN이 정리해 둔](https://developer.mozilla.org/en-US/docs/Web/Performance/Guides/How_browsers_work) Critical Rendering Path의 큰 그림이에요.<Cite id="mdn-how-browsers-work" /> 순서가 고정돼 있고, 어느 한 단계에서 뭔가가 막히면 뒷 단계도 줄줄이 밀려요. 그래서 각 단계가 언제 왜 막히는지를 아는 게 성능 튜닝의 출발점이 됩니다.
+
+## HTML 파싱과 DOM 트리
+
+HTML 파서는 5단계를 거쳐요. 바이트에서 문자로, 문자에서 토큰으로, 토큰에서 노드로, 노드에서 DOM 트리로.<Cite id="web-dev-object-model" /> 토큰 단계에서는 `<html>`, `<body>` 같은 태그가 시작/끝 토큰으로 쪼개지고, 노드 단계에서 각 토큰이 객체가 되면서 속성과 자식 정보가 붙습니다. 마지막에 이 노드들을 부모-자식으로 이어붙이면 DOM이 완성돼요.
+
+파서가 `<script>` 태그를 만나면 기본적으로 파싱을 멈춰요. JavaScript가 `document.write()` 같은 API로 DOM 구조를 바꿀 수 있기 때문에, 스크립트 실행이 끝나기 전엔 다음 토큰을 안전하게 이어붙일 수가 없거든요.<Cite id="chrome-inside-browser" /> 그래서 head에 큰 스크립트를 덩그러니 넣어두면 그 뒤의 HTML이 전부 대기열에 서요. `async` 는 다운로드와 실행을 비동기로 돌리고, `defer` 는 DOM 파싱이 끝난 뒤로 실행을 미룹니다.
+
+다만 파서가 막혀도 브라우저가 손을 놓는 건 아니에요. 별도의 **Preload Scanner** 가 문서를 먼저 훑어서 이미지, 스타일시트, 폰트, 후속 스크립트 같은 리소스를 미리 요청해 둡니다.<Cite id="mdn-how-browsers-work" /> 덕분에 네트워크 왕복 시간이 크게 줄죠.
+
+DOM이 커지면 뒷 단계 전체가 비싸져요. 수천 개 행을 한 번에 렌더링해야 하는 상황이라면 [가상 리스트로 DOM을 덜어내는 쪽](/posts/virtual-list-dom-cost)이 더 현실적입니다.
+
+## CSS가 렌더를 막는 이유
+
+CSS도 DOM과 똑같은 파이프라인을 타요. 바이트에서 문자, 토큰, 노드, 그리고 CSSOM. CSSOM은 셀렉터가 어느 요소에 매칭되는지, 최종 computed style이 뭔지를 담은 트리예요.<Cite id="web-dev-object-model" /> 여기서 재미있는 건 CSS가 **렌더 블로킹** 자원이라는 점입니다.
+
+[web.dev 가 설명하는](https://web.dev/articles/critical-rendering-path/render-blocking-css) 이유는 간단해요. 브라우저는 DOM과 CSSOM이 모두 준비돼야 Render Tree를 만들 수 있어요. CSSOM이 불완전한 상태로 그리기 시작하면 스타일이 적용되지 않은 채 화면이 번쩍였다가 바뀌는 FOUC(Flash of Unstyled Content)가 발생하거든요.<Cite id="web-dev-render-blocking-css" />
+
+<Callout variant="warning">
+"CSS is a render-blocking resource. Get it to the client as soon and as quickly as possible to optimize the time to first render." - web.dev
+
+CSS는 빨리 안 받으면 그냥 첫 페인트 자체가 안 나와요. 그래서 초기 CSS는 작게 쪼개서 우선 보내고, 당장 필요 없는 스타일은 뒤로 미뤄야 해요.
+
+</Callout>
+
+눈에 띄는 요령이 하나 있어요. 바로 `media` 속성입니다. `<link rel="stylesheet" href="print.css" media="print">` 처럼 조건을 걸면, 해당 미디어가 아닐 땐 다운로드는 하되 렌더를 막지 않아요.<Cite id="web-dev-render-blocking-css" /> 모바일 전용 스타일을 분리할 때 같은 기법을 쓸 수 있죠.
+
+**렌더 블로킹과 파서 블로킹은 다른 개념** 이라는 것도 기억해두세요. CSS는 렌더를 막지만 파서는 안 막고, 기본 `<script>` 는 둘 다 막고, `defer` 는 둘 다 안 막아요.
+
+## Render Tree는 보이는 것만 골라낸다
+
+DOM과 CSSOM이 준비되면 브라우저는 둘을 합쳐 Render Tree를 만들어요. 여기서 중요한 건 **실제로 화면에 보일 노드만 포함** 된다는 점입니다.<Cite id="web-dev-render-tree" /> `<head>` 안의 메타데이터나 `<script>` 태그는 당연히 빠지고, CSS로 숨긴 요소도 조건에 따라 취급이 달라져요.
+
+<Callout variant="info">
+"visibility: hidden is different from display: none. The former makes the element invisible, but the element still occupies space in the layout (that is, it's rendered as an empty box), whereas the latter (display: none) removes the element entirely from the render tree." - web.dev
+
+`display: none` 은 Render Tree에서 완전히 빠지기 때문에 자리도 차지하지 않아요. `visibility: hidden` 은 투명한 빈 박스로 남아서 자리를 그대로 차지하고요. 비슷해 보여도 뒷 단계에서 계산량이 달라집니다.
+
+</Callout>
+
+그래서 어떤 요소를 토글할 때 레이아웃을 건드리기 싫다면 `display` 를 쓰고, 공간은 유지한 채 눈에서만 없애고 싶다면 `visibility` 를 쓰는 식으로 구분하게 돼요. 둘 다 "숨긴다" 라고 뭉뚱그려 쓰다 보면 CLS 같은 지표에서 예상치 못한 이동이 잡히기도 합니다.
+
+## Layout에서 Composite까지
+
+Render Tree가 만들어졌으면 이제 세 단계가 빠르게 이어집니다. **Layout → Paint → Composite**.
+
+Layout(reflow)은 각 노드가 뷰포트 어디에 얼마만큼의 크기로 놓일지를 계산해요. 한 요소의 크기가 바뀌면 그 자식과 형제, 때로는 조상까지 다시 측정해야 해서 비쌉니다. 이미지에 width/height를 안 적어두면 로드된 뒤 크기가 결정되면서 뒷 요소들이 한꺼번에 밀리는 리플로우가 발생해요.<Cite id="mdn-how-browsers-work" />
+
+Paint는 계산된 geometry 위에 실제 픽셀을 채우는 단계예요. 색, 테두리, 그림자, 텍스트, 이미지 전부 여기서 래스터라이즈됩니다. 브라우저는 모든 요소를 한 장의 비트맵으로 그리지 않고 **여러 레이어로 나눠서** 그려요. `transform`, `opacity`, `will-change` 같은 속성이나 `position: fixed` 가 붙은 요소가 레이어 경계가 되죠.
+
+Composite는 이 레이어들을 GPU에서 올바른 순서로 합쳐 최종 화면을 만드는 단계예요. [Chrome 팀 설명](https://developer.chrome.com/blog/inside-browser-part3)에 따르면, Composite는 **compositor thread** 라는 별도의 스레드에서 돌기 때문에 메인 스레드가 JavaScript로 막혀 있어도 스크롤이나 합성 가능한 애니메이션은 계속 돌아갈 수 있어요.<Cite id="chrome-inside-browser" />
+
+<Callout variant="tip">
+"To ensure smooth scrolling and animation, everything occupying the main thread, including calculating styles, along with reflow and paint, must take the browser less than 16.67ms to accomplish." - MDN
+
+60fps를 맞추려면 한 프레임을 16.67ms 안에 뽑아야 해요. 메인 스레드에서 도는 스타일 계산, 리플로우, 페인트까지 다 이 예산 안에 들어가야 합니다.
+
+</Callout>
+
+CSS 속성마다 이 파이프라인의 **어느 단계에서 다시 출발하는지** 가 달라요. `width` 나 `top` 을 바꾸면 Layout부터 다시 뛰지만, `transform` 이나 `opacity` 는 Composite만 건드리고 끝나거든요. 이 차이를 더 깊게 파본 이야기는 [애니메이션이 끊기는 진짜 이유](/posts/transform-vs-top-left-rendering-pipeline)에 정리해뒀어요. 레이어가 언제 어떤 조건으로 분리되는지는 [will-change 글](/posts/css-will-change)에서 이어집니다.
+
+## 개발자가 이 흐름을 망가뜨리는 순간
+
+파이프라인은 대체로 브라우저가 알아서 최적화해요. 스타일 변경이 쌓이면 한 프레임 단위로 묶어서 한 번에 Layout을 돌리죠. 다만 이 배치를 개발자가 손수 깨뜨리는 경우가 있어요. 대표적인 게 **레이아웃 스래싱(Layout Thrashing)** 입니다.<Cite id="web-dev-layout-thrashing" />
+
+```js
+// 나쁜 예: 루프 안에서 쓰기-읽기 반복
+for (const box of boxes) {
+  box.style.width = box.offsetWidth + 10 + "px";
+}
+```
+
+이 코드가 위험한 이유는 `offsetWidth` 를 읽는 순간 브라우저가 **동기 레이아웃(forced synchronous layout)** 을 강제하기 때문이에요. 바로 앞에서 `style.width` 를 써서 Layout을 "더럽혔는데", 정확한 값을 돌려주려면 지금 당장 다시 계산해야 하거든요. 반복문 안에서 쓰기-읽기가 번갈아 나오면 매 이터레이션마다 Layout이 돌아요. 수십 개 박스만 돼도 한 프레임 예산이 순식간에 녹습니다.
+
+해결은 **읽기 먼저, 쓰기 나중** 패턴이에요.
+
+```js
+// 좋은 예: 읽기를 먼저 몰아서 한 번, 쓰기를 뒤에 몰아서 한 번
+const widths = boxes.map((b) => b.offsetWidth);
+boxes.forEach((box, i) => {
+  box.style.width = widths[i] + 10 + "px";
+});
+```
+
+읽기를 다 끝낸 다음 쓰기를 몰아하면 Layout이 한 프레임에 한 번만 돌아요. 같은 결과지만 브라우저가 배치 최적화를 할 수 있게 여지를 준 거죠.
+
+이 외에도 파이프라인을 무겁게 만드는 함정이 많아요. 이미지에 치수를 안 적어서 Layout이 밀리거나, 웹폰트가 뒤늦게 교체되면서 CLS가 튀거나, DOM이 너무 커서 Style 계산이 느려지는 경우 모두 같은 뿌리를 공유합니다. [이미지와 폰트 최적화 글](/posts/core-web-vitals-images-fonts)에서 그쪽 이야기를 이어 볼 수 있어요.
+
+---
+
+요약하면, 브라우저 렌더링은 "바이트 → DOM/CSSOM → Render Tree → Layout → Paint → Composite" 로 이어지는 한 줄 흐름이에요. 블랙박스처럼 보이지만 각 단계가 무슨 일을 하는지 알면, 왜 `<script>` 위치가 중요한지, 왜 CSS 한 줄이 첫 페인트를 바꾸는지, 왜 `transform` 이 부드러운지가 한꺼번에 풀립니다. DevTools의 그 알록달록한 막대들도 그제야 의미를 가지기 시작하죠.
+
+<References
+  items={[
+    {
+      id: "mdn-how-browsers-work",
+      title: "MDN - Populating the page: how browsers work",
+      href: "https://developer.mozilla.org/en-US/docs/Web/Performance/Guides/How_browsers_work",
+      description: "렌더링 전체 흐름, 60fps 16.67ms 예산, Preload Scanner 동작 참고",
+    },
+    {
+      id: "web-dev-crp",
+      title: "web.dev - Critical Rendering Path",
+      href: "https://web.dev/articles/critical-rendering-path",
+      description: "Critical Rendering Path 전체 개요와 시퀀스",
+    },
+    {
+      id: "web-dev-object-model",
+      title: "web.dev - Constructing the Object Model",
+      href: "https://web.dev/articles/critical-rendering-path/constructing-the-object-model",
+      description: "DOM/CSSOM 파싱 5단계와 CSS 파싱 비용 수치",
+    },
+    {
+      id: "web-dev-render-tree",
+      title: "web.dev - Render-tree Construction, Layout, and Paint",
+      href: "https://web.dev/articles/critical-rendering-path/render-tree-construction",
+      description: "Render Tree 구성, display: none 과 visibility: hidden 차이",
+    },
+    {
+      id: "web-dev-render-blocking-css",
+      title: "web.dev - Render-Blocking CSS",
+      href: "https://web.dev/articles/critical-rendering-path/render-blocking-css",
+      description: "CSS 렌더 블로킹 원리와 media 속성을 이용한 우선순위 조정",
+    },
+    {
+      id: "web-dev-layout-thrashing",
+      title: "web.dev - Avoid large, complex layouts and layout thrashing",
+      href: "https://web.dev/articles/avoid-large-complex-layouts-and-layout-thrashing",
+      description: "Forced Synchronous Layout과 Read first, then write 패턴",
+    },
+    {
+      id: "chrome-inside-browser",
+      title: "Chrome Developers - Inside look at modern web browser (part 3)",
+      href: "https://developer.chrome.com/blog/inside-browser-part3",
+      description: "Renderer Process의 파싱, Style, Layout, Paint, Composite 단계 서술",
+    },
+  ]}
+/>

@@ -1,0 +1,230 @@
+---
+title: "렌더링은 누가 언제 할 것인가"
+description: "SSR, SSG, ISR 이름은 익숙한데 막상 프로젝트에서 뭘 고를지 막힐 때가 많아요."
+date: 2026-04-16
+tags: ["웹 성능", "SSR", "SSG", "ISR", "Next.js"]
+published: true
+---
+
+SSR, CSR, SSG, ISR. 이름은 어디서든 본 것 같은데 막상 새 프로젝트에서 무엇을 고를지는 매번 멈칫하게 돼요. 저도 그랬거든요. 용어가 많아 보여도 기준은 둘뿐이에요. HTML을 **언제** 만들고 **누가** 만드느냐. 이 두 축만 잡으면 지도가 한 장에 들어와요.
+
+## 렌더링이라는 말이 가리키는 것
+
+서버에서 HTML을 조립하는 것도 렌더링, 브라우저가 상태 변화에 따라 DOM을 갱신하는 것도 렌더링이에요. 한 단어가 여러 층위에서 쓰이다 보니 SSR과 CSR의 경계가 흐릿해지거든요.
+
+근데 차이는 한 장이면 돼요. **언제** (시점)와 **누가** (주체). 시점은 빌드 타임, 요청 타임, 브라우저 타임 중 하나. 주체는 서버 또는 클라이언트. 이 격자 위에 MPA, SPA, SSR, CSR, SSG, ISR이 전부 얹혀 있어요.
+
+App Router에서 [`use client` 한 줄 때문에 경계를 고민해본 적이 있다면](/posts/use-client-boundary-and-overuse) 이 지도가 왜 필요한지 바로 와닿을 거예요. 경계가 꼬이기 전에 전체 그림이 있어야 하거든요.
+
+## MPA와 SPA, 페이지를 넘길 때 누가 받나
+
+먼저 패러다임 층위예요. 링크를 누르는 순간 다음 HTML이 어디서 오느냐는 질문이죠.
+
+MPA(Multi-Page Application)는 전통 웹이에요. 링크를 클릭하면 브라우저가 서버에 GET을 한 번 더 보내고, 서버는 완전히 새 HTML을 통째로 응답해요. 페이지가 깜빡이며 리로드 되는 그 순간이요. 스크롤 위치나 인풋 상태 같은 건 전부 초기화되죠.
+
+SPA는 그 동작을 JS로 흉내 내요.<Cite id="mdn-spa" />
+
+<Callout variant="info">
+"An SPA (Single-page application) is a web app implementation that loads only a single web document, and then updates the body content of that single document via JavaScript APIs such as Fetch when different content is to be shown." - MDN
+
+한 줄로 줄이면 HTML은 처음 한 번만 받고, 이후에는 JS가 body만 바꿔치기하는 구조예요. 브라우저 리로드가 없으니 화면이 깜빡이지 않고, 뒤로 가기 같은 브라우저 동작은 [History API](https://developer.mozilla.org/en-US/docs/Web/API/History_API)로 직접 맞춰줘야 해요.
+
+</Callout>
+
+그림으로 나란히 보면 이렇게 갈려요.
+
+<AnimatedStep
+  steps={[
+    {
+      title: "MPA 흐름",
+      content:
+        "링크 클릭 → 서버에 GET 요청 → 새 HTML 수신 → 브라우저가 전체 페이지 리로드. 헤더, 사이드바까지 전부 다시 그려져요.",
+    },
+    {
+      title: "SPA 흐름",
+      content:
+        "링크 클릭 → 클라이언트 라우터가 가로챔 → 필요한 데이터만 fetch → 현재 DOM의 일부만 교체. 공통 레이아웃은 그대로 남아요.",
+    },
+  ]}
+/>
+
+[React](https://react.dev), Angular, Vue 같은 프레임워크가 SPA 패턴을 대중화했고, [Next.js](https://nextjs.org) 이후의 풀스택 프레임워크는 MPA와 SPA를 한 앱 안에서 섞어 써요.
+
+## HTML을 언제 누가 만드나
+
+이제 시점 축이에요. 같은 SPA여도 HTML이 어디서 언제 조립되느냐에 따라 이름이 다시 갈려요.
+
+### CSR
+
+서버는 거의 빈 HTML, `<div id="root"></div>` 한 줄짜리 스켈레톤에 JS 번들 링크만 얹어 보내는 방식이에요. 화면은 브라우저가 JS를 실행하면서 그리죠.<Cite id="mdn-csr" />
+
+<Callout variant="info">
+"Any page update, including route transitions, do not require a full page reload. This makes the app feel faster and more responsive." - MDN
+
+한 번 번들이 내려오면 이후 인터랙션은 서버를 거치지 않으니 체감 속도가 빠른 편이에요. 대신 첫 진입에 빈 화면이 길게 보일 수 있어요. JS가 내려와서 돌기 전까지는 정말 빈 `<div>` 하나거든요.
+
+</Callout>
+
+### SSR
+
+요청이 들어오는 그 순간 서버가 HTML을 조립해서 내려줘요. 사용자가 누구인지, 지금 몇 시인지 같은 요청별 맥락을 바로 반영할 수 있죠.<Cite id="mdn-ssr" />
+
+<Callout variant="info">
+"The HTML file contains near-complete page content, and any JavaScript asset is only to enable interactivity." - MDN
+
+HTML 자체가 거의 완성돼 있어서 JS가 실패해도 본문은 읽히고, 검색 봇이나 소셜 미리보기 크롤러도 내용을 바로 긁어가요. JS는 인터랙티비티를 더하는 보조 역할이에요.
+
+</Callout>
+
+### SSG
+
+SSR과 발상이 같은데 시점이 달라요. SSR은 **요청할 때마다** 만들고, SSG는 **빌드할 때 한 번** 만들어 정적 파일로 저장해둬요. 이후 모든 요청자에게 같은 HTML을 CDN edge에서 그대로 서빙해요.<Cite id="mdn-ssg" />
+
+<Callout variant="info">
+"They are fast, secure, and easier to deploy, because they can be served from a CDN." - MDN
+
+서버 로직이 없으니 공격 표면이 작고, 전 세계에 복제된 CDN 캐시에서 응답이 밀리초 단위로 떨어져요. 단점은 반대편에 있어요. 콘텐츠가 바뀔 때마다 전체 사이트를 다시 빌드해 재배포해야 해요.
+
+</Callout>
+
+### ISR
+
+SSG의 속도 이점(정적 캐시 + CDN)을 유지하면서도, 콘텐츠가 바뀌면 리빌드 없이 슬쩍 갱신하는 하이브리드예요. Next.js가 대중화한 패턴이죠.<Cite id="nextjs-isr" />
+
+<Callout variant="info">
+"Incremental Static Regeneration (ISR) enables you to: Update static content without rebuilding the entire site, Reduce server load by serving prerendered, static pages for most requests..." - Next.js Docs
+
+대부분의 요청은 이미 만들어진 정적 HTML로 처리하고, 만료된 페이지만 뒤에서 조용히 다시 만들어 다음 요청부터 새 버전을 내주는 식이에요.
+
+</Callout>
+
+선언은 라우트 세그먼트 옵션 한 줄이면 돼요.
+
+```tsx
+// app/blog/[slug]/page.tsx
+export const revalidate = 60;
+```
+
+60초가 지나면 stale로 표시되고, 그 뒤 첫 요청은 stale 버전을 즉시 응답하면서 백그라운드에서 새 버전을 구워요. 응답 헤더의 `x-nextjs-cache` 값으로 `HIT` / `STALE` / `MISS` 를 직접 눈으로 확인할 수 있어요.
+
+<Callout variant="warning">
+"We recommend setting a high revalidation time. For instance, 1 hour instead of 1 second." - Next.js Docs
+
+revalidate를 1초로 당기면 거의 SSR에 가까워져서 SSG로 얻은 속도 이점이 사라져요. 실시간이 꼭 필요하면 dynamic rendering을 쓰고, 어느 정도 지연이 허용되면 시간을 넉넉히 잡는 게 좋아요.
+
+</Callout>
+
+네 전략을 시간축 위에 얹으면 이렇게 정리돼요.
+
+<AnimatedStep
+  steps={[
+    {
+      title: "빌드 시점",
+      content:
+        "SSG가 여기. 배포 전에 모든 페이지 HTML을 미리 만들어 CDN에 업로드해요.",
+    },
+    {
+      title: "요청 시점",
+      content:
+        "SSR이 여기. 사용자가 들어올 때마다 서버가 그 요청에 맞춰 HTML을 조립해요.",
+    },
+    {
+      title: "브라우저 시점",
+      content:
+        "CSR이 여기. 서버는 거의 빈 HTML만 보내고, 브라우저가 JS로 나머지를 그려요.",
+    },
+    {
+      title: "빌드 + 요청 하이브리드",
+      content:
+        "ISR이 여기. 빌드 시점 HTML을 캐시로 쓰되, 만료되면 요청을 트리거로 뒤에서 재생성해요.",
+    },
+  ]}
+/>
+
+## Hydration이 만드는 Uncanny Valley
+
+SSR, SSG, ISR 어느 쪽을 고르든 모던 React 앱이라면 하이드레이션(hydration)이라는 절차가 따라붙어요. 서버가 만든 HTML 위에 클라이언트 JS가 내려와서 이벤트 핸들러를 붙이고 상태를 맞추는 과정이에요. 이게 끝나기 전엔 버튼을 눌러도 반응하지 않아요. <Cite id="webdev-rendering" />
+
+<Callout variant="warning">
+"Server-side rendered pages can appear to be loaded and interactive, but can't actually respond to input until client-side scripts execute and event handlers attach." - web.dev
+
+화면엔 이미 버튼이 보여요. 근데 눌러도 묵묵부답인 순간이 있어요. HTML은 도착했지만 JS가 아직 안 붙은 타이밍, web.dev가 Uncanny Valley라고 부르는 구간이에요.
+
+</Callout>
+
+이 구간이 짧으면 사용자는 눈치채지 못해요. 길어지면 "버튼 망가졌나" 하고 새로고침을 하죠. INP(예전 FID를 대체한 응답성 지표)가 렌더링 전략 선택의 핵심 지표인 이유예요. 하이드레이션을 한 번에 털지 않고 Suspense 경계로 쪼개서 우선순위를 주는 방법은 [따로 정리한 적이 있어요](/posts/suspense-boundary-where).
+
+## 그래서 언제 뭘 고를까
+
+web.dev가 정답 대신 태도를 먼저 권해요.
+
+<Callout variant="warning">
+"When deciding on an approach to rendering, measure and understand what your bottlenecks are." - web.dev
+
+먼저 병목을 재보고 고르세요. 감으로 SSR부터 얹으면 서버 비용만 늘어나요.
+
+</Callout>
+
+그 위에 얹는 가이드라인은 이 정도예요.
+
+<Callout variant="info">
+**콘텐츠 중심 + 거의 안 바뀌는 사이트** (블로그, 문서, 랜딩)
+
+→ **SSG** 가 정답에 가까워요. CDN edge에서 즉시 서빙, 서버 비용 거의 없음.
+
+**콘텐츠가 대부분 정적인데 가끔 갱신** (상품 페이지, 기사)
+
+→ **ISR** 을 권해요. SSG 이점을 유지하면서 수동 리빌드 없이 갱신할 수 있어요.
+
+**요청별 맥락이 필요** (사용자 대시보드, 개인화 홈)
+
+→ **SSR** 또는 App Router의 dynamic rendering. HTML이 사용자마다 달라야 하니까요.
+
+**인터랙션이 메인이고 SEO 우선순위 낮음** (사내 툴, 에디터)
+
+→ **CSR** (SPA). 서버가 가벼워지고 첫 로드 후엔 네이티브 앱처럼 움직여요.
+
+</Callout>
+
+대부분의 상용 앱은 한 가지로 통일하지 않아요. 블로그 섹션은 SSG, 상품 목록은 ISR, 체크아웃은 SSR, 어드민 대시보드는 CSR 식으로 섞어 쓰죠. 페이지 단위로 골라 쓰는 게 요즘 프레임워크의 기본 모드예요. 지도가 머릿속에 있으면 "여긴 어떤 시점에 누가 만드는 게 맞지?" 하나만 물어보면 되거든요.
+
+<References
+  items={[
+    {
+      id: "mdn-spa",
+      title: "MDN - SPA (Single-page application) Glossary",
+      href: "https://developer.mozilla.org/en-US/docs/Glossary/SPA",
+      description: "SPA 정의와 MPA와의 대비 설명",
+    },
+    {
+      id: "mdn-ssr",
+      title: "MDN - SSR (Server-Side Rendering) Glossary",
+      href: "https://developer.mozilla.org/en-US/docs/Glossary/SSR",
+      description: "요청 시점 서버 HTML 생성과 하이드레이션 배경",
+    },
+    {
+      id: "mdn-csr",
+      title: "MDN - CSR (Client-Side Rendering) Glossary",
+      href: "https://developer.mozilla.org/en-US/docs/Glossary/CSR",
+      description: "빈 루트 div와 JS 번들 기반 클라이언트 렌더링",
+    },
+    {
+      id: "mdn-ssg",
+      title: "MDN - SSG (Static Site Generator) Glossary",
+      href: "https://developer.mozilla.org/en-US/docs/Glossary/SSG",
+      description: "빌드 시점 정적 생성과 CDN 서빙 특성",
+    },
+    {
+      id: "nextjs-isr",
+      title: "Next.js Docs - Incremental Static Regeneration",
+      href: "https://nextjs.org/docs/app/guides/incremental-static-regeneration",
+      description: "ISR 동작 방식과 revalidate 권장값",
+    },
+    {
+      id: "webdev-rendering",
+      title: "web.dev - Rendering on the Web",
+      href: "https://web.dev/articles/rendering-on-the-web",
+      description: "렌더링 스펙트럼 전체 비교와 Hydration Uncanny Valley 개념",
+    },
+  ]}
+/>
