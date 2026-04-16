@@ -1,0 +1,119 @@
+---
+title: "Bridge를 얇게, 스토어를 우회하기"
+description: "Bridge가 병목이 되고 심사가 느려지자, 개발자들이 찾은 두 가지 우회로예요."
+date: 2026-04-16
+tags: ["하이브리드 앱", "WebView", "React Native", "Flutter"]
+series: "앱 안에 웹을 심는 이야기"
+seriesOrder: 2
+published: true
+---
+
+지난 편에서 WebView와 Bridge가 같은 아이디어의 두 얼굴이라는 이야기를 했어요. JS 코드가 네이티브 능력을 빌려오는 구조죠. 다만 이 Bridge가 스크롤과 애니메이션에서 병목이 되면서 "어떻게 하면 건너갈 일을 줄일까" 하는 흐름이 시작돼요. 그 흐름이 Bridge를 얇게 만들려는 New Architecture고, 그 옆에서 CodePush가 심사 병목을 우회하는 길을 냈어요.
+
+## React Native의 New Architecture
+
+[React Native](https://reactnative.dev/)의 초기 Bridge가 병목이었다는 건 메인테이너들도 잘 알고 있었어요. 그래서 2010년대 후반부터 이걸 걷어내는 재설계가 시작됐죠. 그 결과물이 New Architecture예요.
+
+New Architecture는 크게 네 기둥으로 이루어져 있어요. JSI, TurboModules, Fabric, 그리고 Codegen이에요.
+
+<AnimatedStep
+  steps={[
+    {
+      title: "JSI",
+      content: "JavaScript 런타임과 네이티브를 C++ 레이어에서 직접 잇는 인터페이스예요. 메시지 직렬화 없이 함수 호출과 객체 참조가 가능해져요."
+    },
+    {
+      title: "TurboModules",
+      content: "JSI 위에서 돌아가는 새 네이티브 모듈 시스템이에요. 필요한 모듈만 lazy-load할 수 있어요."
+    },
+    {
+      title: "Fabric",
+      content: "같은 원리로 다시 쓴 렌더러예요. 동기 렌더링이 가능하고 레거시 Shadow Tree를 대체해요."
+    },
+    {
+      title: "Codegen",
+      content: "JS에서 쓸 네이티브 인터페이스를 타입 안전하게 생성해요. Bridge 시절의 문자열 계약 문제를 걷어내요."
+    },
+  ]}
+/>
+
+2023년 말에는 Bridgeless Mode가 React Native 0.73에 실험적으로 도입됐어요. 기존 Bridge를 완전히 끄고 돌아가는 모드죠. 2024년 10월 0.76 릴리스에서는 New Architecture가 기본값으로 승격됐고, 레거시 Bridge는 장기적으로 걷어내는 방향이 공식화됐어요.<Cite id="reactnative-new-arch" />
+
+## Flutter가 고른 다른 길
+
+React Native가 Bridge를 얇게 만드는 쪽을 택했다면, [Flutter](https://flutter.dev/)는 아예 다른 방향으로 갔어요. OS가 제공하는 UI 위젯을 감싸지 않고, 자체 위젯 세트로 모든 픽셀을 직접 그려요. 렌더러로는 Skia나 최신 Impeller를 앱과 함께 배포하고요.
+
+이 접근의 핵심은 브리지나 OS 위젯 랩핑이 아예 존재하지 않는다는 거예요. 네이티브 컴포넌트를 JS에서 조종하는 게 아니라, Flutter가 직접 그린 위젯이 화면에 나오는 거죠. Dart 코드는 ARM이나 x64 네이티브 머신코드로 컴파일되기 때문에 JS 엔진을 거치는 비용도 없어요.
+
+장점은 플랫폼 간 일관성이에요. iOS든 Android든 같은 렌더러로 같은 픽셀을 그리니까 "이 위젯이 플랫폼마다 조금씩 다르게 보이는" 문제가 거의 없어요. 단점도 있죠. OS의 기본 위젯이 주는 "네이티브 느낌"은 포기해야 해요. 접근성처럼 OS가 제공하는 기능도 Flutter가 다시 구현해야 하고요.
+
+<Callout variant="info">
+"Flutter minimizes those abstractions, bypassing the system UI widget libraries in favor of its own widget set." - Flutter Docs
+
+OS 위젯을 얇게 감싸는 대신, 자기 위젯으로 전체를 대체한다는 선언이에요. 브리지가 얇아질 수 없다면 아예 없애버리자는 접근이죠.<Cite id="flutter-architecture" />
+</Callout>
+
+## 스토어 심사를 우회하는 CodePush
+
+Bridge 병목과는 별개로, 하이브리드 앱이 풀어야 했던 또 하나의 문제가 있었어요. 스토어 심사 지연이에요.
+
+앱 스토어 심사는 평균 하루에서 며칠 걸려요. 저도 치명 버그 하나를 고쳐놓고 심사 대기 시켰다가 그 사이 유저 컴플레인이 쌓이는 걸 본 적 있어요. 운영 중에 찾은 치명적 버그를 그때까지 방치하기도, 이벤트 오픈 일정을 심사 통과에 묶어두기도 어려운 구조죠. 네이티브 바이너리는 못 바꿔도 JS 번들과 에셋만 원격에서 교체하면 되지 않을까. 이 아이디어에서 CodePush가 출발했어요.
+
+원조는 Microsoft가 만든 CodePush예요. React Native 번들과 에셋을 서버에 올려두고, 앱이 실행될 때 새 번들이 있는지 체크해 내려받는 구조죠. 다음 실행 때 새 번들이 적용되면서 스토어를 거치지 않고도 운영 중 수정이 가능해졌어요.
+
+Microsoft의 CodePush 서비스는 App Center 종료와 함께 2025년에 문을 닫았고, 지금은 [Expo](https://expo.dev/)의 EAS Update가 사실상 표준 자리를 차지했어요. 동작 방식은 크게 다르지 않아요. expo-updates 라이브러리가 앱 실행 시 서버에 "내 번들이 최신인가" 물어보고, 새 버전이 있으면 받아와서 다음 reload 때 적용해요.
+
+다만 CodePush로 바꿀 수 있는 범위에는 선이 있어요. 허용되는 건 JS 버그 수정과 UI 튜닝, 번역 수정 정도고, 새 네이티브 모듈 추가나 권한 변경 같은 건 안 돼요. EAS Update는 runtime version 정책으로 이 호환성을 관리해서, 네이티브 코드가 맞는 빌드에만 업데이트를 전송하죠.<Cite id="expo-eas-update" />
+
+## Apple 2.5.2의 경계
+
+CodePush 같은 원격 업데이트가 모든 앱 스토어에서 자유롭게 허용된 건 아니에요. Apple은 개발자 라이선스 협약에 한때 3.3.2 조항을 두고 "코드를 다운로드해 실행 가능하게 만드는 기능"을 제한했어요. 지금은 이 내용이 App Review Guidelines 2.5.2 "Self-Contained Apps" 조항으로 통합됐고요.
+
+<Callout variant="warning">
+"Apps should be self-contained in their bundles... nor may they download, install, or execute code which introduces or changes features or functionality of the app." - Apple App Review 2.5.2
+
+앱 번들은 스스로 완결돼야 하고, 앱의 기능을 새로 도입하거나 바꾸는 코드를 다운로드해 실행할 수는 없다는 뜻이에요. CodePush와 EAS Update가 JS 번들만 교체하는 선을 지키는 이유가 이 조항이에요.<Cite id="apple-review-guidelines" />
+</Callout>
+
+Expo 문서도 EAS Update를 설명하면서 "업데이트 자체가 스토어 가이드라인을 따라야 한다"고 명시해요. 새 기능을 심사 없이 밀어넣는 건 여전히 금지라는 거죠. 번역 수정이나 버그 픽스 같은 운영성 업데이트가 허용의 중심이에요.
+
+또 하나, 번들 다운로드에는 보안 리스크가 따라와요. 중간에서 번들이 변조되면 사용자 기기에서 임의의 JS가 돌 수 있거든요. EAS Update는 서명 검증과 HTTPS를 기본으로 두는데, 자체 CDN으로 OTA를 구현할 때는 이걸 직접 챙겨야 해요.
+
+## 시리즈 회고
+
+두 편을 통해 본 하이브리드 앱은 한 문장으로 정리할 수 있어요. 네이티브 바이너리 배포의 경직성을 각자 다른 레이어에서 우회하는 기술 조합이라는 거예요.
+
+WebView는 UI 전체를 웹으로 빼서 배포 자체를 서버로 옮겼어요. Web Bridge는 그렇게 빼낸 웹이 네이티브 능력을 잃지 않게 메시지 통로를 뚫었고요. React Native의 New Architecture는 그 Bridge가 병목이 되자 더 얇게 다시 썼고, Flutter는 Bridge 자체를 없애고 렌더러를 직접 만드는 길을 걸었어요. CodePush는 아예 스토어 심사 밖에서 업데이트하는 우회로를 열었죠.
+
+각 기술이 푸는 문제는 다르지만, 대가는 비슷해요. 네이티브와 멀어질수록 성능, 안정성, 보안, 스토어 정책 중 어딘가가 흔들려요. 이 trade-off를 어디까지 감수할지가 곧 모바일 아키텍처 선택이 되는 셈이에요.
+
+"우리 앱은 어디쯤에 있어야 하지?"라는 질문은 지금도 유효해요. 답은 팀 상황, 제품 특성, 운영 리듬에 따라 달라지니까요. 이 시리즈가 그 선택의 지도 하나를 손에 쥐어주는 역할을 했으면 좋겠어요.
+
+<References
+  items={[
+    {
+      id: "reactnative-new-arch",
+      title: "React Native - The New Architecture Is Here",
+      href: "https://reactnative.dev/blog/2024/10/23/the-new-architecture-is-here",
+      description: "JSI, Fabric, TurboModules, Bridgeless Mode의 공식 소개",
+    },
+    {
+      id: "flutter-architecture",
+      title: "Flutter Docs - Architectural Overview",
+      href: "https://docs.flutter.dev/resources/architectural-overview",
+      description: "OS 위젯을 감싸지 않고 자체 렌더러로 그리는 설계 설명",
+    },
+    {
+      id: "expo-eas-update",
+      title: "Expo Docs - EAS Update Introduction",
+      href: "https://docs.expo.dev/eas-update/introduction/",
+      description: "OTA 동작 원리, runtime version 정책, 허용 범위",
+    },
+    {
+      id: "apple-review-guidelines",
+      title: "Apple - App Review Guidelines",
+      href: "https://developer.apple.com/app-store/review/guidelines/",
+      description: "2.5.2 Self-Contained Apps 조항과 원격 코드 제약",
+    },
+  ]}
+/>
