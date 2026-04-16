@@ -1,6 +1,7 @@
 export type MotifKey =
   | "typescript"
   | "nextjs"
+  | "react-native"
   | "react"
   | "css"
   | "design-system"
@@ -14,6 +15,7 @@ export type MotifKey =
   | "module"
   | "refactor"
   | "styling"
+  | "rendering"
   | "default";
 
 export interface BannerPalette {
@@ -42,6 +44,7 @@ export interface BannerInput {
 const TAG_TO_MOTIF: Array<[RegExp, MotifKey]> = [
   [/^TypeScript$/i, "typescript"],
   [/^(Next\.js|App Router|React Server Components|RSC)$/i, "nextjs"],
+  [/^React Native$/i, "react-native"],
   [/^React$/i, "react"],
   [/^(디자인 시스템|디자인 토큰|Atomic Design|Design System)$/i, "design-system"],
   [/^(CSS-in-JS|Emotion|Vanilla Extract|Panda CSS|Linaria|Tailwind|CSS Modules)$/i, "styling"],
@@ -51,6 +54,7 @@ const TAG_TO_MOTIF: Array<[RegExp, MotifKey]> = [
   [/^(Node\.js|npm|npx|CLI|모듈 시스템|ESM)$/i, "module"],
   [/^(AST|codemod|리팩토링)$/i, "refactor"],
   [/^(텍스트|제어)$/i, "typography"],
+  [/^(브라우저|렌더링|렌더링 파이프라인|Critical Rendering Path|CRP)$/i, "rendering"],
   [/^(성능|애니메이션|Hooks)$/i, "performance"],
   [/^(Flexbox|Grid|레이아웃|박스 모델|aspect-ratio)$/i, "layout"],
   [/^(has|선택자|Cascade|z-index|stacking-context)$/i, "selector"],
@@ -60,6 +64,7 @@ const TAG_TO_MOTIF: Array<[RegExp, MotifKey]> = [
 const MOTIF_PRIORITY: MotifKey[] = [
   "typescript",
   "nextjs",
+  "react-native",
   "react",
   "design-system",
   "accessibility",
@@ -69,6 +74,7 @@ const MOTIF_PRIORITY: MotifKey[] = [
   "methodology",
   "module",
   "typography",
+  "rendering",
   "performance",
   "layout",
   "selector",
@@ -88,6 +94,13 @@ const PALETTES: Record<MotifKey, BannerPalette> = {
     bgAccent: "#13293d",
     primary: "#61dafb",
     accent: "#f87171",
+    text: "#e0f2fe",
+  },
+  "react-native": {
+    bg: "#0f1a2e",
+    bgAccent: "#1e3555",
+    primary: "#61dafb",
+    accent: "#fbbf24",
     text: "#e0f2fe",
   },
   nextjs: {
@@ -180,6 +193,13 @@ const PALETTES: Record<MotifKey, BannerPalette> = {
     primary: "#f472b6",
     accent: "#60a5fa",
     text: "#fce7f3",
+  },
+  rendering: {
+    bg: "#0a1f2e",
+    bgAccent: "#133248",
+    primary: "#22d3ee",
+    accent: "#fb7185",
+    text: "#cffafe",
   },
   default: {
     bg: "#0a1428",
