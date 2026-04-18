@@ -208,7 +208,7 @@ export function SeriesCard({
     : "group/card flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background transition-all hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 dark:bg-[#111113]";
 
   const panelClass = floatingPanel
-    ? "md:absolute md:left-[-1px] md:right-[-1px] md:top-full md:z-20 md:rounded-b-xl md:border md:border-t-0 md:border-border md:bg-background md:shadow-xl md:shadow-black/5 md:dark:bg-[#111113]"
+    ? "md:absolute md:left-[-1px] md:right-[-1px] md:top-full md:z-20 md:rounded-b-xl md:border md:border-t-0 md:border-border md:bg-background md:shadow-xl md:shadow-black/5 md:dark:bg-[#111113] md:transition-[border-color] group-hover/card:md:border-accent/30"
     : "";
 
   const innerClass = "px-5 pb-4 pt-0";
