@@ -1,12 +1,8 @@
 import Link from "next/link";
 import { posts } from "#site/content";
 import { Hero } from "@/components/ui/hero";
-import {
-  PostList,
-  type PostEntry,
-  type PostItem,
-  type SeriesGroup,
-} from "@/components/ui/post-list";
+import { type PostEntry, type PostItem, type SeriesGroup } from "@/components/ui/post-list";
+import { PostGrid } from "@/components/ui/post-grid";
 import { siteConfig, SITE_URL } from "@/lib/site";
 
 const POPULAR_TAG_MIN_COUNT = 3;
@@ -67,6 +63,7 @@ export default function Home() {
     date: p.date,
     tags: p.tags,
     cover: p.cover,
+    banner: p.banner,
     charCount: p.charCount,
   });
 
@@ -81,6 +78,11 @@ export default function Home() {
         items: sorted.map(toPostItem),
       } satisfies SeriesGroup;
     });
+
+  const publishedFlat: PostItem[] = posts
+    .filter((p) => p.published)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .map(toPostItem);
 
   const websiteJsonLd = {
     "@context": "https://schema.org",
@@ -126,7 +128,7 @@ export default function Home() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(blogJsonLd) }}
       />
       <Hero />
-      <div id="posts" className="mx-auto max-w-3xl px-6 py-16">
+      <div id="posts" className="mx-auto max-w-7xl px-6 py-16">
         {popularTags.length > 0 && (
           <section className="mb-10">
             <h2 className="text-xs font-medium uppercase tracking-wider text-secondary">
@@ -148,7 +150,7 @@ export default function Home() {
         )}
         <section>
           {published.length > 0 ? (
-            <PostList posts={published} />
+            <PostGrid grouped={published} flat={publishedFlat} />
           ) : (
             <p className="text-secondary">아직 글이 없습니다.</p>
           )}

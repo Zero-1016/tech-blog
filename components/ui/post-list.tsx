@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { formatCardDate } from "@/lib/utils";
 import { readingTime } from "@/lib/reading-time";
 import { Banner } from "@/components/ui/banner";
@@ -14,6 +14,7 @@ export interface PostItem {
   date: string;
   tags: string[];
   cover?: string;
+  banner?: string;
   charCount: number;
 }
 
@@ -25,8 +26,12 @@ export interface SeriesGroup {
 
 export type PostEntry = PostItem | SeriesGroup;
 
-function isSeriesGroup(entry: PostEntry): entry is SeriesGroup {
+export function isSeriesGroup(entry: PostEntry): entry is SeriesGroup {
   return "kind" in entry && entry.kind === "series";
+}
+
+export function entryKey(entry: PostEntry) {
+  return isSeriesGroup(entry) ? `series:${entry.name}` : entry.slug;
 }
 
 const CHIP_CLASS = "whitespace-nowrap rounded-md bg-code-bg px-1.5 py-0.5";
@@ -107,7 +112,7 @@ function TagChips({ tags }: { tags: string[] }) {
   );
 }
 
-function PostCard({ post, featured = false }: { post: PostItem; featured?: boolean }) {
+export function PostCard({ post, featured = false }: { post: PostItem; featured?: boolean }) {
   return (
     <Link
       href={`/posts/${post.slug}`}
@@ -128,6 +133,7 @@ function PostCard({ post, featured = false }: { post: PostItem; featured?: boole
             title={post.title}
             slug={post.slug}
             tags={post.tags}
+            banner={post.banner}
             className="h-full w-full transition-transform duration-300 group-hover:scale-105"
             priority={featured}
           />
@@ -141,8 +147,8 @@ function PostCard({ post, featured = false }: { post: PostItem; featured?: boole
         >
           {post.title}
         </h2>
-        <p className="mt-1.5 flex-1 text-sm text-secondary line-clamp-2">{post.description}</p>
-        <div className="mt-3 flex items-center gap-1 text-xs text-secondary">
+        <p className="mt-1.5 text-sm text-secondary">{post.description}</p>
+        <div className="mt-auto pt-3 flex items-center gap-1 text-xs text-secondary">
           <time dateTime={post.date} className="whitespace-nowrap">
             {formatCardDate(post.date)}
           </time>
@@ -160,20 +166,64 @@ function PostCard({ post, featured = false }: { post: PostItem; featured?: boole
   );
 }
 
-function SeriesCard({ group, featured = false }: { group: SeriesGroup; featured?: boolean }) {
+export function SeriesCard({
+  group,
+  featured = false,
+  floatingPanel = false,
+}: {
+  group: SeriesGroup;
+  featured?: boolean;
+  floatingPanel?: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const latest = group.items[0];
-  const panelId = `series-panel-${group.name.replace(/\s+/g, "-")}`;
+  const totalCharCount = group.items.reduce((sum, p) => sum + p.charCount, 0);
+  const seriesTags = Array.from(new Set(group.items.flatMap((p) => p.tags)));
+  const reactId = useId();
+  const panelId = `series-panel-${reactId.replace(/:/g, "")}`;
+
+  useEffect(() => {
+    if (!open || !floatingPanel) return;
+    const handlePointer = (e: PointerEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open, floatingPanel]);
+
+  const containerClass = floatingPanel
+    ? `group/card relative flex flex-col self-start rounded-xl border border-border bg-background transition-all max-md:overflow-hidden hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 dark:bg-[#111113] ${
+        open ? "md:z-20 md:rounded-b-none md:border-b-0 md:shadow-xl md:shadow-black/5" : ""
+      }`
+    : "group/card flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background transition-all hover:border-accent/30 hover:shadow-lg hover:shadow-accent/5 dark:bg-[#111113]";
+
+  const panelClass = floatingPanel
+    ? "md:absolute md:left-[-1px] md:right-[-1px] md:top-full md:z-20 md:rounded-b-xl md:border md:border-t-0 md:border-border md:bg-background md:shadow-xl md:shadow-black/5 md:dark:bg-[#111113]"
+    : "";
+
+  const innerClass = "px-5 pb-4 pt-0";
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background dark:bg-[#111113]">
+    <div ref={containerRef} className={containerClass}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={panelId}
         aria-label={`${group.name} 시리즈 ${group.items.length}편 ${open ? "접기" : "펼치기"}`}
-        className="flex w-full flex-col text-left transition-colors hover:bg-card-hover"
+        className={`flex w-full flex-col overflow-hidden text-left ${
+          floatingPanel ? `md:rounded-xl ${open ? "md:rounded-b-none" : ""}` : ""
+        }`}
       >
         <div className="relative aspect-2/1 w-full overflow-hidden bg-code-bg">
           {latest.cover ? (
@@ -181,7 +231,7 @@ function SeriesCard({ group, featured = false }: { group: SeriesGroup; featured?
               src={latest.cover}
               alt={group.name}
               fill
-              className="object-cover"
+              className="object-cover transition-transform duration-300 group-hover/card:scale-105"
               sizes="(max-width: 768px) 100vw, 672px"
               priority={featured}
             />
@@ -190,7 +240,8 @@ function SeriesCard({ group, featured = false }: { group: SeriesGroup; featured?
               title={group.name}
               slug={latest.slug}
               tags={latest.tags}
-              className="h-full w-full"
+              banner={latest.banner}
+              className="h-full w-full transition-transform duration-300 group-hover/card:scale-105"
               priority={featured}
             />
           )}
@@ -204,7 +255,19 @@ function SeriesCard({ group, featured = false }: { group: SeriesGroup; featured?
               <span className="text-xs text-secondary">{group.items.length}편</span>
             </div>
             <h2 className="mt-1.5 font-semibold tracking-tight">{group.name}</h2>
-            <p className="mt-1 text-sm text-secondary">{latest.description}</p>
+            <div className="mt-3 flex items-center gap-1 text-xs text-secondary">
+              <time dateTime={latest.date} className="whitespace-nowrap">
+                {formatCardDate(latest.date)}
+              </time>
+              <span aria-hidden>·</span>
+              <span className="whitespace-nowrap">{readingTime(totalCharCount)}</span>
+              {seriesTags.length > 0 && (
+                <>
+                  <span aria-hidden>·</span>
+                  <TagChips tags={seriesTags} />
+                </>
+              )}
+            </div>
           </div>
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -222,18 +285,28 @@ function SeriesCard({ group, featured = false }: { group: SeriesGroup; featured?
           </svg>
         </div>
       </button>
-      {open && (
-        <div id={panelId}>
-          <div className="border-t border-border px-5 py-3">
+      <div
+        id={panelId}
+        aria-hidden={!open}
+        className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-out ${
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        } ${panelClass}`}
+      >
+        <div className="min-h-0">
+          <div className={innerClass}>
             {group.items.map((post, i) => (
               <Link
                 key={post.slug}
                 href={`/posts/${post.slug}`}
-                className="group -mx-2 flex items-baseline gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-card-hover"
+                tabIndex={open ? 0 : -1}
+                className="group/item -mx-2 flex items-baseline gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-card-hover"
               >
                 <span className="shrink-0 text-xs tabular-nums text-secondary">{i + 1}</span>
                 <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium group-hover:text-accent">{post.title}</span>
+                  <span className="text-sm font-medium group-hover/item:text-accent">
+                    {post.title}
+                  </span>
+                  <p className="mt-0.5 text-xs text-secondary">{post.description}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-secondary">
                     <time dateTime={post.date}>{formatCardDate(post.date)}</time>
                     <span aria-hidden>·</span>
@@ -250,7 +323,7 @@ function SeriesCard({ group, featured = false }: { group: SeriesGroup; featured?
             ))}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -258,10 +331,6 @@ function SeriesCard({ group, featured = false }: { group: SeriesGroup; featured?
 function renderEntry(entry: PostEntry, featured: boolean) {
   if (isSeriesGroup(entry)) return <SeriesCard group={entry} featured={featured} />;
   return <PostCard post={entry} featured={featured} />;
-}
-
-function entryKey(entry: PostEntry) {
-  return isSeriesGroup(entry) ? `series:${entry.name}` : entry.slug;
 }
 
 export function PostList({ posts }: { posts: PostEntry[] }) {
