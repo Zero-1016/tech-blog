@@ -7,6 +7,7 @@ declare module "#site/content" {
     series?: string;
     seriesOrder?: number;
     cover?: string;
+    banner?: string;
     published: boolean;
     slug: string;
     toc: { title: string; url: string; items: { title: string; url: string; items: never[] }[] }[];
