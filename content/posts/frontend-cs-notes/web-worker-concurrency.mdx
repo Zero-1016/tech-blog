@@ -1,0 +1,145 @@
+---
+title: "메인 스레드가 멈추면 클릭도 멈춰요"
+description: "정렬 한 줄에 클릭이 멈춰요. 메인 스레드가 한 가닥이거든요."
+date: 2026-04-18
+tags: ["CS", "프론트엔드", "Web Worker", "동시성", "성능", "브라우저"]
+series: "코드 한 줄 뒤의 CS"
+banner: "event-loop"
+seriesOrder: 4
+published: true
+---
+
+큰 데이터를 정렬하는 동안 화면이 잠깐 얼어붙은 적이 있어요. 마우스로 클릭해도 반응이 없고, 스크롤도 안 되고, 한 2 초 뒤에 일제히 풀리는 그 답답한 순간이요. 처음엔 "비동기인데 왜 다른 게 같이 멈춰?" 싶었거든요. 사실 자바스크립트는 비동기여도 한 스레드 위에서 돌아요. 그 한 스레드가 정렬 함수에 묶여 있으면 클릭, 스크롤, 페인트 모두 같이 묶이는 거예요. 답은 [Web Worker](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API) 라는, 별도 스레드를 띄우는 표준이에요. 다만 워커가 모든 문제를 푸는 건 아니에요.
+
+## 렌더러 프로세스 안의 단일 메인 스레드
+
+브라우저는 탭마다 별도 **렌더러 프로세스** 를 띄워요. 한 탭이 죽어도 다른 탭이 안 죽고, 사이트 격리(Site Isolation) 로 보안 경계도 잡히는 구조예요.<Cite id="chrome-inside-browser-1" /> 그 프로세스 안에 여러 스레드가 같이 사는데, 그중 **메인 스레드는 딱 하나** 예요. JS 실행, 스타일 계산, 레이아웃, 페인트 레코드, 사용자 이벤트 처리까지 다 이 한 스레드가 차례로 해요.
+
+직렬 파이프라인이라는 게 핵심이에요. HTML 파싱 다음 스타일 계산, 그 다음 레이아웃, 페인트 레코드. 각 단계가 다음 단계의 입력이거든요. JS 가 중간에 끼어들면 그 뒤 단계는 다 같이 멈춰요. [2 편의 이벤트 루프](/posts/event-loop-microtasks) 가 도는 게 바로 이 메인 스레드 위고요.
+
+다행히 모든 스레드가 메인 위에 있는 건 아니에요. 컴포지터 스레드와 래스터 스레드는 별도로 돌아요.<Cite id="chrome-inside-browser-3" /> 그래서 JS 가 메인을 점유하고 있어도 스크롤이나 합성 가능한 transform 애니메이션은 계속 부드러울 수 있어요. 이 차이는 [transform 과 top/left 의 차이](/posts/transform-vs-top-left-rendering-pipeline) 글에서 따로 정리해 두었어요.
+
+## Web Worker 가 따로 돈다
+
+Web Worker 는 메인 스레드 옆에 또 다른 JS 실행 컨텍스트를 띄우는 표준이에요.
+
+<Callout variant="info">
+"laborious processing can be performed in a separate thread, allowing the main (usually the UI) thread to run without being blocked/slowed down." - MDN
+
+무거운 계산을 별도 스레드에 보내고, 메인 스레드는 UI 응답에만 집중하게 만드는 모델이에요. 워커도 자체 이벤트 루프와 task 큐를 가져요. 그러니까 워커 안의 무한 루프는 메인 스레드를 막지 못해요.
+
+</Callout>
+
+워커는 별도 파일로 분리돼요. `new Worker("/worker.js")` 로 띄우고, 메인과 통신하는 방법은 `postMessage` 와 `onmessage` 이벤트뿐이에요.<Cite id="mdn-worker" /> 변수 공유, 함수 호출, DOM 접근 모두 안 돼요.
+
+두 스레드 사이에 진짜로 격리된 벽이 서 있는 셈이에요.
+
+<Callout variant="warning">
+"Workers are relatively heavy-weight, and are not intended to be used in large numbers." - WHATWG HTML
+
+스펙이 직접 "비교적 무겁다, 많이 만들지 마라" 라고 써둔 게 인상적이에요. 워커 하나가 OS 스레드 한 개에 가까운 비용이거든요. 픽셀 단위 병렬화 같은 대규모 분산용이 아니에요.
+
+</Callout>
+
+## 메시지 패싱이라는 다리
+
+워커와 메인이 데이터를 주고받는 방법은 `postMessage` 한 가지예요. 이 메시지는 기본적으로 **구조적 복제 알고리즘** 으로 직렬화돼요.<Cite id="mdn-postmessage" /> 그러니까 큰 객체를 통째로 보내면 받는 쪽이 같은 크기의 복사본을 메모리에 새로 만들어요. 100MB 짜리 ArrayBuffer 를 보내면 100MB 가 한 번 더 잡히는 거예요.
+
+이걸 우회하는 게 **Transferable** 이에요. ArrayBuffer, ImageBitmap, OffscreenCanvas 같은 일부 객체는 "복사" 가 아니라 "이전" 이 가능하거든요.<Cite id="mdn-transferable" />
+
+<Callout variant="info">
+"When such a buffer is transferred between threads, the associated memory resource is detached from the original buffer and attached to the buffer object created in the new thread." - MDN
+
+원본 버퍼는 detach 돼서 더 이상 사용 못 해요. byteLength 가 0 이 되거든요. 메모리는 한 번만 잡히고, 소유권만 다른 스레드로 넘어가는 모델이에요. 이미지 픽셀 버퍼나 오디오 샘플처럼 큰 메모리 블록을 워커로 보낼 때 필수예요.
+
+</Callout>
+
+`postMessage(data, [buffer])` 처럼 두 번째 인자에 transfer 리스트를 넘기면 돼요. 이 한 줄이 있고 없고가 큰 데이터 처리에서 성능 차이를 만들어요. 가끔 보이는 SharedArrayBuffer 는 진짜 공유 메모리지만, COOP/COEP 헤더가 필요해서 도입 비용이 따로 있어요.
+
+## Worker 가 못 푸는 문제
+
+워커가 만능은 아니에요. 가장 중요한 제약은 **DOM 접근 불가** 예요. document 도 없고, window 도 없어요. 그러니까 React 렌더링 같은 건 워커로 못 옮겨요. 옮길 수 있는 건 순수한 계산이에요. 정렬, 파싱, 이미지 변환, 압축 같은 자리요.
+
+[web.dev 가 정리한 흐름](https://web.dev/articles/off-main-thread) 의 핵심도 같아요. "워커를 쓰면 빨라진다" 가 아니라 **느린 기기에서도 UI 가 끊기지 않게 된다** 가 진짜 효용이에요.<Cite id="webdev-off-main-thread" /> 빠른 기기에서는 메시지 패싱 오버헤드 때문에 오히려 살짝 느릴 수 있어요. 다만 저사양 기기에서 메인 스레드가 한 번도 멈추지 않는 게 사용자 체감으로는 훨씬 큰 가치고요.
+
+마지막으로 비슷해 보이지만 다른 친구를 짚어둘게요. **Service Worker** 는 Web Worker 와 이름이 비슷하지만 다른 문제를 풀어요.<Cite id="webdev-workers-overview" /> Service Worker 는 네트워크 요청을 가로채는 프록시고, 캐시와 오프라인을 담당해요. 탭이 닫혀도 백그라운드에 살아있을 수 있고요. 무거운 계산을 보내는 자리가 아니에요. 둘을 같은 "워커 패밀리" 로 묶으면 헷갈려요. "백그라운드 계산은 Web Worker, 네트워크 프록시는 Service Worker" 로 정리하면 깔끔해요.
+
+비교 정리는 이렇게 돼요.
+
+<Callout variant="tip">
+**setTimeout 분할**
+
+같은 메인 스레드 안에서 task 를 나눠 양보하는 방식. 다른 스레드는 아니어서 정말 무거운 계산은 결국 메인을 점유.
+
+**Web Worker**
+
+별도 스레드 자체. DOM 접근 불가, 무거운 계산 전용. 메시지 패싱 비용 있음.
+
+**Service Worker**
+
+네트워크 프록시. 캐시와 오프라인 담당. 무거운 계산 자리 아님.
+
+</Callout>
+
+---
+
+매일 짜는 코드 한 줄 뒤에 [한 줄로 합쳐진 HTTP 응답](/posts/http-multiplexing) 이 있고, [두 개의 큐](/posts/event-loop-microtasks) 가 있고, [30 년 된 표준](/posts/data-representation) 위의 데이터가 있어요. 그리고 그 모든 걸 짊어진 메인 스레드 한 가닥이 있고요. 코드는 그 위에 얹는 트레이드오프예요. 그 자리들이 보이기 시작하면 짜는 코드가 조금씩 달라져요.
+
+<References
+  items={[
+    {
+      id: "mdn-web-workers",
+      title: "MDN - Web Workers API",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API",
+      description: "별도 스레드 정의, postMessage 통신, 워커 종류 분류"
+    },
+    {
+      id: "mdn-worker",
+      title: "MDN - Worker",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/Worker",
+      description: "Worker 생성자와 라이프사이클, 동일 출처 제약"
+    },
+    {
+      id: "mdn-postmessage",
+      title: "MDN - Worker.postMessage()",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/Worker/postMessage",
+      description: "구조적 복제 직렬화, Transferable 이전 모델"
+    },
+    {
+      id: "mdn-transferable",
+      title: "MDN - Transferable objects",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Transferable_objects",
+      description: "이전 후 detached, 큰 메모리 블록 zero-copy 전송"
+    },
+    {
+      id: "whatwg-workers",
+      title: "WHATWG HTML Living Standard - Web Workers",
+      href: "https://html.spec.whatwg.org/multipage/workers.html",
+      description: "워커 정의, 자체 이벤트 루프, heavy-weight 경고"
+    },
+    {
+      id: "webdev-off-main-thread",
+      title: "web.dev - Use web workers to run JavaScript off the main thread",
+      href: "https://web.dev/articles/off-main-thread",
+      description: "메인 스레드의 부담, 워커의 진짜 효용은 안정성"
+    },
+    {
+      id: "webdev-workers-overview",
+      title: "web.dev - Web Workers Overview",
+      href: "https://web.dev/articles/workers-overview",
+      description: "Web Worker 와 Service Worker 의 구분, 라이브러리 패턴"
+    },
+    {
+      id: "chrome-inside-browser-1",
+      title: "Chrome Developers - Inside look at modern web browser (part 1) Process model",
+      href: "https://developer.chrome.com/blog/inside-browser-part1",
+      description: "탭별 렌더러 프로세스, Site Isolation 모델"
+    },
+    {
+      id: "chrome-inside-browser-3",
+      title: "Chrome Developers - Inside look at modern web browser (part 3) Renderer process",
+      href: "https://developer.chrome.com/blog/inside-browser-part3",
+      description: "렌더러 프로세스의 메인 스레드와 컴포지터, 래스터 스레드"
+    }
+  ]}
+/>

@@ -1,0 +1,158 @@
+---
+title: "offsetWidth 한 줄이 프레임을 훔칠 때"
+description: "offsetWidth를 읽는 순간 브라우저가 멈춰요. 이 문제를 확인해봐요."
+date: 2026-04-18
+tags: ["웹 성능", "DOM", "렌더링", "브라우저"]
+published: true
+---
+
+가상 리스트가 이유 없이 뚝뚝 끊길 때가 있어요. 저도 처음엔 "아이템이 많아서 그런가" 싶어서 overscan 숫자만 만지작거렸거든요. 그러다 Performance 탭을 열었더니 빨간 막대가 빼곡하더라고요. "Forced reflow"라는 경고 위로 화살표를 따라가 보니, 아이템 높이를 재려고 박아둔 `offsetHeight` 한 줄이 원인이었어요. 한 줄이 프레임 하나를 통째로 삼키고 있었던 거죠.
+
+## offsetWidth 한 줄이 하는 일
+
+평소 브라우저는 style 계산, layout, paint를 프레임 단위로 차곡차곡 스케줄해요. JS가 DOM을 만졌어도 그 결과를 당장 계산하지는 않고, 다음 프레임 직전에 한 번에 처리하거든요. 브라우저 입장에서 "아직 읽는 사람 없으니 나중에 해도 됨"이라는 판단이에요.
+
+문제는 JS가 스타일을 바꾼 직후에 `offsetWidth`를 읽는 순간 발생해요. 브라우저는 "이 값을 정확히 돌려주려면 지금 당장 layout을 계산해야 한다"고 판단하고, 원래 스케줄을 뒤엎어서 즉시 layout을 돌려요. 그동안 JS는 그 한 줄 위에 멈춰 있어요. layout이 끝날 때까지 메인 스레드가 막혀 있으니까요. 스크롤이 덜컥거리거나 클릭이 한 박자 늦게 반응하는, 그 감각이 여기서 나와요. 이걸 forced synchronous layout이라고 불러요.<Cite id="mdn-offset-width" />
+
+<Callout variant="info">
+"Returns the layout width of an element as an integer." - MDN
+
+레이아웃 너비를 정수 픽셀로 돌려준다는 말은, 그 값을 돌려주려면 반드시 레이아웃이 최신 상태여야 한다는 뜻이에요. border와 padding, 세로 스크롤바까지 포함한 수치거든요.
+
+</Callout>
+
+layout을 강제로 트리거하는 API는 생각보다 많아요. `offsetWidth`, `offsetHeight`, `clientWidth`, `clientHeight`, `getBoundingClientRect`, `scrollTop` 같은 것들이 전부 포함돼요. Paul Irish의 정리 문서를 보면 innerHeight나 조건부로 `getComputedStyle`도 들어가 있고요.<Cite id="paul-irish-reflow" /> 이름에 width/height/rect가 들어가 있으면 일단 의심하는 게 안전해요.
+
+이 흐름 자체가 왜 비싼지는 [브라우저가 화면을 그리는 파이프라인](/posts/how-browsers-render-pages)을 한 번 훑으면 바로 와닿아요. style부터 paint까지 밟아야 하는 단계가 있는데, 그걸 매 읽기마다 되감는 거예요. 그러면 남는 질문은 이 한 줄을 어떻게 감당할 거냐예요. 피할지, 모아둘지부터 떠올려 봐요.
+
+## 반복되면 Layout thrashing
+
+한 번 강제 layout은 비싸긴 해도 감당 가능해요. 진짜 문제는 루프에서 발생해요. 쓰고, 읽고, 쓰고, 읽고가 반복되는 코드를 돌리면 매 반복마다 layout이 새로 계산되거든요. 이걸 layout thrashing이라고 불러요.
+
+예를 들어 N개 요소의 높이를 재서 새 높이를 적용하는 순진한 루프를 상상해보세요.
+
+```js
+for (const box of boxes) {
+  const next = box.offsetHeight * 1.5;
+  box.style.height = next + "px";
+}
+```
+
+한 줄 한 줄은 별로 이상해 보이지 않아요. 근데 읽기와 쓰기가 번갈아 오면서 매 반복마다 이전 스타일 변경을 확정시키려고 layout이 돌아가요. 100개짜리 리스트에서 100번 reflow가 터지는 셈이에요.<Cite id="webdev-layout-thrashing" />
+
+<Callout variant="warning">
+"Always batch your style reads, and do them first." - web.dev
+
+읽기는 읽기끼리 모아서 먼저 돌리고, 쓰기는 그다음에 몰아서 처리하라는 이야기예요. 이렇게 하면 읽기 구간에서는 layout이 한 번만 돌고, 쓰기 구간은 다음 프레임으로 미뤄지거든요.
+
+</Callout>
+
+같은 문제를 조금 다른 각도에서 풀어본 적이 있어요. [transform과 top/left의 차이](/posts/transform-vs-top-left-rendering-pipeline)에서도 layout을 건드리느냐 아니냐가 프레임 유지의 핵심이었거든요. 측정 API는 반대쪽 이야기예요. 내가 읽는 한 줄이 layout을 끌어오는 꼴이죠.
+
+이런 배칭 전략을 라이브러리로 굳혀놓은 게 [fastdom](https://github.com/wilsonpage/fastdom) 같은 도구예요. read queue와 mutate queue를 분리해서 requestAnimationFrame에 맞춰 순서대로 비워주거든요.<Cite id="fastdom-readme" /> 오래된 해법인데 지금도 잘 돌아요. 다만 "측정 자체는 어쩔 수 없고 타이밍만 모으자"는 전제를 깔고 있죠.
+
+## pretext가 택한 다른 길
+
+[pretext](https://github.com/chenglou/pretext)는 다른 전제에서 출발해요. 텍스트라면 DOM을 아예 안 재도 된다는 거예요.<Cite id="pretext-readme" /> react-motion을 만들었던 Cheng Lou가 Midjourney에서 일하면서 내놓은 라이브러리고, Sebastian Markbage의 text-layout 작업에서 뿌리를 가져왔어요.
+
+<Callout variant="info">
+"Pretext side-steps the need for DOM measurements such as `getBoundingClientRect` and `offsetHeight`, one of the most expensive operations in the browser." - pretext README
+
+브라우저에서 가장 비싼 연산 중 하나인 DOM 측정을, 그냥 피해 가자는 결론이에요. DOM에 텍스트를 끼워 넣고 박스 크기를 재는 대신, Canvas `measureText`로 글자 너비를 얻고 줄바꿈 규칙을 직접 계산해서 높이를 뽑아내거든요.
+
+</Callout>
+
+API는 두 단계로 갈라져 있어요. `prepare`는 텍스트와 폰트 정보를 받아서 한 번만 분석해두는 함수예요. 그 결과를 `layout`에 넘기면 가로폭과 줄 높이에 맞춰 실제 높이와 줄 수를 돌려주고요.
+
+```ts
+import { prepare, layout } from "pretext";
+
+const prepared = prepare("AGI 春天到了. بدأت الرحلة 🚀", "16px Inter");
+const { height, lineCount } = layout(prepared, textWidth, 20);
+```
+
+여기서 중요한 건 `height`를 얻는 동안 DOM 트리는 손도 안 댔다는 점이에요. `getBoundingClientRect`도, `offsetHeight`도 없어요. 결과적으로 브라우저는 layout 파이프라인을 돌릴 이유가 없고, reflow도 일어나지 않아요.
+
+## 가상 리스트에서의 텍스트 높이
+
+실전으로 내려와 보면 차이가 꽤 크게 벌어져요. [가상 리스트가 DOM에서 덜어내는 것들](/posts/virtual-list-dom-cost)에서 가변 높이 아이템을 다룰 때 고민거리가 하나 있었거든요. 아이템마다 텍스트 길이가 달라서 높이가 제각각이면, 어느 시점에든 그 높이를 알아야 스크롤 위치를 잡을 수 있어요.
+
+기존 방식은 오프스크린 DOM을 하나 띄워서 측정해요. 정확하긴 한데, 아이템 수만큼 reflow가 쌓여요.
+
+```js
+function measureTextHeight(text, width, font) {
+  const el = document.createElement("div");
+  el.style.cssText = `
+    position: absolute;
+    visibility: hidden;
+    width: ${width}px;
+    font: ${font};
+  `;
+  el.textContent = text;
+  document.body.appendChild(el);
+  const height = el.offsetHeight;
+  document.body.removeChild(el);
+  return height;
+}
+```
+
+같은 계산을 pretext로 바꾸면 DOM이 전혀 안 끼어들어요.
+
+```js
+import { prepare, layout } from "pretext";
+
+function measureTextHeight(text, width, font, lineHeight) {
+  const prepared = prepare(text, font);
+  return layout(prepared, width, lineHeight).height;
+}
+```
+
+pretext README는 이런 가상화 외에도 Masonry 레이아웃, 라벨 오버플로 검증, 텍스트가 들어올 자리에 미리 공간을 비워두는 레이아웃 시프트 방지 같은 use case도 언급해요. Canvas나 SVG, WebGL에 텍스트를 올릴 때도 같은 계산이 필요하고요.
+
+## pretext가 덮지 못하는 자리
+
+그렇다고 모든 측정을 pretext로 갈아탈 수 있는 건 아니에요. 이 라이브러리는 이름 그대로 텍스트 전용이거든요. 툴팁 위치 계산, 가변 이미지 크기, 드래그 대상의 좌표 같은 일반 DOM 측정은 여전히 `getBoundingClientRect`가 필요해요.
+
+CSS 지원 범위도 좁은 편이에요. `white-space`는 normal과 pre-wrap 정도, `word-break`는 normal과 keep-all 정도만 다루고, 복잡한 overflow-wrap 조합은 아직이에요. macOS의 `system-ui` 폰트는 Canvas가 실제 렌더링 폰트와 미묘하게 어긋나서, README에서도 named font를 쓰라고 권해요.
+
+<Callout variant="tip">
+fastdom과 pretext는 서로 대체재가 아니에요. 앞쪽은 측정 타이밍을 모으는 도구고, 뒤쪽은 측정 자체를 우회하는 도구거든요. 이미지 높이 같은 건 여전히 fastdom 류로 배칭하고, 텍스트 높이만 pretext로 빼도 reflow 예산이 꽤 남아요.
+
+</Callout>
+
+글자 하나를 화면에 제대로 올리기 위해서 라이브러리가 브라우저의 폰트 엔진을 모방한다는 게, 처음엔 유난스러워 보였어요. 근데 가만히 생각해보면, 그 무게가 곧 우리가 평소 무심히 박아넣은 `offsetWidth` 한 줄의 진짜 가격이에요. 프레임 하나를 훔쳐간 그 한 줄이요.
+
+<References
+  items={[
+    {
+      id: "mdn-offset-width",
+      title: "MDN - HTMLElement: offsetWidth property",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/offsetWidth",
+      description: "offsetWidth 정의와 반환 값의 구성 요소 확인",
+    },
+    {
+      id: "webdev-layout-thrashing",
+      title: "web.dev - Avoid large, complex layouts and layout thrashing",
+      href: "https://web.dev/articles/avoid-large-complex-layouts-and-layout-thrashing",
+      description: "forced sync layout과 읽기·쓰기 배칭 원칙",
+    },
+    {
+      id: "pretext-readme",
+      title: "Cheng Lou - pretext README",
+      href: "https://github.com/chenglou/pretext",
+      description: "DOM 측정 우회 전략, prepare/layout API, 사용 사례와 제약",
+    },
+    {
+      id: "paul-irish-reflow",
+      title: "Paul Irish - What forces layout / reflow",
+      href: "https://gist.github.com/paulirish/5d52fb081b3570c81e3a",
+      description: "reflow를 유발하는 DOM 속성과 메서드 카탈로그",
+    },
+    {
+      id: "fastdom-readme",
+      title: "Wilson Page - fastdom README",
+      href: "https://github.com/wilsonpage/fastdom",
+      description: "read/mutate 큐로 layout thrashing을 배칭하는 구조",
+    },
+  ]}
+/>

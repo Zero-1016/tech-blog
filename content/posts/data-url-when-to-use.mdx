@@ -1,0 +1,149 @@
+---
+title: "data URL은 언제 이득이고 언제 손해일까"
+description: "아이콘을 매번 요청하는 게 아까워서 인라인했는데, CSS 파일이 더 커졌어요."
+date: 2026-04-18
+tags: ["브라우저", "성능", "CSS", "보안"]
+banner: data-url
+published: true
+---
+
+작은 아이콘이 많은 페이지에서 Network 탭이 너덜너덜한 게 싫었어요. 요청 수를 줄이자 싶어서 `<img>` 대신 `data:image/svg+xml;base64,...` 형태로 전부 CSS에 박아버렸죠. 그다음 프로젝트에선 CSS 파일이 갑자기 50KB 넘게 뚱뚱해지는 걸 보면서, 이게 맞는 건가 싶더라고요. data URL 자체는 오래된 도구인데, 잘 쓰는 감을 잡지 못하면 오히려 독이 돼요.
+
+## 요청을 줄이려다 캐시를 잃었습니다
+
+함정은 캐시에서 시작돼요. 원래 `icon-ok.svg`가 별도 파일이면 브라우저가 한 번 받아서 디스크 캐시에 넣어두고, 다음 페이지에서도 그대로 꺼내 써요. 그런데 아이콘이 CSS 안에 data URL로 박히면, 그 아이콘은 더 이상 "파일" 이 아니라 `.prose .icon { background: url("data:image/svg+xml;base64,...") }` 처럼 CSS 텍스트의 일부예요. CSS 전체는 캐시되지만, 그 안의 아이콘만 따로 캐시되는 법은 없죠.
+
+그래서 같은 아이콘을 열 페이지에서 재사용하더라도, CSS 파일을 처음 받는 순간 그 아이콘 데이터도 "딱 한 번" 함께 받아지고 끝이에요. 별도 파일이었다면 한 번 받고 나머지 페이지는 전부 304, 요청 자체도 안 나갔을 텐데요. 요청 수 한두 개 줄이려다 캐시 재사용의 여지를 통째로 놓칠 수 있어요.
+
+## data URL의 문법과 원래 용도
+
+스펙부터 짧게 훑을게요. data URL은 1998년에 [RFC 2397](https://www.rfc-editor.org/rfc/rfc2397)으로 정의된 URL 스킴이에요. 문법은 `data:[<mediatype>][;base64],<data>` 로 요약돼요.<Cite id="rfc-2397" /> 미디어 타입을 생략하면 `text/plain;charset=US-ASCII`가 기본이고, `;base64` 플래그가 없으면 데이터는 percent-encoding(URL 인코딩)으로 해석돼요.
+
+세 가지 형태를 나란히 보면 감이 잡혀요.
+
+```
+data:,Hello%20World
+data:text/plain;base64,SGVsbG8gV29ybGQ=
+data:image/svg+xml,%3Csvg xmlns='...'%3E...%3C/svg%3E
+```
+
+핵심은 data URL이 "짧은 값" 을 인라인하기 위한 장치라는 거예요. RFC는 이 스킴이 "short values" 에만 유용하다고 처음부터 못을 박아놨어요.<Cite id="rfc-2397" /> 이메일처럼 외부 리소스 접근이 제한된 환경, 혹은 몇백 바이트짜리 작은 자산을 URL 문법 안에서 표현해야 할 때가 원래 무대였어요.
+
+<Callout variant="info">
+"The `data:` URL scheme is only useful for short values." - RFC 2397
+
+짧은 값이라는 말이 핵심이에요. 원저자들은 처음부터 이 스킴을 메가바이트 단위 파일을 끼워 넣으라고 만든 게 아니었어요.
+
+</Callout>
+
+## 브라우저는 data URL을 어떻게 다룰까
+
+[브라우저가 자원을 받아 화면을 그리는 과정](/posts/how-browsers-render-pages)을 떠올려보면, 일반 URL은 DNS 조회부터 TCP/TLS, HTTP 요청까지 거쳐서 리소스를 가져와요. data URL은 이 전 과정을 건너뛰어요. 문서 안에 본문이 이미 들어있으니까, 파싱만 하면 끝이죠.
+
+그래서 특성이 몇 가지 따라붙어요. 같은 자산이면 별도 HTTP 요청이 나가지 않아서, 아주 짧은 아이콘 하나에 라운드트립 한 번을 확실히 아낄 수 있어요. 반대로 브라우저 캐시 대상에서 빠지기 때문에 "한 번 받은 걸 다시 꺼내 쓰는" 경로가 원천적으로 안 돼요. 같은 파일이 여러 페이지에 인라인 돼 있으면, HTML이나 CSS가 바뀔 때마다 그 데이터도 같이 다시 흘러들어와요.
+
+origin도 특이해요. data URL은 **unique opaque origin** 으로 취급돼서 설정 객체의 origin을 상속받지 않아요.<Cite id="mdn-data-urls" /> `document.referrer`를 기대하거나 상대 URL로 접근하려 해도 막히고요. 쿠키를 동반한 요청도 마찬가지예요. 작은 이미지 임베드 정도면 상관없지만, data URL로 열리는 스크립트 안에서 fetch를 시도하면 여기서 바로 걸려요.
+
+## base64는 원본보다 약 1/3 커져요
+
+base64는 3바이트의 이진 데이터를 4개의 ASCII 문자로 옮기는 인코딩이에요. 그래서 base64 결과물은 원본보다 대략 1/3 커져요.<Cite id="mdn-base64" /> 10KB 아이콘을 base64로 인라인하면 13KB 정도 되고, 여기에 gzip을 태워도 원본 파일을 따로 gzip 한 것과 같은 효율은 안 나와요. 텍스트 포맷을 base64로 다시 감싸면 엔트로피가 어중간해지거든요.
+
+재미있는 지점은 SVG처럼 이미 텍스트인 포맷이에요. data URL의 기본 경로는 base64가 아니라 percent-encoding이고, SVG 원본 자체가 ASCII 문자라서 굳이 base64로 감쌀 이유가 없어요. 공백이나 `<`, `>` 같은 몇 글자만 percent-encoding 하면 base64 버전보다 짧아지는 경우가 많아요.
+
+<CodePlayground
+  template="react"
+  showPreview={true}
+  code={`function IconCompare() {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#6366f1"><circle cx="12" cy="12" r="10"/></svg>';
+
+    const b64 = btoa(svg);
+    const encoded = encodeURIComponent(svg);
+
+    const b64Size = ("data:image/svg+xml;base64," + b64).length;
+    const encSize = ("data:image/svg+xml," + encoded).length;
+
+    return (
+      <div style={{ fontFamily: "system-ui", fontSize: 13, lineHeight: 1.7 }}>
+        <p>원본 SVG: {svg.length} bytes</p>
+        <p>base64 data URL: {b64Size} bytes</p>
+        <p>URL-encoded data URL: {encSize} bytes</p>
+        <p>차이: {b64Size - encSize} bytes</p>
+        <img src={"data:image/svg+xml," + encoded} alt="" width="48" />
+      </div>
+    );
+  }`}
+/>
+
+같은 SVG를 두 방식으로 넣어보면 URL 인코딩 쪽이 꽤 짧게 나와요. 아이콘이 수십 개면 이 차이가 CSS 파일 전체 크기에 제법 반영돼요. base64는 이진 이미지(png, jpg)처럼 텍스트로 못 표현하는 경우에만 쓰는 게 자연스러워요.
+
+## 언제 쓰고 언제 말아야 하나
+
+결국 판단은 세 가지 질문으로 줄어들어요. 이 자산이 얼마나 작은가, 캐시 재사용 가치가 있는가, 자주 바뀌는가. 이 세 개만 체크하면 대부분 결정이 나와요.
+
+<Callout variant="info">
+**어울리는 자리**
+
+☐ 1KB 안팎의 마이크로 아이콘, 체크마크, 화살표<br/>
+☐ Critical CSS 안에 인라인해서 초기 렌더에 쓰이는 작은 이미지<br/>
+☐ 이메일처럼 외부 리소스 접근이 제한된 환경<br/>
+☐ 템플릿으로 자동 생성되는 1회성 placeholder
+
+**피해야 하는 자리**
+
+☐ 여러 페이지에서 공유되는 자산 (캐시 이득이 훨씬 커요)<br/>
+☐ 수십 KB를 넘는 이미지나 폰트<br/>
+☐ 자주 교체되는 리소스 (HTML이나 CSS 전체가 같이 무효화돼요)<br/>
+☐ 별도 파일로 뽑아 lazy load가 가능한 이미지
+
+</Callout>
+
+작은 자산이고 한 문서 안에서만 쓰인다면 data URL이 라운드트립을 절약해 줘요. 반대로 "이미지 최적화" 맥락에서 data URL이 해법처럼 보이는 순간이 있는데, 그때는 잠깐 멈추는 게 좋아요. [이미지와 폰트만 잡아도 점수가 돌아온다](/posts/core-web-vitals-images-fonts)에서 다룬 것처럼, LCP 개선의 핵심은 대개 "작은 아이콘을 줄이기" 가 아니라 "큰 이미지에 제대로 된 width/height와 포맷을 주기" 예요. 그 큰 이미지는 data URL로 감싸지 마세요.
+
+## 주소창으로 여는 길은 막혀있어요
+
+보안 얘기를 빼놓을 수 없어요. data URL은 "페이지처럼 보이는 주소" 를 공격자가 만들어내기 좋은 도구거든요. `data:text/html,<form action="...">` 같은 걸 보내고, 주소창에 `data:` 라고 떠 있어도 보통 사용자는 이게 원본 서버인지 아닌지 구분하기 어려워요.
+
+Firefox는 2017년에 상위 창(top-level window)을 data URL로 이동시키는 경로 대부분을 차단했어요.<Cite id="mozilla-data-url-block" /> `window.open("data:...")`, `location = "data:..."`, 링크 클릭, 302 리다이렉트, meta refresh 전부 막혔고, 예외는 사용자가 주소창에 직접 붙여넣는 경우와 몇몇 안전한 MIME 타입(이미지, PDF, JSON) 뿐이에요. Chrome과 Safari도 비슷한 방향으로 따라갔고요.
+
+<Callout variant="warning">
+"A number of security issues (for example, phishing) have been associated with data URLs, and navigating to them in the browser's top level. To mitigate such issues, top-level navigation to `data:` URLs is blocked in all modern browsers." - MDN
+
+data URL이 통째로 위험한 건 아니에요. 본문에 이미지로 박히는 경로는 그대로 살아있어요. 다만 브라우저가 "주소창으로 향하는 길" 만 꽉 막아놨다는 게 포인트예요.
+
+</Callout>
+
+SVG는 image 계열에서도 따로 제외됐어요. SVG가 스크립트를 품을 수 있어서 "이미지라서 안전해요" 라고 가정할 수 없거든요. 외부에서 받은 SVG를 data URL로 붙일 생각이라면 한 번 더 고민하세요.
+
+## 마무리
+
+data URL은 "외부 리소스 접근이 불편한 환경에서 짧은 값을 끼워 넣기 위한 도구" 로 출발했어요. 요청 수를 줄이는 묘약이 아니라요. 그 용도에서 벗어나면 캐시를 잃고, base64 오버헤드까지 떠안게 돼요. 공유 자산의 재사용 기회도 같이 사라지고요. 1KB 안팎의 인라인 아이콘 정도는 마음껏 쓰세요. 그보다 큰 건 그냥 파일로 두는 게 나아요.
+
+<References
+  items={[
+    {
+      id: "mdn-data-urls",
+      title: "MDN - data URLs",
+      href: "https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Schemes/data",
+      description: "문법, base64 플래그, unique opaque origin, top-level navigation 차단",
+    },
+    {
+      id: "rfc-2397",
+      title: "IETF RFC 2397 - The data URL scheme",
+      href: "https://www.rfc-editor.org/rfc/rfc2397",
+      description: "data URL 스펙. short values 용도 명시",
+    },
+    {
+      id: "mdn-base64",
+      title: "MDN - Base64 (Glossary)",
+      href: "https://developer.mozilla.org/en-US/docs/Glossary/Base64",
+      description: "3바이트를 4문자로 인코딩, 약 1/3 크기 증가",
+    },
+    {
+      id: "mozilla-data-url-block",
+      title: "Mozilla Security - Blocking Top-Level Navigations to data URLs",
+      href: "https://blog.mozilla.org/security/2017/11/27/blocking-top-level-navigations-data-urls-firefox-59/",
+      description: "피싱 완화 목적 차단 경로와 예외",
+    },
+  ]}
+/>

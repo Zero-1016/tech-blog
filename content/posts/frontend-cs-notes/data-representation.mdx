@@ -1,0 +1,164 @@
+---
+title: "이모지 length가 1이 아닌 이유"
+description: "이모지 length 와 0.1+0.2, 30 년 된 표준 두 개의 함정이에요."
+date: 2026-04-18
+tags: ["CS", "프론트엔드", "JavaScript", "유니코드", "부동소수점"]
+series: "코드 한 줄 뒤의 CS"
+seriesOrder: 3
+published: true
+---
+
+`'A'.length` 는 1 이에요. 그 다음 줄에 `'😀'.length` 를 찍으면 2 가 나와요. `'👨‍👩‍👧'.length` 는 8 까지 나오기도 하고요. 한 글자인데 length 가 1 이 아닌 자리, 처음 봤을 때 진짜로 당황했거든요. 이게 그냥 자바스크립트 버그가 아니라 30 년 전 유니코드 인코딩 표준을 그대로 들고 온 결과예요. 같은 결로 number 도 IEEE 754 라는 30 년 표준 위에 서 있어서, `0.1 + 0.2` 가 0.3 이 아닌 자리가 나오고요. 두 함정의 뿌리가 사실 같은 곳에 있어요.
+
+## JavaScript 문자열은 UTF-16 으로 잡혀 있어요
+
+자바스크립트의 String 은 내부적으로 **UTF-16** 으로 저장돼요. UTF-16 은 한 글자를 16 비트 단위(code unit) 로 표현하는 방식이고요. `length` 가 돌려주는 건 글자 수가 아니라 **code unit 의 개수** 예요.<Cite id="mdn-string-length" />
+
+<Callout variant="warning">
+"JavaScript uses UTF-16 encoding, where each Unicode character may be encoded as one or two code units, so it's possible for the value returned by length to not match the actual number of Unicode characters in the string." - MDN
+
+대부분 글자는 1 code unit 으로 들어와서 length 가 직관과 맞아요. 다만 BMP (Basic Multilingual Plane, U+0000 부터 U+FFFF) 밖에 있는 문자는 2 code unit 으로 잡혀요. 이모지 대부분이 그쪽에 있고요.
+
+</Callout>
+
+이걸 surrogate pair 라고 불러요. 16 비트로 표현 못 하는 코드 포인트를 두 개의 16 비트 값으로 쪼개서 저장하는 트릭이에요. 그래서 `'😀'.length` 가 2 가 나오고, 더 무서운 건 `'😀'[0]` 을 찍으면 깨진 surrogate 한 쪽만 돌려받아요. 문자열을 단순히 reverse 하면 이모지가 박살나는 자리가 그래서예요.
+
+## 사람이 보는 한 글자는 어떻게 셀까
+
+회피 방법은 단계적으로 있어요. 가장 단순한 건 spread 연산자예요. `[...str].length` 로 풀면 자바스크립트의 문자열 이터레이터가 surrogate pair 를 한 묶음으로 처리해서 code point 단위로 세요. 그래서 `[...'😀'].length` 는 1 이 나와요.
+
+근데 이걸로 끝이 아니에요. `'👨‍👩‍👧'.length` 는 8 인데, `[...'👨‍👩‍👧'].length` 도 4 가 나와요. 한 글자가 4 code point 인 거죠. ZWJ (Zero Width Joiner, U+200D) 라는 보이지 않는 문자가 사람 이모지 세 개를 묶어서 "한 가족" 으로 표시하는 시퀀스이기 때문이에요. code point 단위로 세도 사람이 보는 한 글자와 어긋나요.
+
+진짜 답은 [Intl.Segmenter](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter) 예요.<Cite id="mdn-intl-segmenter" /> grapheme(사용자가 인지하는 한 글자) 단위로 안전하게 자르는 표준 API 인데, 2024 년에 모든 최신 브라우저에서 기본 동작이 됐어요.
+
+```js
+const segmenter = new Intl.Segmenter("ko", { granularity: "grapheme" });
+[...segmenter.segment("👨‍👩‍👧")].length; // 1
+```
+
+한 가지 더 짚어둘 게 있어요. **같아 보이는 두 문자가 사실 다른 코드 포인트 시퀀스** 인 경우가 있어요.<Cite id="mdn-string-normalize" /> 한글의 "각" 은 완성형 한 글자(`\uAC01`) 로도 쓰고, 자모 분해형(`ㄱ + ㅏ + ㄱ`) 으로도 쓸 수 있거든요. 둘은 화면에 똑같이 보이지만 `===` 로 비교하면 false 가 나와요. 검색이 안 먹히는 자리가 여기서 자주 생겨요. `str.normalize("NFC")` 한 번 거치면 같은 형태로 통일돼서 비교가 가능해져요.
+
+## 0.1 + 0.2 가 어긋나는 자리
+
+문자열 다음은 number 차례예요. 자바스크립트의 모든 숫자는 **IEEE 754 double-precision 64 비트** 로 저장돼요.<Cite id="mdn-number" /> 정수, 실수, NaN, Infinity 다 같은 형식이에요.
+
+<Callout variant="info">
+"The JavaScript Number type is a double-precision 64-bit binary format IEEE 754 value, like double in Java or C#." - MDN
+
+64 비트는 부호 1 비트, 지수 11 비트, 가수 52 비트로 쪼개져 있어요. 가수 52 비트로 표현 가능한 정밀도가 약 15 부터 17 자리 십진수 정도고요. 이 형식이 십진 분수를 정확히 표현 못 하는 게 0.1 + 0.2 함정의 뿌리예요.
+
+</Callout>
+
+0.1 을 이진 분수로 바꾸면 무한히 반복되는 패턴이 나와요. `0.0001100110011...` 이렇게요. 64 비트 안에 다 못 담으니까 적당한 자리에서 잘라요. 그 잘린 0.1 을 두 번 더하면 진짜 0.2 가 아니라 살짝 어긋난 값이 돼요. 그래서 `0.1 + 0.2` 가 `0.30000000000000004` 같은 값으로 나오는 거예요. 자바스크립트 버그가 아니고, 십진수와 이진수의 표현 차이예요.
+
+같은 이유로 큰 정수도 함정이 있어요. 가수 52 비트 + 암묵적 1 비트로 정수는 53 비트까지 정확하게 표현 가능해요. 그래서 안전한 정수 범위가 `Number.MAX_SAFE_INTEGER`, 즉 `2^53 - 1` 까지예요. 이 범위 밖에서는 인접한 두 정수가 같은 값으로 잡히기도 해요. 예를 들어 `2 ** 53` 과 `2 ** 53 + 1` 이 `===` 로 같다고 나와요. ID 같은 큰 정수를 다룰 때 BigInt 가 필요한 이유가 여기 있어요.
+
+## 안전하게 비교하는 법
+
+부동소수점 비교에 `===` 를 쓰면 안 된다는 건 익숙한 조언이에요. 그러면 `Math.abs(a - b) < Number.EPSILON` 으로 충분할까요? 답은 "아니요" 예요.<Cite id="mdn-number-epsilon" />
+
+<Callout variant="warning">
+"Important takeaway: do not simply use Number.EPSILON as a threshold for equality testing. Use a threshold that is appropriate for the magnitude and accuracy of the numbers you are comparing." - MDN
+
+`Number.EPSILON` 은 **1 근처에서의** 가장 작은 차이예요. 그러니까 1 근처 값을 비교할 때만 의미가 있어요. 비교하는 숫자가 큰 값이면 그 크기에 비례해서 tolerance 도 키워야 정확해요.
+
+</Callout>
+
+그러니까 안전한 비교는 `Math.abs(a - b) < Number.EPSILON * Math.max(Math.abs(a), Math.abs(b))` 같은 형태가 돼요. `toFixed` 도 함정이 있어요. `(1.005).toFixed(2)` 가 `"1.01"` 이 아니라 `"1.00"` 으로 나오기도 해요. 1.005 가 부동소수점에서 정확히 1.005 가 아니라 살짝 작은 값으로 잡혀서요. 표시용 포맷팅은 [Intl.NumberFormat](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat) 이 더 정확하고요.
+
+<CodePlayground
+  code={`function Demo() {
+    const examples = [
+      { label: "'A'.length", value: "A".length },
+      { label: "'😀'.length", value: "😀".length },
+      { label: "[...'😀'].length", value: [..."😀"].length },
+      { label: "'👨‍👩‍👧'.length", value: "👨‍👩‍👧".length },
+      { label: "[...'👨‍👩‍👧'].length", value: [..."👨‍👩‍👧"].length },
+      { label: "0.1 + 0.2", value: 0.1 + 0.2 },
+      { label: "0.1 + 0.2 === 0.3", value: String(0.1 + 0.2 === 0.3) },
+      { label: "(1.005).toFixed(2)", value: (1.005).toFixed(2) },
+    ];
+    return (
+      <table className="demo">
+        <thead>
+          <tr>
+            <th>표현식</th>
+            <th>결과</th>
+          </tr>
+        </thead>
+        <tbody>
+          {examples.map((ex, i) => (
+            <tr key={i}>
+              <td>
+                <code>{ex.label}</code>
+              </td>
+              <td>
+                <code>{String(ex.value)}</code>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }`}
+  css={`.demo {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 0.9rem;
+  }
+
+  .demo th,
+  .demo td {
+    border: 1px solid #ddd;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+  }
+
+  .demo th {
+    background: #f4f4f4;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+직접 실행해 보면 표 한 번에 다 보여요. 글자 length 가 어긋나는 자리, 0.1 더하기가 어긋나는 자리, toFixed 가 반올림을 제대로 못 하는 자리가 한 화면에서 정렬돼요.
+
+---
+
+[2 편의 이벤트 루프](/posts/event-loop-microtasks) 가 코드를 언제 실행할지 정한다면, 데이터 표현은 그 코드가 다루는 값의 **모양** 을 정해요. 두 함정의 뿌리가 비슷해요. 30 년 전에 정해진 표준을 그대로 들고 온 결과거든요. 다음 편은 이 모든 게 돌아가는 자리, 메인 스레드 이야기예요. JS 한 줄이 무거우면 클릭도 멈추는 자리부터 시작합니다.
+
+<References
+  items={[
+    {
+      id: "mdn-string-length",
+      title: "MDN - String: length",
+      href: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/length",
+      description: "length 는 UTF-16 code unit 수, surrogate pair 와 회피책"
+    },
+    {
+      id: "mdn-intl-segmenter",
+      title: "MDN - Intl.Segmenter",
+      href: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter",
+      description: "grapheme 단위 안전 분할, Baseline 2024 지원 범위"
+    },
+    {
+      id: "mdn-number",
+      title: "MDN - Number",
+      href: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number",
+      description: "IEEE 754 double 정의, 안전 정수 범위, BigInt 도입 동기"
+    },
+    {
+      id: "mdn-number-epsilon",
+      title: "MDN - Number.EPSILON",
+      href: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/EPSILON",
+      description: "EPSILON 단순 비교의 한계, 스케일링이 필요한 이유"
+    },
+    {
+      id: "mdn-string-normalize",
+      title: "MDN - String.prototype.normalize",
+      href: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/normalize",
+      description: "NFC/NFD 정규화, 같은 글자가 다른 코드 시퀀스로 표현되는 자리"
+    }
+  ]}
+/>
