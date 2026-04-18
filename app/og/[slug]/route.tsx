@@ -24,6 +24,7 @@ export async function GET(_req: Request, { params }: Params) {
     slug: post.slug,
     tags: post.tags,
     series: post.series,
+    banner: post.banner,
   });
 
   const motifPath = path.join(process.cwd(), "public", "banners", "motifs", `${spec.motif}.svg`);

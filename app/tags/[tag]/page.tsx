@@ -79,6 +79,7 @@ export default async function TagPage({ params }: Props) {
           date: post.date,
           tags: post.tags,
           cover: post.cover,
+          banner: post.banner,
           charCount: post.charCount,
         }))}
       />

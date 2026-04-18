@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none" font-family="-apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif">
+
+  <text x="40" y="52" font-size="12" font-weight="700" fill="#e0f2fe" opacity="0.9" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">HTTP/1.1</text>
+  <text x="40" y="68" font-size="10" fill="#e0f2fe" opacity="0.55">동시 6 연결</text>
+
+  <g opacity="0.9">
+    <line x1="150" y1="56" x2="362" y2="56" stroke="#38bdf8" stroke-width="0.8" opacity="0.3"/>
+    <line x1="150" y1="74" x2="362" y2="74" stroke="#38bdf8" stroke-width="0.8" opacity="0.3"/>
+    <line x1="150" y1="92" x2="362" y2="92" stroke="#38bdf8" stroke-width="0.8" opacity="0.3"/>
+    <line x1="150" y1="110" x2="362" y2="110" stroke="#38bdf8" stroke-width="0.8" opacity="0.3"/>
+    <line x1="150" y1="128" x2="362" y2="128" stroke="#38bdf8" stroke-width="0.8" opacity="0.3"/>
+    <line x1="150" y1="146" x2="362" y2="146" stroke="#38bdf8" stroke-width="0.8" opacity="0.3"/>
+
+    <rect x="152" y="50" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.85"/>
+    <rect x="180" y="50" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.55"/>
+    <rect x="208" y="50" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.3"/>
+
+    <rect x="152" y="68" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.85"/>
+    <rect x="180" y="68" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.55"/>
+    <rect x="208" y="68" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.3"/>
+
+    <rect x="152" y="86" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.85"/>
+    <rect x="180" y="86" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.55"/>
+    <rect x="208" y="86" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.3"/>
+
+    <rect x="152" y="104" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.85"/>
+    <rect x="180" y="104" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.55"/>
+
+    <rect x="152" y="122" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.85"/>
+    <rect x="180" y="122" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.55"/>
+
+    <rect x="152" y="140" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.85"/>
+    <rect x="180" y="140" width="22" height="12" rx="2" fill="#38bdf8" opacity="0.55"/>
+  </g>
+
+  <g opacity="0.7">
+    <text x="240" y="176" font-size="10" fill="#f87171" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">7+ 대기</text>
+    <rect x="296" y="166" width="16" height="12" rx="2" fill="none" stroke="#f87171" stroke-width="1" stroke-dasharray="2 2"/>
+    <rect x="316" y="166" width="16" height="12" rx="2" fill="none" stroke="#f87171" stroke-width="1" stroke-dasharray="2 2"/>
+    <rect x="336" y="166" width="16" height="12" rx="2" fill="none" stroke="#f87171" stroke-width="1" stroke-dasharray="2 2"/>
+  </g>
+
+  <path d="M200 200 L200 228 M190 218 L200 228 L210 218" stroke="#fb923c" stroke-width="1.8" fill="none"/>
+
+  <text x="40" y="262" font-size="12" font-weight="700" fill="#fb923c" opacity="0.95" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">HTTP/2</text>
+  <text x="40" y="278" font-size="10" fill="#e0f2fe" opacity="0.6">단일 연결, 다중 스트림</text>
+
+  <rect x="30" y="294" width="340" height="56" rx="6" fill="#1a2e4d" opacity="0.5" stroke="#38bdf8" stroke-width="1.2"/>
+
+  <g>
+    <rect x="40" y="304" width="40" height="36" rx="3" fill="#38bdf8" opacity="0.92"/>
+    <text x="60" y="326" font-size="11" fill="#0a1628" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">1</text>
+
+    <rect x="84" y="304" width="30" height="36" rx="3" fill="#fbbf24" opacity="0.9"/>
+    <text x="99" y="326" font-size="11" fill="#0a1628" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">3</text>
+
+    <rect x="118" y="304" width="36" height="36" rx="3" fill="#f472b6" opacity="0.92"/>
+    <text x="136" y="326" font-size="11" fill="#0a1628" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">5</text>
+
+    <rect x="158" y="304" width="28" height="36" rx="3" fill="#38bdf8" opacity="0.92"/>
+    <text x="172" y="326" font-size="11" fill="#0a1628" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">1</text>
+
+    <rect x="190" y="304" width="44" height="36" rx="3" fill="#a5b4fc" opacity="0.92"/>
+    <text x="212" y="326" font-size="11" fill="#0a1628" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">7</text>
+
+    <rect x="238" y="304" width="30" height="36" rx="3" fill="#fbbf24" opacity="0.9"/>
+    <text x="253" y="326" font-size="11" fill="#0a1628" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">3</text>
+
+    <rect x="272" y="304" width="30" height="36" rx="3" fill="#f472b6" opacity="0.92"/>
+    <text x="287" y="326" font-size="11" fill="#0a1628" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">5</text>
+
+    <rect x="306" y="304" width="54" height="36" rx="3" fill="#38bdf8" opacity="0.92"/>
+    <text x="333" y="326" font-size="11" fill="#0a1628" text-anchor="middle" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">1</text>
+  </g>
+
+  <text x="40" y="370" font-size="10" fill="#e0f2fe" opacity="0.65" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">stream 1, 3, 5, 7 interleaved</text>
+
+</svg>

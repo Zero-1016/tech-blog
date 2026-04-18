@@ -16,6 +16,10 @@ export type MotifKey =
   | "refactor"
   | "styling"
   | "rendering"
+  | "data-url"
+  | "measurement"
+  | "network"
+  | "event-loop"
   | "default";
 
 export interface BannerPalette {
@@ -39,6 +43,7 @@ export interface BannerInput {
   slug: string;
   tags?: string[];
   series?: string;
+  banner?: string;
 }
 
 const TAG_TO_MOTIF: Array<[RegExp, MotifKey]> = [
@@ -54,6 +59,10 @@ const TAG_TO_MOTIF: Array<[RegExp, MotifKey]> = [
   [/^(Node\.js|npm|npx|CLI|모듈 시스템|ESM)$/i, "module"],
   [/^(AST|codemod|리팩토링)$/i, "refactor"],
   [/^(텍스트|제어)$/i, "typography"],
+  [/^(data URL|인라인 자산|Base64|임베드)$/i, "data-url"],
+  [/^(DOM 측정|offsetWidth|offsetHeight|측정|리플로우|reflow|DOM)$/i, "measurement"],
+  [/^(네트워크|HTTP|HTTP\/1\.1|HTTP\/2|HTTP\/3|QUIC|TCP|multiplexing)$/i, "network"],
+  [/^(이벤트 루프|event loop|microtask|마이크로태스크|task queue|scheduler)$/i, "event-loop"],
   [/^(브라우저|렌더링|렌더링 파이프라인|Critical Rendering Path|CRP)$/i, "rendering"],
   [/^(성능|애니메이션|Hooks)$/i, "performance"],
   [/^(Flexbox|Grid|레이아웃|박스 모델|aspect-ratio)$/i, "layout"],
@@ -74,6 +83,10 @@ const MOTIF_PRIORITY: MotifKey[] = [
   "methodology",
   "module",
   "typography",
+  "data-url",
+  "measurement",
+  "network",
+  "event-loop",
   "rendering",
   "performance",
   "layout",
@@ -201,6 +214,34 @@ const PALETTES: Record<MotifKey, BannerPalette> = {
     accent: "#fb7185",
     text: "#cffafe",
   },
+  "data-url": {
+    bg: "#0a1a33",
+    bgAccent: "#163a5c",
+    primary: "#3b82f6",
+    accent: "#f472b6",
+    text: "#dbeafe",
+  },
+  measurement: {
+    bg: "#0c1c2e",
+    bgAccent: "#16304b",
+    primary: "#5eead4",
+    accent: "#fcd34d",
+    text: "#ccfbf1",
+  },
+  network: {
+    bg: "#0a1628",
+    bgAccent: "#1a2e4d",
+    primary: "#38bdf8",
+    accent: "#fb923c",
+    text: "#e0f2fe",
+  },
+  "event-loop": {
+    bg: "#0f1530",
+    bgAccent: "#1e2a52",
+    primary: "#facc15",
+    accent: "#a78bfa",
+    text: "#e0e7ff",
+  },
   default: {
     bg: "#0a1428",
     bgAccent: "#1e3555",
@@ -239,7 +280,8 @@ function extractInitials(title: string): string {
 }
 
 export function buildBannerSpec(input: BannerInput): BannerSpec {
-  const motif = pickMotif(input.tags ?? []);
+  const override = input.banner && input.banner in PALETTES ? (input.banner as MotifKey) : null;
+  const motif = override ?? pickMotif(input.tags ?? []);
   return {
     motif,
     palette: PALETTES[motif],

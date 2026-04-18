@@ -161,6 +161,7 @@ export default async function PostPage({ params }: Props) {
                   title={post.title}
                   slug={post.slug}
                   tags={post.tags}
+                  banner={post.banner}
                   className="aspect-[2/1] w-full"
                 />
               </div>
