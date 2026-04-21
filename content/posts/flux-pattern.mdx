@@ -1,0 +1,171 @@
+---
+title: "Flux가 남긴 단방향 흐름"
+description: "Flux 저장소는 archive 됐어요. 근데 상태 관리 얘기할 때 왜 여전히 Flux부터 나오죠?"
+date: 2026-04-21
+tags: ["React", "상태관리", "아키텍처", "Flux", "Redux"]
+published: true
+---
+
+Redux 공식 문서를 읽다 보면 "prior art: Flux" 같은 섹션이 꼭 나와요. Zustand, Jotai, Recoil 소개글도 마찬가지예요. 2026년 지금, Flux 저장소는 이미 archive 됐는데 왜 매번 Flux 얘기부터 시작할까요. 저는 이게 오래 궁금했거든요. 답을 찾다 보니, 결국 Flux는 "도구" 가 아니라 **사상의 원류** 로 남아 있는 거였어요.
+
+## 양방향 바인딩이 무너진 자리
+
+Flux 얘기를 하려면 Flux가 왜 태어났는지부터 봐야 해요. 2010년대 초 프론트엔드는 Angular 1, Ember, Knockout 같은 양방향 바인딩 프레임워크가 주류였어요. 모델을 바꾸면 뷰가 따라 바뀌고, 뷰의 입력이 모델을 다시 바꾸고. 처음엔 "이게 바로 마법이구나" 싶었죠.
+
+근데 앱이 커지면 이 마법이 빚더미가 돼요. Facebook이 채팅 알림 카운트 버그를 겪으면서 그 한계를 공개적으로 얘기한 게 유명해요. 알림을 읽었는데도 뱃지에 숫자가 남아 있고, 그 숫자가 어디서 왔는지 역추적이 안 되는 거예요. 모델 A가 B를 바꾸고, B가 다시 C를 바꾸고, C가 또 A를 바꾸고. 의존 그래프가 순환을 만들면 한 번의 액션이 몇 단계를 거쳐 끝나는지 아무도 설명 못 하는 상태가 와요.
+
+그래서 Facebook은 방향을 반대로 돌려봤어요. 데이터가 한 방향으로만 흐르도록 강제하면 어떨까. 상태가 어디서 바뀌었는지 추적 가능한 구조가 되지 않을까. 그게 Flux예요.
+
+## Flux의 네 역할과 한 방향 흐름
+
+Flux는 프레임워크가 아니에요. README 첫 줄에 박혀 있어요.<Cite id="facebook-flux" />
+
+<Callout variant="info">
+"An application architecture for React utilizing a unidirectional data flow." - Facebook Flux README
+
+React 앱을 위한 단방향 데이터 흐름 아키텍처. 라이브러리가 아니라 "이렇게 짜라" 는 규약이에요.
+
+</Callout>
+
+Flux가 제안하는 건 네 개의 역할과 그 사이를 흐르는 한 방향이에요.
+
+<AnimatedStep steps={[
+  {
+    title: "Action",
+    content: "사용자 클릭, 네트워크 응답, 타이머 만료 같은 '발생한 일' 을 서술하는 평범한 객체. { type, payload } 형태. 이 자체는 아무것도 바꾸지 않아요."
+  },
+  {
+    title: "Dispatcher",
+    content: "앱에 딱 하나 존재하는 중앙 허브. Action을 받아서 등록된 Store 전부에게 차례로 전달해요. 순서와 의존을 dispatcher가 관리."
+  },
+  {
+    title: "Store",
+    content: "상태를 보관하는 곳. Action을 받아 자기 상태를 갱신하고, 갱신이 끝나면 'change' 이벤트를 발행해요. 도메인별로 여러 개 둬도 됨."
+  },
+  {
+    title: "View",
+    content: "React 컴포넌트. Store의 change 이벤트를 구독해 다시 렌더. 사용자 입력이 들어오면 setState가 아니라 Action을 dispatch."
+  }
+]} />
+
+흐름은 항상 한 방향이에요. `Action → Dispatcher → Store → View`, 그리고 View에서 사용자 입력이 들어오면 또 `Action → Dispatcher → ...`. View가 Store를 직접 건드리거나, Store끼리 서로를 부르거나 하는 샛길이 막혀 있어요.
+
+<CodePlayground
+  template="react"
+  showPreview={true}
+  code={`import React, { useReducer } from "react";
+
+  function App() {
+    return <Counter />;
+  }
+
+  function counterReducer(state, action) {
+    switch (action.type) {
+      case "increment":
+        return { count: state.count + 1 };
+      case "decrement":
+        return { count: state.count - 1 };
+      default:
+        return state;
+    }
+  }
+
+  function Counter() {
+    const [state, dispatch] = useReducer(counterReducer, { count: 0 });
+    return (
+      <div className="counter">
+        <p>count: {state.count}</p>
+        <button onClick={() => dispatch({ type: "increment" })}>+1</button>
+        <button onClick={() => dispatch({ type: "decrement" })}>-1</button>
+      </div>
+    );
+  }`}
+  css={`.counter {
+    padding: 16px;
+    font-family: sans-serif;
+  }`}
+/>
+
+위 예제의 `useReducer` 가 곧 작은 Flux 예요. action을 dispatch하고, reducer가 상태를 갱신하고, view가 갱신된 상태를 렌더. 한 방향 흐름이 컴포넌트 하나 크기로 축소된 버전이죠. Flux의 아이디어가 React 안에 녹아들어 있는 이유가 여기 있어요.
+
+## React와 단방향이 맞는 이유
+
+React 자체가 Flux를 전제하고 설계된 건 아니지만, 사상이 같은 방향을 보고 있어요.<Cite id="react-thinking" />
+
+<Callout variant="info">
+"React uses one-way data flow, passing data down the component hierarchy from parent to child component." - React docs, Thinking in React
+
+부모에서 자식으로만 props가 흐르고, 자식이 상태를 바꾸려면 부모가 내려준 콜백을 호출해요. 이걸 React 문서는 "inverse data flow" 라고 불러요.
+
+</Callout>
+
+부모가 상태를 들고, 자식은 그 복제본을 props로 받기만 해요. 자식은 받은 props를 직접 수정할 수 없어요. 상태를 바꾸려면 부모가 내려준 setter를 호출해서 "바꿔주세요" 라고 위로 요청해요. Flux 의 dispatch 와 모양이 거의 같죠.
+
+그래서 Flux 가 잘 어울리는 게 아니라, **React 모델 자체가 Flux 의 한 형태** 에 가까워요. Flux 는 그 한 방향 흐름을 앱 전체로 확장한 사상이에요. 컴포넌트 트리 하나가 아니라 앱이라는 더 큰 트리를 같은 규약으로 움직이게 만드는 시도.
+
+## Redux가 Flux에서 지운 것과 남긴 것
+
+Flux 얘기에서 Redux 를 빼놓기 어려워요. Redux 공식 문서의 "Prior Art" 섹션이 이 관계를 아주 깔끔하게 정리해 둬요.<Cite id="redux-prior-art" />
+
+<Callout variant="info">
+"Like Flux, Redux prescribes that you concentrate your model update logic in a certain layer of your application... both tell you to describe every mutation as a plain object called an 'action'." - Redux docs
+
+모델 갱신 로직을 한 레이어에 몰아두기, 모든 변화를 평범한 객체로 서술하기. Redux 가 Flux 에서 물려받은 정수예요.
+
+</Callout>
+
+남긴 게 있으면 지운 것도 있어요. Redux 가 Flux 를 단순화한 지점이 두 가지예요.
+
+첫째, Dispatcher 를 지웠어요. Flux 는 전용 Dispatcher 객체에 등록된 콜백들을 순서대로 호출해요. Redux 는 이걸 순수 함수 한 방으로 대체했어요. `(state, action) => state`. 그게 reducer 예요. 합성이 쉬워지고, 테스트도 쉬워져요.
+
+둘째, 불변성을 강제했어요. Flux 의 Store 는 내부에서 자기 상태를 mutate 해도 괜찮았어요. Redux reducer 는 mutate 금지. 항상 새 객체를 반환해야 해요. 이게 시간 여행 디버깅, DevTools 상태 스냅샷, 메모이제이션 최적화를 가능하게 해줬어요.
+
+<AnimatedStep steps={[
+  {
+    title: "Flux",
+    content: "Action → Dispatcher(콜백 등록 허브) → Store(자기 상태 mutate 가능) → View. 여러 Store 간 의존은 dispatcher.waitFor 로."
+  },
+  {
+    title: "Redux",
+    content: "Action → Store(순수 함수 reducer 로 새 상태 계산) → View. Dispatcher 없음. mutate 금지. 전역 상태 트리 한 개."
+  },
+  {
+    title: "남은 정신",
+    content: "한 방향 흐름, action 객체로 변화 서술, 갱신 로직을 한 레이어에 몰아두기. 이 세 가지는 동일."
+  }
+]} />
+
+Flux 원작자들이 Redux 접근을 "개선" 으로 승인한 역사적 맥락이 있어요. Flux 가 제시한 문제의식이 Redux 에서 더 엄격한 형태로 이어졌다고 볼 수 있는 거죠.
+
+## Flux 저장소는 archive 됐어요, 그래서요
+
+2023년 3월, [facebook/flux](https://github.com/facebook/flux) 저장소는 archive 상태로 바뀌었어요. README 에도 "더 정교한 대안을 쓰세요" 라는 안내가 붙었어요. [Redux](https://redux.js.org), [Zustand](https://zustand-demo.pmnd.rs), [Jotai](https://jotai.org), [Recoil](https://recoiljs.org), [MobX](https://mobx.js.org). 지금 쓸 수 있는 상태 관리 라이브러리가 이미 충분히 성숙했다는 뜻이에요.
+
+그래서 "Flux 는 죽었다" 고 말하면 반만 맞아요. 라이브러리로서는 맞지만, 사상은 전혀 안 죽었거든요. 오늘 Zustand 의 store, Jotai 의 atom, Redux 의 slice, TanStack Query 의 mutation, React 자체의 `useReducer`. 전부 "한 방향으로 흐르는 action 기반 상태" 라는 Flux 의 뼈대를 변주한 형태예요.
+
+처음 질문으로 돌아가요. 왜 상태 관리 얘기를 할 때 Flux 부터 나올까요. 그게 "좋은 추상" 이었기 때문이에요. 좋은 추상은 구현이 사라져도 언어로 남아요. 우리가 action, store, dispatch 라는 단어로 대화할 수 있는 게 Flux 가 물려준 가장 큰 유산이에요. 라이브러리가 사라져도 단어가 남은 거죠.
+
+한 걸음 더 가고 싶으면, 지금 내가 쓰는 상태 관리 도구의 공식 문서에서 "Flux" 또는 "prior art" 섹션을 찾아보세요. 대부분의 도구가 자기가 Flux 에서 무엇을 물려받고 무엇을 지웠는지 1~2문장으로 설명해 둬요. 거기서 그 도구의 성격이 보여요.
+
+<References
+  items={[
+    {
+      id: "facebook-flux",
+      title: "Facebook - Flux (GitHub, archived)",
+      href: "https://github.com/facebook/flux",
+      description: "Flux 네 역할과 단방향 데이터 흐름 정의, 2023년 archive 안내",
+    },
+    {
+      id: "redux-prior-art",
+      title: "Redux Docs - Prior Art",
+      href: "https://redux.js.org/understanding/history-and-design/prior-art",
+      description: "Redux 가 Flux 에서 계승한 것과 Dispatcher 제거, 불변성 강제 같은 차이",
+    },
+    {
+      id: "react-thinking",
+      title: "React Docs - Thinking in React",
+      href: "https://react.dev/learn/thinking-in-react",
+      description: "React 의 단방향 데이터 흐름과 inverse data flow 원칙",
+    },
+  ]}
+/>

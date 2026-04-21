@@ -1,0 +1,187 @@
+---
+title: "Context를 여러 개로 쪼개야 하는 이유"
+description: "한 객체로 묶어 넘기면 dispatch만 쓰는 컴포넌트까지 리렌더돼요."
+date: 2026-04-21
+tags: ["React", "Context", "성능", "상태관리"]
+published: true
+---
+
+[React](https://react.dev) Context로 전역 상태를 내려주는 코드를 보면 `<Provider value={{ user, setUser }}>` 처럼 상태와 업데이트 함수를 한 객체로 묶어 넘기는 패턴을 자주 만나요. 처음엔 저도 이게 깔끔해 보였거든요. 그런데 앱이 조금만 커지면 "나는 setter만 쓰는데 왜 이 컴포넌트가 계속 다시 그려지지?" 하는 질문이 따라붙어요.
+
+답은 Context의 비교 방식에 있어요. 그리고 이걸 피하려고 React 공식 문서가 직접 보여주는 해법이 "값과 dispatch를 아예 다른 Context로 쪼개기" 예요.
+
+## 매 렌더마다 새 객체가 문제
+
+Context를 읽는 컴포넌트는 Provider의 `value`가 바뀌면 전부 다시 그려져요. 여기서 "바뀐다" 의 기준이 중요한데, React는 이전 값과 새 값을 `Object.is`로 비교해요.<Cite id="react-usecontext" />
+
+<Callout variant="warning">
+"React automatically re-renders all the children that use a particular context starting from the provider that receives a different value. The previous and the next values are compared with the Object.is comparison." - react.dev
+
+말을 풀면 이래요. Provider의 value가 `Object.is`로 다르다고 판정되는 순간, 그 Context를 읽는 모든 하위 컴포넌트가 리렌더 대상이 돼요. 부분 구독 같은 건 없어요.
+
+</Callout>
+
+그래서 이런 코드를 쓰면:
+
+<CodePlayground
+  template="react"
+  code={`import { createContext, useContext, useState, memo } from "react";
+
+  const UserContext = createContext(null);
+
+  function App() {
+    return (
+      <Provider>
+        <Display />
+        <Button />
+      </Provider>
+    );
+  }
+
+  function Provider({ children }) {
+    const [user, setUser] = useState({ name: "jihyeong" });
+    return (
+      <UserContext.Provider value={{ user, setUser }}>
+        {children}
+      </UserContext.Provider>
+    );
+  }
+
+  const Display = memo(function Display() {
+    const { user } = useContext(UserContext);
+    console.log("Display render");
+    return <p>hello, {user.name}</p>;
+  });
+
+  const Button = memo(function Button() {
+    const { setUser } = useContext(UserContext);
+    console.log("Button render");
+    return <button onClick={() => setUser({ name: "bot" })}>change</button>;
+  });`}
+/>
+
+`Button`은 `setUser`만 꺼내 쓰는데 user가 바뀔 때마다 같이 리렌더돼요. 이유는 Provider의 `{ user, setUser }` 객체가 매 렌더마다 새로 만들어지기 때문이에요. 참조가 달라지니 `Object.is` 가 `false`, 그래서 Context를 구독하는 `Button`도 같이 끌려가요.
+
+## memo로는 막히지 않아요
+
+첫 대응으로 `React.memo`를 떠올리기 쉽죠. 근데 memo는 props 비교만 해요. Context로 들어오는 값은 props가 아니라 다른 통로예요.<Cite id="react-usecontext" />
+
+<Callout variant="info">
+"Skipping re-renders with memo does not prevent the children receiving fresh context values." - react.dev
+
+memo는 부모에서 내려오는 props 참조만 가로채요. Context는 그 경로를 건너뛰어 컴포넌트에 직접 꽂히기 때문에, memo 벽을 뚫고 내부까지 새 value가 도착해요.
+
+</Callout>
+
+그럼 Provider의 value를 `useMemo`로 감싸면 되지 않나 싶은데, 상태가 실제로 바뀌는 순간에는 객체도 당연히 새로 만들어야 해요. user가 업데이트되면 `{ user, setUser }`의 user 자리가 달라지니까요. 결국 user가 바뀌는 한, setter만 쓰는 컴포넌트도 계속 따라 리렌더 돼요. 감싸는 걸로는 근본을 못 피해요.
+
+이건 [useMemo를 선제적으로 두르는 버릇](/posts/react-usememo-patterns)이 왜 잘 안 먹히는지와도 맞닿아 있어요. 참조 안정성은 "감싼다고 생기는 것" 이 아니라 "그 값이 실제로 언제 바뀌는가" 의 문제예요.
+
+## 공식 해법, 두 Context로 쪼개기
+
+React 공식 튜토리얼의 "Scaling Up with Reducer and Context" 페이지는 이 문제를 이렇게 풀어요. Context를 두 개로 나누는 거예요.<Cite id="react-scaling" />
+
+<Callout variant="info">
+"To pass them down the tree, you will create two separate contexts: TasksContext provides the current list of tasks. TasksDispatchContext provides the function that lets components dispatch actions." - react.dev
+
+상태는 `TasksContext`에, dispatch는 `TasksDispatchContext`에 각각 실어서 내려요. 값을 읽어야 하는 컴포넌트만 앞쪽 Context를 구독하고, 바꾸기만 하는 컴포넌트는 뒤쪽 Context를 구독하는 구조죠.
+
+</Callout>
+
+실제로 쓰면 이렇게 돼요.
+
+<CodePlayground
+  template="react"
+  code={`import { createContext, useContext, useReducer, memo } from "react";
+
+  const UserContext = createContext(null);
+  const UserDispatchContext = createContext(null);
+
+  function App() {
+    return (
+      <Provider>
+        <Display />
+        <Button />
+      </Provider>
+    );
+  }
+
+  function reducer(state, action) {
+    if (action.type === "rename") return { name: action.name };
+    return state;
+  }
+
+  function Provider({ children }) {
+    const [user, dispatch] = useReducer(reducer, { name: "jihyeong" });
+    return (
+      <UserContext.Provider value={user}>
+        <UserDispatchContext.Provider value={dispatch}>
+          {children}
+        </UserDispatchContext.Provider>
+      </UserContext.Provider>
+    );
+  }
+
+  const Display = memo(function Display() {
+    const user = useContext(UserContext);
+    console.log("Display render");
+    return <p>hello, {user.name}</p>;
+  });
+
+  const Button = memo(function Button() {
+    const dispatch = useContext(UserDispatchContext);
+    console.log("Button render");
+    return (
+      <button onClick={() => dispatch({ type: "rename", name: "bot" })}>
+        change
+      </button>
+    );
+  });`}
+/>
+
+`Button`이 구독하는 `UserDispatchContext`의 value는 `dispatch` 함수 하나예요. user 상태가 바뀌어도 이 Context의 value 참조는 그대로라서 `Button`은 리렌더 대상에서 빠져요. 핵심은 "바뀌는 것" 과 "안 바뀌는 것" 을 같은 value 객체에 묶어두지 않는 거예요.
+
+## dispatch는 왜 참조가 안 흔들리나
+
+여기서 조금 미묘한 부분이 있어요. `useState`의 setter나 `useReducer`의 dispatch가 "매 렌더마다 같은 함수 참조" 라는 건 React가 보장해주는 동작이에요. 직접 `useCallback`으로 감싸지 않아도 돼요.
+
+그래서 위 코드의 `UserDispatchContext`는 별도 `useMemo` 없이 `dispatch`를 그대로 넘겨도 참조가 안정적이에요. Provider가 다시 렌더되면서 `<UserDispatchContext.Provider value={dispatch}>`가 다시 평가돼도, `dispatch` 식별자 자체가 같은 참조를 가리키니 Context의 value는 변하지 않은 걸로 판정돼요.
+
+반면 `useCallback`으로 직접 만든 함수를 내려주려면 의존성 배열을 꼼꼼히 관리해야 참조 안정성이 지켜져요. dispatch를 쓸 수 있는 자리라면 그냥 dispatch를 쓰는 게 손이 덜 가요. [단방향 흐름으로 상태 관리를 설계했을 때](/posts/flux-pattern) 얻는 이득도 여기서 한 번 더 발현돼요. 액션을 보내는 쪽과 상태를 읽는 쪽이 자연스럽게 분리되니까요.
+
+## 한 걸음 더
+
+흥미로운 엇갈림이 있어요. [Kent C. Dodds](https://kentcdodds.com)의 "How to Use React Context Effectively" 글에서는 state와 dispatch를 **한** value로 묶어서 내리는 패턴을 소개해요. 저도 처음엔 이 접근을 따라 썼거든요.
+
+둘 다 근거가 있어요. Dodds의 접근은 dispatch만 쓰는 컴포넌트가 드문 작은 앱이나, 상태가 자주 안 바뀌는 Provider에는 충분히 깔끔해요. 공식 문서의 분리 접근은 Provider가 자주 업데이트되고, 트리 깊숙한 곳에 setter만 쓰는 자식이 많을 때 이득이 커져요.
+
+"무조건 쪼개라" 가 아니라 "언제 value가 바뀌고, 누가 그 Context를 구독하느냐"를 먼저 보세요. dispatch만 쓰는 자식이 memo 벽을 뚫고 리렌더되는 게 눈에 띄는 순간, 공식 패턴으로 갈아타면 돼요.
+
+<References
+  items={[
+    {
+      id: "react-scaling",
+      title: "React - Scaling Up with Reducer and Context",
+      href: "https://react.dev/learn/scaling-up-with-reducer-and-context",
+      description: "공식 튜토리얼이 직접 보여주는 state/dispatch Context 분리 패턴",
+    },
+    {
+      id: "react-usecontext",
+      title: "React - useContext",
+      href: "https://react.dev/reference/react/useContext",
+      description: "Object.is 비교와 memo가 Context 업데이트를 막지 못하는 이유",
+    },
+    {
+      id: "react-createcontext",
+      title: "React - createContext",
+      href: "https://react.dev/reference/react/createContext",
+      description: "Provider value 변경이 하위 구독 컴포넌트에 전파되는 규칙",
+    },
+    {
+      id: "react-passing-deeply",
+      title: "React - Passing Data Deeply with Context",
+      href: "https://react.dev/learn/passing-data-deeply-with-context",
+      description: "Context의 기본 동작과 언제 쓰고 언제 피해야 하는지",
+    },
+  ]}
+/>

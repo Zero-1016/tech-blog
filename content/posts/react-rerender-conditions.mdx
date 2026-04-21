@@ -1,0 +1,147 @@
+---
+title: "리액트는 언제 다시 그리나요"
+description: "state, props, 부모 중 무엇이 트리거였는지 헷갈릴 때 보세요."
+date: 2026-04-21
+tags: ["React", "렌더링", "성능"]
+published: true
+---
+
+리액트로 앱을 만들다 보면 "이 컴포넌트가 왜 또 그려지지?" 하는 순간이 찾아와요. 저도 프로파일러를 켜놓고 한참을 들여다본 적이 있거든요. props가 안 바뀐 것 같은데 자식이 계속 반짝거리고, state를 갱신했는데 화면은 그대로인 경우도 있었어요. 리렌더가 어디서 시작되고 어디까지 번지는지 감이 잡히면 이런 상황이 훨씬 덜 당황스러워져요.
+
+## 리렌더가 시작되는 순간
+
+리액트 공식 문서는 렌더링을 Trigger, Render, Commit 세 단계로 설명해요. 여기서 핵심은 Trigger예요. 최초 마운트를 제외하면, 리액트가 컴포넌트를 다시 그리기로 결정하는 트리거는 크게 두 종류뿐이에요.<Cite id="react-render-and-commit" />
+
+<AnimatedStep steps={[
+  { title: "컴포넌트 자신의 state 업데이트", content: "setState 계열 setter가 호출되면 해당 컴포넌트가 리렌더 대상으로 큐에 들어가요." },
+  { title: "조상 컴포넌트의 리렌더", content: "부모가 다시 그려지면 그 아래 자식들도 기본적으로 같이 그려져요. props가 바뀌지 않아도 해당돼요." }
+]} />
+
+props 변경이 별도 트리거처럼 보이지만, 사실 "부모가 리렌더됐기 때문에 자식이 새로운 props를 받는 것"이에요. 그래서 공식 문서는 props를 독립 트리거로 세지 않아요. 이 구분이 나중에 `React.memo`의 동작을 이해할 때 도움이 돼요.
+
+## 참조 동등성으로 판단해요
+
+setter를 호출했다고 무조건 리렌더가 일어나진 않아요. 리액트는 새 값과 이전 값을 `Object.is`로 비교하고, 결과가 같다면 해당 컴포넌트의 리렌더를 건너뛰어요. 이걸 bailout이라고 불러요.<Cite id="react-queueing-updates" />
+
+문제는 객체나 배열이에요. 내용이 바뀌어도 참조가 같으면 리액트는 "변화 없음"으로 판단해요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+
+  function TodoList() {
+    const [todos, setTodos] = useState([{ id: 1, text: "run" }]);
+
+    function addMutate() {
+      todos.push({ id: 2, text: "read" });
+      setTodos(todos);
+    }
+
+    function addImmutable() {
+      setTodos([...todos, { id: 2, text: "read" }]);
+    }
+
+    return (
+      <div>
+        <ul>
+          {todos.map((t) => (
+            <li key={t.id}>{t.text}</li>
+          ))}
+        </ul>
+        <button onClick={addMutate}>mutate then set</button>
+        <button onClick={addImmutable}>spread and set</button>
+      </div>
+    );
+  }`}
+/>
+
+왼쪽 버튼을 누르면 배열에 항목을 push한 뒤 같은 참조를 setTodos에 넘겨요. 리액트는 `Object.is(prev, next)`가 true라고 판단해서 리렌더를 건너뛰고, 화면에 새 항목이 안 나타나요. 오른쪽 버튼은 새 배열을 만들어서 넘기니까 참조가 달라지고, 리렌더가 일어나요. 불변 업데이트가 관례가 된 이유가 여기에 있어요.
+
+## 부모가 그리면 자식도 그려져요
+
+리렌더에서 가장 자주 놓치는 부분이에요. 부모 컴포넌트가 다시 그려지면, props가 안 바뀌었더라도 자식은 기본적으로 리렌더돼요. 리액트가 자동으로 props를 비교해서 자식을 스킵해주지 않아요.
+
+<Callout variant="info">
+"React will normally re-render a component whenever its parent re-renders." - react.dev, memo
+
+부모가 그려지면 자식도 그려진다는 게 기본 동작이에요. 이 전제를 깔고 나서 `memo`를 얹어야 얘기가 맞아요.
+
+</Callout>
+
+`React.memo`로 감싸면 props를 얕게 비교해서 동일하면 리렌더를 건너뛰어요. 이때 주의할 점은 props 중에 함수나 객체 리터럴이 섞여 있으면 매번 새 참조가 만들어져서 memo가 사실상 무력해진다는 거예요. 그래서 `useCallback`과 `useMemo`가 함께 등장하는 경우가 많아요. 이 조합이 언제 의미 있는지는 [useMemo가 필요한 순간](/posts/react-usememo-patterns)에서 한번 정리한 적이 있어요.
+
+## Context가 내려주는 리렌더
+
+Context는 조금 다른 경로를 타요. `useContext`로 값을 구독한 컴포넌트는 Provider의 `value`가 이전과 달라지면 중간 트리에 `React.memo`가 끼어 있더라도 리렌더돼요. memo는 자기 props만 비교하지, 구독 중인 context의 변화를 막진 못하거든요.<Cite id="react-context" />
+
+그래서 Provider value를 매 렌더마다 새 객체 리터럴로 넘기면 구독자 전원이 같이 그려지는 상황이 생겨요.
+
+<CodePlayground
+  template="react"
+  code={`import { createContext, useContext, useState } from "react";
+
+  const UserContext = createContext(null);
+
+  function App() {
+    return (
+      <Provider>
+        <NameViewer />
+      </Provider>
+    );
+  }
+
+  function Provider({ children }) {
+    const [user, setUser] = useState({ name: "jane" });
+    const value = { user, setUser };
+    return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+  }
+
+  function NameViewer() {
+    const { user } = useContext(UserContext);
+    return <p>{user.name}</p>;
+  }`}
+/>
+
+Provider가 리렌더될 때마다 `value`는 새 객체라서, 실제 user 데이터가 안 바뀌어도 NameViewer가 같이 그려져요. 값과 setter를 분리해서 Provider를 쪼개거나, value를 `useMemo`로 감싸면 이 연쇄를 끊을 수 있어요. 비슷한 맥락을 [Context 값과 dispatch를 왜 쪼개나](/posts/react-context-split-value-dispatch)에서 다뤘어요.
+
+## 같은 값으로 setState하면
+
+마지막으로 자주 헷갈리는 엣지 케이스 하나. `setState(sameValue)`처럼 `Object.is` 기준 동일한 값으로 업데이트하면 리액트가 해당 컴포넌트의 리렌더를 bail out한다고 했잖아요. 그래서 카운터에 `setCount(count)`를 걸면 아무 일도 안 일어나요.
+
+<Callout variant="warning">
+bail out은 "항상 스킵"은 아니에요. 이미 부모에서 리렌더가 진행 중이라면, 자식 단계에서 같은 값으로 setState를 호출해도 자식까지 한 번은 렌더 함수가 돌 수 있어요. 공식 문서도 이걸 "React may still need to render that specific component before bailing out"이라고 적어요.
+
+</Callout>
+
+실무에서 이걸 의존할 일은 드물어요. 다만 디버깅 중에 "같은 값 넣었는데 왜 렌더가 돌지?" 하는 의문이 생기면 이 규칙을 떠올려보면 돼요. 리렌더를 막고 싶다면 `Object.is`가 true가 되도록 값을 그대로 유지하거나, 아예 상태를 끌어올려서 조건 분기로 처리하는 게 더 예측 가능해요.
+
+이렇게 리렌더 조건을 한 번 정리해두면, 프로파일러에서 빨간 막대가 길게 찍혔을 때 "이게 state 트리거인지, 부모 전파인지, context 전파인지"를 빠르게 분류할 수 있어요. 원인을 분류하고 나야 `memo`, `useMemo`, context 분리 중 어떤 도구를 꺼낼지 판단이 서요.
+
+<References
+  items={[
+    {
+      id: "react-render-and-commit",
+      title: "React - Render and Commit",
+      href: "https://react.dev/learn/render-and-commit",
+      description: "리렌더를 Trigger, Render, Commit 세 단계로 설명한 공식 가이드",
+    },
+    {
+      id: "react-queueing-updates",
+      title: "React - Queueing a Series of State Updates",
+      href: "https://react.dev/learn/queueing-a-series-of-state-updates",
+      description: "state 변경 여부를 Object.is로 비교하고 bailout하는 규칙",
+    },
+    {
+      id: "react-memo",
+      title: "React - memo",
+      href: "https://react.dev/reference/react/memo",
+      description: "부모가 리렌더될 때 자식도 기본 리렌더되며 memo가 props 얕은 비교로 스킵하는 동작",
+    },
+    {
+      id: "react-context",
+      title: "React - Passing Data Deeply with Context",
+      href: "https://react.dev/learn/passing-data-deeply-with-context",
+      description: "Provider value가 바뀌면 memo로 감싸도 구독 컴포넌트가 리렌더되는 경로",
+    },
+  ]}
+/>
