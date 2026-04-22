@@ -1,0 +1,195 @@
+---
+title: "자식의 ref를 부모가 쓰려면"
+description: "부모에서 자식의 focus나 scroll을 호출해야 할 때 쓰는 훅이에요."
+date: 2026-04-22
+tags: ["React", "Hooks", "ref"]
+published: true
+---
+
+로그인 폼을 제출했는데 비밀번호가 틀렸을 때, 커서가 다시 비밀번호 칸으로 돌아가면 편하죠. 저도 자식 컴포넌트를 만들어놓고는 부모 쪽에서 "이 input에 focus 좀 넣고 싶은데" 하고 막힌 적이 있거든요. [React](https://react.dev)는 선언적 모델이 기본이라서, 부모가 자식 내부 DOM을 직접 건드리는 건 예외적인 일이에요. 그래서 아예 전용 출구가 따로 마련돼 있어요.
+
+## 부모가 자식의 무언가를 건드려야 할 때
+
+`<input>`을 자식 컴포넌트 안에 숨긴 상태에서 focus를 부모가 어떻게 호출할지 생각해볼게요. prop으로 `shouldFocus` 같은 불리언을 내려보내서 자식이 스스로 focus하게 만들 수도 있어요. 다만 focus를 넣어야 할 시점이 부모의 이벤트 처리 중간(예: 유효성 검사 실패 직후)이라면, 이걸 state 변화로 우회하는 게 어색해집니다.
+
+ref를 쓰면 부모가 자식 내부로 손을 넣을 수 있어요. 다만 React 공식 문서는 이걸 "탈출구"라는 단어로 설명해요.
+
+<Callout variant="warning">
+"Refs are an escape hatch. You should only use them when you have to 'step outside React.'" - React 공식 문서
+
+ref는 React의 선언적 모델을 잠깐 벗어나는 자리예요. 포커스 이동, 스크롤 위치, 브라우저 API 호출처럼 props로 표현이 안 될 때만 꺼내는 도구라는 뜻이에요.
+
+</Callout>
+
+문제는 부모가 자식 ref를 그냥 받으면 자식 DOM 노드 전체를 만질 수 있게 된다는 점이에요. `ref.current.value`로 값을 바꾸거나, `innerHTML`을 갈아 끼우는 것까지 막히지 않아요. 자식 입장에서는 "부모에게 뭘 허용하고 뭘 감출지"를 정해둘 방법이 필요해요. `useImperativeHandle`은 그 자리를 위한 훅이에요.<Cite id="react-dom-refs" />
+
+## 시그니처와 기본 사용
+
+훅은 세 인자를 받아요.
+
+```tsx
+useImperativeHandle(ref, createHandle, dependencies?);
+```
+
+`ref`는 컴포넌트가 prop으로 받은 ref 오브젝트고, `createHandle`은 부모에게 노출할 객체를 반환하는 함수예요. `dependencies`는 의존성 배열이고요. 생략하면 매 렌더마다 handle이 다시 만들어지고, 배열을 넘기면 `Object.is`로 비교해서 달라졌을 때만 재생성해요.<Cite id="react-useimperativehandle" />
+
+아래는 부모 버튼이 자식 input에 focus를 넣는 최소 예제예요. 이 데모는 `forwardRef` 기반으로 작성했어요. React 19에서 어떻게 단순해지는지는 뒤에서 다시 볼게요.
+
+<CodePlayground
+  template="react"
+  showPreview={true}
+  code={`import { useRef, useImperativeHandle, forwardRef } from "react";
+
+  const FancyInput = forwardRef(function FancyInput({ placeholder }, ref) {
+    const inputRef = useRef(null);
+
+    useImperativeHandle(ref, () => ({
+      focus: () => {
+        inputRef.current?.focus();
+      },
+    }));
+
+    return (
+      <input ref={inputRef} placeholder={placeholder} className="fi-input" />
+    );
+  });
+
+  function App() {
+    const fancyRef = useRef(null);
+
+    return (
+      <div className="fi-wrap">
+        <FancyInput ref={fancyRef} placeholder="이름을 입력하세요" />
+        <button onClick={() => fancyRef.current?.focus()} className="fi-btn">
+          input으로 이동
+        </button>
+      </div>
+    );
+  }`}
+  css={`.fi-wrap {
+    display: flex;
+    gap: 8px;
+    padding: 16px;
+  }
+
+  .fi-input {
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    flex: 1;
+  }
+
+  .fi-btn {
+    padding: 8px 16px;
+    background: #0070f3;
+    color: white;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .fi-btn:hover {
+    background: #0060df;
+  }`}
+/>
+
+핵심은 `inputRef`가 자식 안에만 있고, 부모는 `fancyRef.current.focus()`만 호출할 수 있다는 점이에요. DOM 노드 원본을 넘기지 않으니 부모가 `inputRef.current.value`를 건드릴 여지가 없어요. 노출되는 API를 의도적으로 축소한 셈이에요.
+
+## 여러 동작을 하나로 묶기
+
+handle에 넣을 수 있는 건 함수 하나로 한정되지 않아요. 내부 ref 여러 개를 하나의 메서드로 합쳐서 노출할 수도 있어요. React 공식 문서는 "댓글 영역으로 스크롤한 다음 입력 input에 focus" 같은 합성 동작을 예로 들어요.<Cite id="react-useimperativehandle" />
+
+```tsx
+function Post({ ref }) {
+  const listRef = useRef(null);
+  const addCommentRef = useRef(null);
+
+  useImperativeHandle(ref, () => ({
+    scrollAndFocusAddComment() {
+      listRef.current?.scrollIntoView({ behavior: "smooth" });
+      addCommentRef.current?.focus();
+    },
+  }));
+
+  return (
+    <>
+      <section ref={listRef}>{/* 댓글 목록 */}</section>
+      <input ref={addCommentRef} placeholder="댓글 작성" />
+    </>
+  );
+}
+```
+
+부모는 `postRef.current.scrollAndFocusAddComment()` 한 줄만 부르면 돼요. 어떤 ref를 어떤 순서로 건드리는지는 자식이 책임지고요. 부모 입장에선 "댓글로 이동한다"는 의도만 보이고, 구현 디테일은 감춰져 있어요.
+
+handle에 값 프로퍼티를 얹는 것도 가능해요. 다만 "지금 열려 있나요" 같은 상태는 prop으로 내리는 편이 예측 가능해요. 명령형으로 꺼내 쓰는 건 메서드로 제한하는 게 깔끔합니다.
+
+## React 19에서 forwardRef 없이
+
+React 18 이하에서는 함수 컴포넌트가 ref를 받으려면 `forwardRef`로 감싸야 했어요. 앞의 데모가 그 형태예요.
+
+```tsx
+const FancyInput = forwardRef(function FancyInput(props, ref) {
+  const inputRef = useRef(null);
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }));
+  return <input ref={inputRef} {...props} />;
+});
+```
+
+React 19부터는 `ref`를 다른 prop과 똑같이 구조분해로 받을 수 있어요.<Cite id="react-19" />
+
+```tsx
+function FancyInput({ ref, ...props }) {
+  const inputRef = useRef(null);
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }));
+  return <input ref={inputRef} {...props} />;
+}
+```
+
+훅 자체 시그니처는 그대로예요. 달라진 건 래퍼가 빠졌다는 것뿐이에요. React 팀은 기존 `forwardRef` 코드를 자동 변환해주는 codemod도 함께 내놨고, 앞으로 `forwardRef` 자체가 deprecate될 예정이에요.<Cite id="react-forwardref" /> 클래스 컴포넌트는 이 변화와 무관해요. 클래스의 ref는 인스턴스 참조라 prop으로 오가는 개념이 아니거든요.
+
+## 아껴 쓰는 감각
+
+끝으로 한 가지 덧붙여요. `useImperativeHandle`은 쓸 수 있다고 해서 자주 꺼내는 훅이 아니에요. 공식 문서도 이 점을 분명히 해요.
+
+<Callout variant="info">
+"You should only use refs for imperative behaviors that you can't express as props." - React 공식 문서
+
+Modal 컴포넌트에 `{ open, close }` handle을 노출하는 것보다 `isOpen` prop으로 선언적으로 제어하는 편이 낫다는 뜻이에요.
+
+</Callout>
+
+포커스, 스크롤, 텍스트 선택, 외부 라이브러리 연동처럼 React 바깥의 일에 한정하는 게 권장이에요. 선언적으로 표현 가능한 상태는 prop으로 내리고, 그게 안 되는 자리에서만 이 훅을 꺼내요. [필요할 때만 꺼내는 훅이라는 감각](/posts/react-usememo-patterns)은 `useMemo`와도 닮아 있어요. 측정 없이 감싸는 `useMemo`가 대부분 빗나가는 것처럼, 관성으로 쓰는 `useImperativeHandle`도 대부분 prop 설계로 다시 풀릴 수 있거든요.
+
+<References
+  items={[
+    {
+      id: "react-useimperativehandle",
+      title: "React - useImperativeHandle",
+      href: "https://react.dev/reference/react/useImperativeHandle",
+      description: "시그니처, Pitfall, Usage 섹션 전반 참고",
+    },
+    {
+      id: "react-dom-refs",
+      title: "React - Manipulating the DOM with Refs",
+      href: "https://react.dev/learn/manipulating-the-dom-with-refs",
+      description: "ref를 'escape hatch'로 규정한 근거",
+    },
+    {
+      id: "react-forwardref",
+      title: "React - forwardRef",
+      href: "https://react.dev/reference/react/forwardRef",
+      description: "React 18 이하의 ref 전달 방식과 deprecate 안내",
+    },
+    {
+      id: "react-19",
+      title: "React 19 - ref as a prop",
+      href: "https://react.dev/blog/2024/12/05/react-19",
+      description: "함수 컴포넌트에서 ref를 prop으로 받는 변화",
+    },
+  ]}
+/>
