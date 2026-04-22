@@ -1,0 +1,412 @@
+---
+title: "React 입력의 두 갈래 길"
+description: "onChange 마다 리렌더되는 게 부담일 때, 비제어가 답이 되기도 해요."
+date: 2026-04-22
+tags: ["React", "폼", "성능", "Hooks"]
+published: true
+---
+
+폼 입력을 받는 컴포넌트를 만들다 보면 어느 순간 고민이 시작돼요. 이 값을 `useState` 로 들고 있어야 할지, 그냥 `ref` 로 꺼내 써도 되는지 말이에요. 저도 처음엔 무조건 state 로 관리했거든요. 근데 입력창이 열 개쯤 되니까 한 글자 쳤을 뿐인데 페이지 전체가 다시 그려지는 게 눈에 보이더라고요. 그때부터 "제어" 와 "비제어" 라는 이름이 귀에 들어오기 시작했어요.
+
+## 같은 입력, 다른 주인
+
+같은 `<input>` 을 두고도 [React](https://react.dev) 에서는 두 방식으로 다룰 수 있어요. 한쪽은 값이 어디에 있어야 하는지를 React 가 결정하고, 다른 한쪽은 DOM 에게 전부 맡기죠. 이 차이가 "제어" 와 "비제어" 라는 이름의 출발점이에요.
+
+이름이 왜 "제어" 일까요. React 공식 문서는 state lift-up 을 설명하면서 "부모가 자식의 동작을 전부 지정한다" 라고 표현합니다.<Cite id="react-sharing-state" />
+
+<Callout variant="info">
+"This lets the parent component fully specify its behavior." - react.dev
+
+자식 컴포넌트가 props 로 동작을 결정당하는 상태를 "제어" 라고 부르는 거예요. 반대로 스스로 상태를 들고 있으면 "비제어" 고요.
+
+</Callout>
+
+아래 데모에서 두 방식이 어떻게 다른지 직접 해볼 수 있어요. 왼쪽 입력은 매 키 입력마다 state 가 갱신되고, 오른쪽은 버튼을 눌러야 값을 읽어요.
+
+<CodePlayground
+  code={`function InputComparison() {
+    const [value, setValue] = React.useState("");
+    const uncontrolledRef = React.useRef(null);
+    const [readback, setReadback] = React.useState("");
+
+    return (
+      <div className="compare">
+        <div className="col">
+          <h4>제어</h4>
+          <input
+            className="field"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="입력해보세요"
+          />
+          <p className="echo">현재 값: {value || "(비어있음)"}</p>
+        </div>
+        <div className="col">
+          <h4>비제어</h4>
+          <input
+            className="field"
+            ref={uncontrolledRef}
+            defaultValue=""
+            placeholder="입력해보세요"
+          />
+          <button
+            className="btn"
+            onClick={() => setReadback(uncontrolledRef.current.value)}
+          >
+            값 읽기
+          </button>
+          <p className="echo">읽은 값: {readback || "(아직)"}</p>
+        </div>
+      </div>
+    );
+  }`}
+  css={`.compare {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  .col {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  }
+
+  .col h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: #6b7280;
+  }
+
+  .field {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+  }
+
+  .btn {
+    margin-top: 8px;
+    padding: 4px 10px;
+    border: 1px solid #374151;
+    background: #111827;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .echo {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #374151;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+제어 쪽은 React state 가 현재 값을 알고 있어서 화면에 즉시 반영돼요. 비제어 쪽은 값을 물어볼 때까지 React 가 뭐가 들어갔는지 모르고요.
+
+## 제어 컴포넌트, React가 단일 출처
+
+제어 입력의 계약은 `value` 와 `onChange` 의 쌍이에요. 하나만 빠지면 경고가 뜨고 입력 자체가 막혀요. React 공식 레퍼런스가 이걸 강하게 말합니다.<Cite id="react-input" />
+
+<Callout variant="warning">
+"If you pass `value` without `onChange`, it will be impossible to type into the input." - react.dev
+
+`value` 를 주면 React 가 그 값을 권위 있는 출처로 삼아요. `onChange` 가 없으면 사용자가 키를 쳐도 React 가 원래 value 로 매번 되돌려버리거든요. 결과적으로 입력이 안 되는 read-only 필드가 돼요.
+
+</Callout>
+
+아래에서 직접 확인해보세요. 위쪽은 `onChange` 없이 `value` 만 준 경우, 아래쪽은 둘 다 준 경우예요.
+
+<CodePlayground
+  code={`function ValueWithoutOnChange() {
+    const [value, setValue] = React.useState("초기값");
+
+    return (
+      <div className="wrap">
+        <label className="row">
+          <span>value만 (입력 막힘)</span>
+          <input className="field" value={value} placeholder="쳐봐도 안 변해요" />
+        </label>
+        <label className="row">
+          <span>value + onChange</span>
+          <input
+            className="field"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </label>
+        <p className="echo">현재 값: {value}</p>
+      </div>
+    );
+  }`}
+  css={`.wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .row span {
+    font-size: 13px;
+    color: #6b7280;
+  }
+
+  .field {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+  }
+
+  .echo {
+    margin: 0;
+    font-size: 13px;
+    color: #374151;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+한 가지 더. 제어 입력의 `value` 에 `undefined` 나 `null` 이 들어가면 안 돼요. React 가 제어인지 비제어인지 판단을 못 해서 수명 중간에 모드가 바뀌어버리거든요. 그래서 실전에서는 `value={name ?? ""}` 처럼 빈 문자열로 방어하는 패턴이 흔해요.
+
+## 비제어 컴포넌트, DOM이 단일 출처
+
+비제어 입력은 반대로 브라우저에게 값을 맡겨요. React 는 처음 마운트될 때 `defaultValue` 를 초기값으로 한 번 넘기고, 그 뒤에는 관여하지 않아요. 값이 궁금하면 `ref.current.value` 로 DOM 에 직접 물어보면 돼요.
+
+왜 이게 가능할까요. `useRef` 의 동작 원리 때문이에요.<Cite id="react-use-ref" />
+
+<Callout variant="info">
+"Changing a ref does not trigger a re-render." - react.dev
+
+ref 에 값을 할당해도 컴포넌트는 다시 그려지지 않아요. 그래서 매 키 입력마다 React 가 개입하지 않는 거죠. 브라우저가 자체 메커니즘으로 input 값을 관리하고, React 는 제출 시점에만 한 번 꺼내 봐요.
+
+</Callout>
+
+state 와 ref 중 뭘 고를지 판단하는 기준이 공식 문서에 잘 정리돼 있어요.<Cite id="react-refs-learn" />
+
+<Callout variant="info">
+"When you want a component to 'remember' some information, but you don't want that information to trigger new renders, you can use a ref." - react.dev
+
+화면에 보여야 하는 값이면 state, 제출 시점에만 필요한 값이면 ref. 비제어 입력의 "현재 값" 은 브라우저 input 자체가 이미 화면에 그려주고 있어요. React 가 한 번 더 추적할 이유가 없는 거죠.
+
+</Callout>
+
+아래는 비제어로 작성한 간단한 폼이에요. 입력창 두 개에 뭐든 쳐도 상단의 렌더 횟수는 움직이지 않아요. 제출 버튼을 눌러야 값이 한 번에 읽혀요.
+
+<CodePlayground
+  code={`function UncontrolledForm() {
+    const nameRef = React.useRef(null);
+    const emailRef = React.useRef(null);
+    const [result, setResult] = React.useState(null);
+    const renderCount = React.useRef(0);
+    renderCount.current += 1;
+
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      setResult({
+        name: nameRef.current.value,
+        email: emailRef.current.value,
+      });
+    };
+
+    return (
+      <form onSubmit={handleSubmit} className="form">
+        <p className="counter">렌더 횟수: {renderCount.current}</p>
+        <input
+          className="field"
+          ref={nameRef}
+          defaultValue=""
+          placeholder="이름"
+        />
+        <input
+          className="field"
+          ref={emailRef}
+          defaultValue=""
+          placeholder="이메일"
+        />
+        <button className="btn" type="submit">
+          제출
+        </button>
+        {result && <pre className="out">{JSON.stringify(result, null, 2)}</pre>}
+      </form>
+    );
+  }`}
+  css={`.form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .counter {
+    margin: 0;
+    font-size: 13px;
+    color: #6b7280;
+  }
+
+  .field {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+  }
+
+  .btn {
+    align-self: flex-start;
+    padding: 6px 12px;
+    border: 1px solid #374151;
+    background: #111827;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .out {
+    padding: 8px;
+    background: #f3f4f6;
+    border-radius: 4px;
+    font-size: 12px;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+`defaultValue` 는 첫 렌더 시점의 초기값만 정의해요. 이후에 state 로 `defaultValue` 를 바꿔도 이미 마운트된 input 의 현재 값은 갱신되지 않아요. 이름이 말 그대로의 뜻이에요.
+
+## file input은 왜 비제어여야만 할까요
+
+`type="file"` input 은 React 설계 때문이 아니라 브라우저 보안 제약 때문에 비제어밖에 안 돼요. 이건 [MDN HTMLInputElement](https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement) 문서에서 확인할 수 있어요.<Cite id="mdn-html-input" />
+
+스크립트가 임의로 `value` 에 파일 경로를 꽂아 넣을 수 있으면, 사용자 동의 없이 PC 의 파일을 서버로 올려보내는 공격이 가능해져요. 그래서 브라우저는 file input 의 `value` 를 스크립트로 세팅할 수 없도록 막았고, 파일 목록은 `files` (FileList, read-only) 로만 노출해요.
+
+React 가 value 를 세팅할 길 자체가 없으니 제어 컴포넌트를 만들 수도 없어요. 자연스럽게 ref 로 접근하는 비제어 방식이 유일한 해법이 되는 거죠.
+
+<CodePlayground
+  code={`function FilePicker() {
+    const fileRef = React.useRef(null);
+    const [info, setInfo] = React.useState(null);
+
+    const handleChange = () => {
+      const file = fileRef.current.files[0];
+      if (!file) {
+        setInfo(null);
+        return;
+      }
+      setInfo({
+        name: file.name,
+        size: file.size,
+        type: file.type || "unknown",
+      });
+    };
+
+    return (
+      <div className="picker">
+        <input type="file" ref={fileRef} onChange={handleChange} />
+        {info && (
+          <dl className="info">
+            <dt>이름</dt>
+            <dd>{info.name}</dd>
+            <dt>크기</dt>
+            <dd>{info.size} bytes</dd>
+            <dt>타입</dt>
+            <dd>{info.type}</dd>
+          </dl>
+        )}
+      </div>
+    );
+  }`}
+  css={`.picker {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .info {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .info dt {
+    color: #6b7280;
+  }
+
+  .info dd {
+    margin: 0;
+    color: #111827;
+  }`}
+  template="react"
+  showPreview={true}
+/>
+
+혹시 file input 에 `value={...}` 를 넘겨본 적 있다면 이 에러 메시지가 익숙할 거예요. "A component is changing an uncontrolled input to be controlled" 경고요. 대부분 이 자리에서 나와요.
+
+## 그럼 어느 쪽을 쓰나요
+
+둘 사이의 선택은 "우수한 방식" 이 아니라 "리렌더 비용" 에 대한 트레이드오프예요. 제어는 매 키 입력마다 state 가 갱신되고, 그 state 를 들고 있는 컴포넌트와 자식들이 다시 그려져요. 이게 자연스러운 규모면 유지. 부담스러워지는 순간이 오면 비제어를 섞는 거죠.
+
+실전에서 이 트레이드오프를 가장 잘 보여주는 게 [React Hook Form](https://react-hook-form.com) 이에요.<Cite id="rhf-faq" />
+
+<Callout variant="info">
+"React Hook Form relies on an uncontrolled form, which is the reason why the `register` function captures `ref` and the controlled component has its re-rendering scope with `Controller` or `useController`." - React Hook Form FAQs
+
+RHF 는 기본적으로 비제어로 동작해요. `register` 가 각 input 의 ref 를 모아두고, 제출 시점에 한 번에 값을 읽죠. 덕분에 타이핑할 때마다 폼 전체가 리렌더되는 일이 없어요. 단, 외부 UI 라이브러리처럼 제어가 필수인 컴포넌트만 `Controller` 로 감싸서 부분적으로 제어화해요.
+
+</Callout>
+
+이 패턴이 중요한 이유는 "제어냐 비제어냐" 가 이분법이 아니라는 걸 보여주기 때문이에요. 대부분의 필드는 비제어로 두고, 제어가 꼭 필요한 곳만 스코프를 좁혀서 제어로 만들 수 있어요.
+
+폼이 커서 리렌더 비용이 고민된다면 기본을 비제어로 돌리는 걸 생각해볼 만해요. 리렌더가 실제로 어디서 시작되고 어디까지 번지는지는 [지난 글](/posts/react-rerender-conditions) 에서 다뤘으니 함께 보면 판단이 쉬워져요.
+
+<References
+  items={[
+    {
+      id: "react-input",
+      title: "React - `<input>` Reference",
+      href: "https://react.dev/reference/react-dom/components/input",
+      description: "제어/비제어 input 의 정의, value 와 onChange 쌍 규칙, defaultValue 동작",
+    },
+    {
+      id: "react-use-ref",
+      title: "React - `useRef` Reference",
+      href: "https://react.dev/reference/react/useRef",
+      description: "ref 변경이 리렌더를 트리거하지 않는다는 핵심 원리",
+    },
+    {
+      id: "react-refs-learn",
+      title: "React - Referencing Values with Refs",
+      href: "https://react.dev/learn/referencing-values-with-refs",
+      description: "state 와 ref 판정 기준, 화면에 보여야 하는지 여부",
+    },
+    {
+      id: "react-sharing-state",
+      title: "React - Sharing State Between Components",
+      href: "https://react.dev/learn/sharing-state-between-components",
+      description: "controlled 라는 네이밍의 유래, 부모가 자식 동작을 지정하는 패턴",
+    },
+    {
+      id: "mdn-html-input",
+      title: "MDN - HTMLInputElement",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement",
+      description: "file input 이 value 를 스크립트로 세팅할 수 없는 브라우저 보안 제약",
+    },
+    {
+      id: "rhf-faq",
+      title: "React Hook Form - FAQs",
+      href: "https://react-hook-form.com/faqs",
+      description: "register 가 ref 를 수집해 리렌더를 피하는 설계와 Controller 혼용 전략",
+    },
+  ]}
+/>
