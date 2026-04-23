@@ -1,0 +1,166 @@
+---
+title: "npm 말고도 많은 이유"
+description: "npm만 쓰다가 pnpm이나 bun은 왜 있는지 궁금하셨다면요."
+date: 2026-04-23
+tags: ["npm", "pnpm", "Yarn", "Bun", "Node.js"]
+published: true
+---
+
+팀 저장소를 받아서 `pnpm install` 을 쳤는데 "package manager mismatch" 에러가 떠요. 분명 어제까지 `npm install` 로 잘 되던 저장소였거든요. 이런 경험 한 번쯤은 있으실 거예요. 패키지 매니저가 왜 이렇게 여러 개인지, 어느 걸 고르는 게 맞는지 감이 잘 안 잡히죠.
+
+## node_modules 는 왜 이렇게 생겼나
+
+[Node.js](https://nodejs.org) 에서 `require("express")` 를 쓰면 런타임이 파일을 찾는 방식이 있어요. 현재 디렉토리의 `node_modules/express` 를 먼저 보고, 없으면 부모 디렉토리로, 그다음 더 위로 올라가면서 탐색하거든요. 가장 먼저 발견된 걸 쓰죠.<Cite id="nodejs-modules" />
+
+이 알고리즘은 "부모에 있으면 자식도 쓸 수 있다" 를 전제로 설계됐어요. [TypeScript 의 모듈 해석도 비슷한 고민에서 출발하죠](/posts/typescript-module-resolution). npm 은 여기에 맞춰서 모든 패키지를 최상위 `node_modules/` 에 평탄하게 깔아두기로 했어요. hoisting 이라고 부르는 전략이에요.
+
+평탄 hoisting 은 같은 패키지가 중복으로 깔리지 않아서 디스크와 속도 측면에서 이득이에요. 다만 `package.json` 에 선언하지 않은 패키지까지 `require` 가 통한다는 부작용이 있어요. 선언 안 한 패키지를 쓰는 건 처음엔 티가 안 나는데, 그 패키지가 어느 순간 의존성 트리에서 빠지면 갑자기 빌드가 깨지거든요. 이걸 "유령 의존성 (phantom dependency)" 이라고 부릅니다.
+
+npm 이 어떻게 동작하는지는 [전에 npx 와 비교하면서 짚었어요](/posts/npm-vs-npx). 이 글은 그 위에서 "왜 다른 매니저들이 필요했는가" 로 이어지는 흐름이에요.
+
+## yarn 이 처음 끼어든 자리
+
+npm 초기엔 설치 속도가 느렸고, 팀원마다 설치 결과가 달라질 수 있었어요. 같은 `package.json` 이어도 설치 시점에 따라 트리가 달라지면 CI 는 되는데 로컬은 안 되는 상황이 생기거든요. 이 문제를 풀려고 [Yarn](https://yarnpkg.com) 이 등장했어요. Meta (당시 Facebook) 가 오픈소스로 공개한 프로젝트죠.
+
+Yarn Classic (v1) 이 들고 온 건 `yarn.lock` 이었어요. 설치 트리를 파일로 고정해서, 같은 commit 이면 누가 언제 install 하든 같은 결과를 뽑도록 한 거예요. 여기에 병렬 다운로드와 오프라인 캐시로 속도까지 바로잡았고요. 저도 처음 Yarn 을 썼을 때 lockfile 이 있다는 것만으로 "아 이제 팀원끼리 install 결과가 같겠구나" 싶어서 안심했거든요.
+
+재미있는 건 npm 이 이 아이디어를 받아들였다는 거예요. npm v5 부터 `package-lock.json` 이 기본 동작이 됐고, 이후 버전은 lockfile 포맷을 계속 개선했어요.<Cite id="npm-lockfile" />
+
+<Callout variant="info">
+"subsequent installs are able to generate identical trees, regardless of intermediate dependency updates." - docs.npmjs.com
+
+시점에 상관없이 같은 설치 결과를 뽑는 게 lockfile 의 존재 이유에요. 중간에 누가 패키지를 새로 publish 하든, 설치 트리는 그대로 유지돼야 하죠.
+
+</Callout>
+
+이 시기부터 "lockfile 이 있는 설치" 가 표준이 됐어요. 어느 매니저를 쓰든 lockfile 은 필수라는 합의가 자리잡은 순간이에요.
+
+## pnpm 이 바꾼 저장 방식
+
+[pnpm](https://pnpm.io) 은 조금 다른 각도에서 `node_modules` 를 다시 봤어요. 공식 motivation 페이지가 세 가지 이유를 적어두고 있거든요. 디스크 공간 절약, 설치 속도, 그리고 비평탄 구조.<Cite id="pnpm-motivation" />
+
+핵심 아이디어는 "중앙 저장소 + 링크" 구조예요. 어떻게 동작하는지 단계로 풀어보면 이래요.
+
+<Callout variant="info">
+**링크가 뭐냐면**
+
+"링크" 는 파일 내용을 복제하지 않고 가리키기만 하는 포인터예요. 두 종류가 있어요.
+
+• hard link: 같은 파일을 두 경로에서 가리켜요. 디스크 블록은 하나인데 이름이 여러 개 붙은 셈이에요.
+• symlink (심볼릭 링크): "저쪽 경로를 봐" 라는 쪽지예요. 쪽지가 가리키는 파일이 사라지면 깨진 링크가 돼요.
+
+pnpm 은 둘을 함께 써요. store 와 프로젝트 파일 사이엔 hard link (내용 공유), 프로젝트 node_modules 안의 구조는 symlink (경로 표시).
+
+</Callout>
+
+<AnimatedStep steps={[
+  { title: "content-addressable store", content: "홈 디렉토리 근처에 전역 저장소가 하나 만들어져요. 다운로드한 모든 패키지 파일이 여기에 한 번만 저장됩니다." },
+  { title: "hard link 로 프로젝트 연결", content: "프로젝트 node_modules 안의 파일들은 store 의 파일을 hard link 로 가리켜요. 실제 디스크 블록은 store 한 곳만 차지하고, 프로젝트는 가리키기만 하죠." },
+  { title: "버전 차이는 차이만 저장", content: "같은 패키지의 다른 버전을 설치하면, 바뀐 파일만 store 에 추가돼요. 전체 복제가 아니라 변경분만 쌓입니다." }
+]} />
+
+여기까지가 디스크 절약과 속도의 정체예요. 이 구조에는 부수 효과가 하나 더 있어요. 최상위 `node_modules` 에는 `package.json` 에 선언한 직접 의존성만 symlink 로 노출되고, 간접 의존성은 `node_modules/.pnpm/<name>@<version>/node_modules/` 아래에 숨어있거든요.<Cite id="pnpm-symlink" />
+
+결과는 명확해요. 선언하지 않은 패키지는 `require` 가 닿지 않고, 유령 의존성이 구조적으로 차단됩니다. pnpm 이 스스로 "Strict" 하다고 말하는 이유가 이거죠.
+
+## yarn berry 와 Plug'n'Play
+
+Yarn Classic 이후 Yarn 은 완전히 다시 쓰였어요. Yarn v2 (Berry) 는 더 과감한 실험을 시작했거든요. `node_modules` 폴더 자체를 만들지 않는다는 방향이에요.
+
+대신 프로젝트 루트에 `.pnp.cjs` 라는 단일 로더 파일이 하나 생깁니다. 이 파일이 전체 의존성 트리 정보를 담고, Node.js 의 모듈 해석 훅을 통해 패키지 위치를 상수 시간에 찾아줘요. Plug'n'Play (PnP) 라고 부르는 전략이에요.<Cite id="yarn-pnp" />
+
+<Callout variant="info">
+"A Yarn PnP install typically does one thing: generate the Node.js loader file (`.pnp.cjs`)." - yarnpkg.com
+
+설치 과정에서 파일을 복사하거나 hardlink 를 만드는 단계가 아예 없어요. I/O 를 최소한으로 줄인 거죠.
+
+</Callout>
+
+재미있는 부수 효과가 Zero-Install 이에요. `.yarn/cache` 와 `.pnp.cjs` 를 git 에 커밋하면, 새 팀원이 클론한 직후에 `yarn install` 없이 바로 실행할 수 있거든요.
+
+다만 PnP 가 만능은 아니에요. React Native, Expo 같은 도구는 전통적 `node_modules` 디렉토리를 요구해서 호환이 안 됩니다. 그래서 Yarn Berry 는 `nodeLinker` 옵션으로 설치 전략을 바꿀 수 있게 뒀어요. `pnp` 가 기본이지만, `node-modules` (Yarn Classic 스타일) 와 `pnpm` (pnpm 스타일 symlink) 도 고를 수 있고요. 이 말은 Yarn Berry 하나가 세 가지 설치 모드를 다 품는 상위 도구가 됐다는 뜻이에요.
+
+## bun 이 들고 온 것
+
+[Bun](https://bun.sh) 은 맥락이 좀 달라요. 패키지 매니저만 만든 게 아니라 런타임과 번들러와 테스트 러너까지 한 덩어리로 묶은 도구거든요. `bun install` 은 그 안에서 "npm/yarn/pnpm 의 빠른 대체재" 로 포지셔닝됐어요.<Cite id="bun-install" />
+
+Bun 의 첫 번째 욕심은 "파일을 어떻게 옮기느냐" 였어요. 패키지 파일을 store 나 캐시에서 프로젝트로 가져올 때, OS 마다 가장 빠른 방법이 다르거든요. 그래서 Bun 은 플랫폼별로 다른 전략을 기본값으로 깔아뒀어요. macOS 에서는 APFS 의 `clonefile` (copy-on-write, 복사한 것처럼 보이지만 내용이 바뀔 때까지 원본과 디스크를 공유하는 연산) 을 쓰고, Linux 에서는 앞서 pnpm 에서 본 hardlink 를 써요. 각 OS 의 파일시스템이 가장 잘하는 연산을 골라 쓴다는 접근이에요.
+
+lockfile 역사도 재미있어요. 초기 Bun 은 바이너리 lockfile `bun.lockb` 를 썼어요. 파싱 속도와 파일 크기 때문이었는데, diff 와 코드 리뷰가 불편하다는 피드백이 계속 쌓였죠. Bun 1.2 부터는 텍스트 포맷 `bun.lock` 이 기본이 됐어요.<Cite id="bun-lockfile" />
+
+최근 Bun 에서 눈에 띄는 건 설치 구조를 `isolated` 로 바꿨다는 점이에요. 여기서 "isolated" 는 pnpm 섹션에서 본 그 구조와 같아요. 최상위 `node_modules` 엔 선언한 패키지만 노출하고, 간접 의존성은 따로 격리된 폴더에 숨겨두는 방식이죠. 새 monorepo 를 만들면 Bun 이 이걸 기본으로 골라줍니다. Yarn Berry 의 `nodeLinker: pnpm` 에 이어 Bun 의 `isolated` 까지. 업계가 pnpm 이 제시한 구조로 수렴하고 있다는 신호로 읽혀요.
+
+<Callout variant="warning">
+"Unlike other npm clients, Bun does not execute arbitrary lifecycle scripts like `postinstall` for installed dependencies." - bun.sh
+
+Bun 은 npm/yarn 과 달리 `postinstall` 같은 lifecycle 스크립트를 기본으로 실행하지 않아요. 악성 postinstall 이 공급망 공격 경로가 되는 문제에 대한 방어인데, 필요한 패키지는 `trustedDependencies` 에 명시해서 허용할 수 있어요.
+
+</Callout>
+
+## 그래서 뭘 고를까
+
+여기까지 보면 흐름이 보여요. npm 이 평탄 hoisting 으로 간단하게 시작했고, Yarn Classic 이 재현성과 속도를 바로잡았고, pnpm 이 "선언된 패키지만 접근 가능" 이라는 엄격함을 실현했고, Yarn Berry 가 더 급진적으로 `node_modules` 를 없앴고, Bun 이 올인원으로 올라탔어요.
+
+<Callout variant="info">
+**다섯 매니저 한눈에**
+
+• npm: 기본 동반 도구라 호환성 범위가 가장 넓어요. 다만 평탄 hoisting 때문에 유령 의존성 방지가 약해요.
+• Yarn Classic: lockfile 과 병렬 다운로드의 원조예요. 기능은 안정적이지만 v1 은 더 이상 활발히 개발되지 않아요.
+• pnpm: 디스크 절약과 엄격한 의존성 격리가 강점이에요. symlink 구조가 익숙하지 않은 일부 도구와 가끔 부딪쳐요.
+• Yarn Berry: PnP 로 I/O 가 거의 없고 Zero-Install 이 가능해요. React Native 같은 네이티브 툴체인 호환이 아킬레스건이고요.
+• Bun: 속도와 올인원이 매력이에요. 비교적 신생이라 엣지 케이스는 계속 다듬어지는 중이에요.
+
+</Callout>
+
+"절대 최고" 라는 건 없어요. 기준에 따라 골라야 하거든요. 팀에 React Native 나 Expo 가 있다면 PnP 는 호환성 문제가 있으니 피하고, `nodeLinker: node-modules` 나 pnpm, npm 이 안전한 선택이에요. 디스크 공간이 빡빡한 환경이면 pnpm 의 content-addressable store 가 가장 유리하고요. CI 캐시 없이 빠르게 돌려야 하면 Bun 이나 Yarn Berry 의 Zero-Install 이 맞아요.
+
+제일 중요한 건 이미 안정된 팀 합의가 있다면 그걸 계속 쓰는 거예요. 바꿀 이유가 "최근 벤치마크가 좋아서" 정도라면, 마이그레이션 비용이 이득을 넘기는 경우가 생각보다 많거든요.
+
+한 가지 흐름은 분명히 보여요. pnpm 스타일 symlink 구조가 사실상 표준 대안이 되고 있어요. Yarn Berry 의 `nodeLinker: pnpm`, Bun 의 `isolated` linker, 그리고 pnpm 본인까지. 유령 의존성을 막으면서 디스크도 아끼는 이 구조가 타협점으로 자리잡고 있는 걸로 보입니다.
+
+<References
+  items={[
+    {
+      id: "nodejs-modules",
+      title: "Node.js - Modules (CommonJS)",
+      href: "https://nodejs.org/api/modules.html",
+      description: "require 가 node_modules 를 위로 탐색하는 알고리즘",
+    },
+    {
+      id: "npm-lockfile",
+      title: "npm Docs - package-lock.json",
+      href: "https://docs.npmjs.com/cli/v10/configuring-npm/package-lock-json",
+      description: "lockfile 의 목적과 v1~v3 변천",
+    },
+    {
+      id: "yarn-pnp",
+      title: "Yarn - Plug'n'Play",
+      href: "https://yarnpkg.com/features/pnp",
+      description: ".pnp.cjs 로 node_modules 를 대체하는 전략",
+    },
+    {
+      id: "pnpm-motivation",
+      title: "pnpm - Motivation",
+      href: "https://pnpm.io/motivation",
+      description: "pnpm 이 존재하는 세 가지 이유",
+    },
+    {
+      id: "pnpm-symlink",
+      title: "pnpm - Symlinked node_modules structure",
+      href: "https://pnpm.io/symlinked-node-modules-structure",
+      description: "비평탄 symlink 구조가 유령 의존성을 차단하는 방식",
+    },
+    {
+      id: "bun-install",
+      title: "Bun Docs - bun install",
+      href: "https://bun.sh/docs/cli/install",
+      description: "isolated linker, clonefile/hardlink backend, lifecycle script 차단",
+    },
+    {
+      id: "bun-lockfile",
+      title: "Bun Docs - Lockfile",
+      href: "https://bun.sh/docs/pm/lockfile",
+      description: "bun.lockb 에서 bun.lock 으로의 전환 이력",
+    },
+  ]}
+/>
