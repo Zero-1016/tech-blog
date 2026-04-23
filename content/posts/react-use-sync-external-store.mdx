@@ -1,0 +1,175 @@
+---
+title: "Zustand 밑에 깔린 훅의 정체"
+description: "React가 렌더를 중단하는 사이, 외부 store 값이 바뀌면 화면이 갈라져요."
+date: 2026-04-23
+tags: ["React", "Hooks", "concurrent", "상태관리"]
+published: true
+---
+
+[Zustand](https://zustand.docs.pmnd.rs/)의 v4 changelog를 넘기다가 `use-sync-external-store` 라는 긴 이름을 마주친 적이 있어요. 버전이 올라간 이유 한 줄에 이 훅이 등장하더라고요. 처음엔 "그냥 subscribe 감싸는 유틸이겠거니" 했는데, [React](https://react.dev) 공식 문서가 이 훅을 유난히 신중하게 설명하는 게 궁금해서 읽어봤어요. 동시성 렌더링이 만드는 조용한 함정 하나가 있더라고요.
+
+## 렌더 중단 사이에 store가 바뀌면
+
+React 17까지는 렌더가 한 번 시작되면 끝까지 달렸어요. 어디선가 상태가 바뀌어도 지금 렌더는 마치고 나서 다음 렌더를 시작하죠. 18이 오면서 달라진 건 React가 렌더 도중에 쉴 수 있다는 거예요. 사용자 입력이 들어오면 더 급한 작업을 먼저 처리하려고 렌더를 잠시 멈춥니다. 이게 concurrent rendering의 핵심이에요. [리액트는 언제 다시 그리나요](/posts/react-rerender-conditions)에서 다룬 기본 리렌더 모델 위에 "중단 가능" 이라는 축이 하나 더 얹힌 셈이에요.<Cite id="react-18-release" />
+
+문제는 이 "쉬는 순간" 이에요. React가 들고 있는 상태(`useState` 같은)는 렌더 큐 안에 있어서 React가 통제해요. 렌더 중간에 누가 몰래 바꿀 수 없죠. 근데 외부 store는 달라요. Zustand나 [Redux](https://redux.js.org)는 React 밖에서 돌아가요. 렌더가 쉬는 사이에 store가 업데이트되면 같은 데이터가 한 화면에 두 값으로 동시에 보일 수 있어요. React 팀이 이 현상에 이름을 붙여뒀어요. **tearing**, 화면이 찢어진다는 뜻이에요.
+
+말로 들으면 추상적이니까 그림을 그려볼게요. 같은 `count` 를 읽는 컴포넌트 A와 B가 있다고 해봐요. A를 렌더하는 도중에 사용자가 버튼을 누르고, 그 이벤트가 store의 `count` 를 1에서 2로 바꿔요. React는 일단 이벤트를 처리하고 나서 렌더를 재개해요. 이제 B를 렌더할 차례죠. B는 새 값 2를 읽어요. 화면에는 A가 1, B가 2로 찍힙니다. 같은 데이터가 두 자리에서 다르게 보이는 거예요. 이게 tearing이에요.<Cite id="react-18-wg-tearing" />
+
+<Callout variant="warning">
+"If you want to be able to interrupt rendering to respond to user input for more responsive experiences, you need to be resilient to the data you're rendering changing and causing the user interface to tear." - React 18 Working Group
+
+렌더를 중단할 수 있게 만들려면, 중단 사이에 데이터가 바뀌어도 화면이 갈라지지 않아야 한다는 얘기예요.
+
+</Callout>
+
+내부 상태는 React가 알아서 지키지만, 외부 store는 그 보호막 밖에 있어서 따로 계약이 필요해요. 그 계약이 `useSyncExternalStore` 예요.
+
+## 세 인자가 만드는 계약
+
+시그니처는 이렇게 생겼어요.
+
+```tsx
+const snapshot = useSyncExternalStore(
+  subscribe,
+  getSnapshot,
+  getServerSnapshot,
+);
+```
+
+첫 번째 인자 `subscribe` 는 옵저버 패턴의 그 subscribe예요. store에 콜백을 등록하고 구독 해제 함수를 돌려줘요. React는 이 콜백을 통해 "store가 바뀌었으니 다시 읽어" 라는 신호를 받아요. [subscribe 한 줄에 숨은 옵저버 패턴](/posts/observer-pattern-redux-zustand)에서 다룬 구조 그대로예요.
+
+두 번째 `getSnapshot` 은 store의 현재 값을 돌려줘요. 중요한 건 참조 동일성이에요. store가 바뀌지 않았으면 같은 참조, 바뀌었으면 새 참조. React는 이 반환값을 `Object.is` 로 비교해서 리렌더 여부를 결정해요.<Cite id="react-use-sync-external-store" />
+
+<Callout variant="info">
+"While the store has not changed, repeated calls to getSnapshot must return the same value. If the store changes and the returned value is different (as compared by Object.is), React re-renders the component." - React 공식 문서
+
+store가 안 바뀌면 getSnapshot을 여러 번 불러도 같은 값이 나와야 해요. 참조가 유지돼야 한다는 거죠.
+
+</Callout>
+
+세 번째 `getServerSnapshot` 은 선택적이지만 SSR 환경에선 사실상 필수예요. 서버에선 subscribe가 의미 없잖아요. store 변경 이벤트가 일어날 일이 없으니까요. 이 함수는 초기값을 제공해서 서버 HTML과 클라이언트 hydrate가 같은 값에서 시작하게 만들어요. 생략하면 SSR에서 에러가 나요.
+
+## 왜 이름이 Sync인가
+
+이 훅의 원래 이름은 `useMutableSource` 였어요. React 18 정식 출시 전에 `useSyncExternalStore` 로 바뀌었는데, 이름 변경이 기능의 핵심을 담고 있어요.
+
+"Sync" 는 동기(synchronous)라는 뜻이에요. 이 훅을 통해 들어오는 상태 변경은 time-slicing을 우회해요. `startTransition` 으로 감싸도 동기로 처리돼요. 시간을 쪼개 쓰면서 중간에 쉬는 능력을 일부러 포기하는 거예요. 왜 그랬을까요.<Cite id="react-18-wg-naming" />
+
+<Callout variant="info">
+"Replacing visible content with a fallback is a significant regression in the user experience, especially if it happens unpredictably. By contrast, occasionally disabling time-slicing, while not ideal, has a much less dramatic effect." - React 18 Working Group
+
+보이던 화면이 갑자기 로딩 스피너로 바뀌는 건 UX 퇴보예요. 그것보단 가끔 time-slicing을 포기하는 게 훨씬 덜 나쁘다는 판단이었어요.
+
+</Callout>
+
+정리하면 React 팀은 두 가치 사이에서 선택을 내린 거예요. 외부 store는 React 큐 밖에서 변하니까 time-slicing과 함께 쓸 깔끔한 방법이 없었어요. 억지로 time-slicing을 유지하면 tearing을 못 막고, 막으려고 화면을 fallback으로 교체하면 UX가 망가져요. 그래서 "외부 store 구독은 동기" 라는 규칙을 새겼어요.
+
+## 브라우저 API를 React에 끌어오기
+
+외부 store가 Redux나 Zustand만은 아니에요. `navigator.onLine`, `window.matchMedia`, `location` 같은 브라우저 API도 React 밖에 상태를 두고 이벤트로 알려주는 구조라 똑같이 외부 store예요. 예전엔 `useEffect` + `useState` 조합으로 구독하는 코드가 흔했는데, 그 조합은 tearing에 취약했어요.
+
+공식 문서가 예시로 드는 온라인 상태 구독을 옮겨봤어요. 개발자 도구의 Network 탭에서 Offline으로 바꾸면 프리뷰가 따라 반응해요.
+
+<CodePlayground
+  template="react"
+  code={`import { useSyncExternalStore } from "react";
+
+  function subscribe(callback) {
+    window.addEventListener("online", callback);
+    window.addEventListener("offline", callback);
+    return () => {
+      window.removeEventListener("online", callback);
+      window.removeEventListener("offline", callback);
+    };
+  }
+
+  function useOnlineStatus() {
+    return useSyncExternalStore(
+      subscribe,
+      () => navigator.onLine,
+      () => true
+    );
+  }
+
+  function StatusBar() {
+    const isOnline = useOnlineStatus();
+    const label = isOnline ? "온라인" : "오프라인";
+    const dotClass = isOnline ? "dot dot--on" : "dot dot--off";
+    return (
+      <div className="bar">
+        <span className={dotClass} />
+        <span>{label}</span>
+      </div>
+    );
+  }
+
+  export default function App() {
+    return <StatusBar />;
+  }`}
+  css={`.bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: system-ui;
+    padding: 12px;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .dot--on {
+    background: #22c55e;
+  }
+
+  .dot--off {
+    background: #ef4444;
+  }`}
+  showPreview={true}
+/>
+
+세 줄 안에 구독, 읽기, 초기값이 다 들어있어요. `getServerSnapshot` 으로 `true` 를 준 건 "서버에선 일단 온라인으로 치자" 는 선언이에요. 실제 상태는 브라우저가 hydrate 되면서 이벤트로 교정돼요.
+
+## 빠지기 쉬운 함정
+
+공식 문서 Pitfalls에 두 가지가 유난히 강하게 적혀 있어요.
+
+첫째, `getSnapshot` 이 매번 새 객체를 반환하면 무한 리렌더에 빠져요. `Object.is` 비교를 쓰니까 `[]` 나 `{ ... }` 같은 새 참조는 항상 "다른 값" 으로 보여요. 그러면 React가 리렌더하고, 리렌더 중에 다시 `getSnapshot` 을 부르고, 또 새 객체가 나오고, 또 리렌더. 끝이 없어요. 해법은 store 내부에 캐시를 두고 데이터가 실제로 바뀌었을 때만 새 참조를 만드는 거예요. Zustand가 selector에 `shallow` equality 옵션을 따로 제공하는 이유도 같은 맥락이에요.<Cite id="react-use-sync-external-store" />
+
+둘째, `subscribe` 함수를 컴포넌트 안에서 정의하면 매 렌더마다 새 함수가 돼요. React는 subscribe 참조가 바뀌면 이전 구독을 해제하고 다시 구독해요. 매 렌더마다 구독과 해제를 반복하는 건 비용이에요. `subscribe` 는 컴포넌트 **밖에** 두거나 `useCallback` 으로 감싸세요.
+
+공식 문서가 한 가지 더 못 박아 둔 조언이 있어요. 이 훅은 앱 코드가 아니라 라이브러리 통합용이라는 점이에요. 앱에서 상태가 필요하면 `useState` 와 `useReducer` 가 먼저고, 이 훅은 기존 non-React 코드를 React 18 동시성과 맞출 때 쓰라고요. 직접 쓸 일은 드물지만, 쓰는 라이브러리 안에서 이 훅이 돌아가고 있다는 걸 알고 있으면 왜 어떤 패턴을 피해야 하는지가 보여요.
+
+tearing은 concurrent rendering이 데려온 새 함정이에요. React 내부 상태는 React가 지키지만 외부 store는 그 보호막 밖에 있죠. `useSyncExternalStore` 는 "이 store의 변경을 네가 못 막으니까 내가 계약을 지킬게, 대신 time-slicing은 양보할게" 라는 절충안이에요. 라이브러리 속에서 이 계약이 어떻게 작동하는지 알면, 왜 Zustand가 마이너 버전 changelog에 이 훅 이름을 적어두었는지가 자연스럽게 이해돼요.
+
+<References
+  items={[
+    {
+      id: "react-use-sync-external-store",
+      title: "React Docs - useSyncExternalStore",
+      href: "https://react.dev/reference/react/useSyncExternalStore",
+      description: "훅 시그니처, getSnapshot 참조 동일성, Pitfalls 참고",
+    },
+    {
+      id: "react-18-release",
+      title: "React Blog - React v18.0",
+      href: "https://react.dev/blog/2022/03/29/react-v18",
+      description: "concurrent rendering 도입과 useSyncExternalStore 신규 훅 소개",
+    },
+    {
+      id: "react-18-wg-tearing",
+      title: "React 18 Working Group - Concurrent Rendering and External Stores",
+      href: "https://github.com/reactwg/react-18/discussions/69",
+      description: "tearing의 정의와 발생 시나리오",
+    },
+    {
+      id: "react-18-wg-naming",
+      title: "React 18 Working Group - useMutableSource to useSyncExternalStore",
+      href: "https://github.com/reactwg/react-18/discussions/86",
+      description: "이름에 Sync가 붙은 이유와 time-slicing 트레이드오프",
+    },
+  ]}
+/>
