@@ -1,0 +1,353 @@
+---
+title: "React key, 리스트 밖에서도 써봤나요"
+description: "리스트 렌더링용이라 여겼던 key가 state 리셋 도구라는 사실, 놓치셨을 수 있어요."
+date: 2026-04-23
+tags: ["React", "렌더링", "상태관리"]
+published: true
+---
+
+리스트를 그릴 때 [React](https://react.dev)가 "이 자식에 고유한 key를 붙여라" 하고 경고하잖아요. 저도 처음엔 그게 React 콘솔을 조용히 만드는 주문 같은 거라고 여겼어요. 근데 key를 잘못 고르면 체크박스가 엉뚱한 행을 따라다니고, 입력하던 텍스트가 다른 자리로 옮겨가기도 해요. 범인은 대개 `index`였거든요. 그리고 같은 개념이 리스트 밖에서, state를 통째로 리셋하는 스위치로도 쓰여요.
+
+## 체크박스가 엉뚱한 행을 따라가요
+
+세 줄짜리 할 일 목록을 그려볼게요. 각 항목 옆에 체크박스가 있고, 행마다 삭제 버튼이 붙어 있어요. 가운데 항목만 체크한 상태에서 맨 위를 삭제해보세요. 직관적으로는 체크가 가운데에 그대로 남아 있을 것 같지만, 실제로는 key를 뭘로 썼느냐에 따라 결과가 갈려요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+
+  const INITIAL = [
+    { id: "a", text: "우유 사기" },
+    { id: "b", text: "이메일 답장" },
+    { id: "c", text: "러닝 30분" },
+  ];
+
+  function App() {
+    const [todos, setTodos] = useState(INITIAL);
+    const remove = (id) => setTodos(todos.filter((t) => t.id !== id));
+
+    return (
+      <ul className="todo">
+        {todos.map((todo, i) => (
+          <li key={i}>
+            <label>
+              <input type="checkbox" />
+              <span>{todo.text}</span>
+            </label>
+            <button onClick={() => remove(todo.id)}>삭제</button>
+          </li>
+        ))}
+      </ul>
+    );
+  }`}
+  css={`.todo {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .todo li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+  }
+
+  .todo button {
+    margin-left: auto;
+    padding: 2px 8px;
+  }`}
+/>
+
+체크박스 두어 개를 눌러놓고 맨 위 삭제 버튼을 눌러보면, 체크 표시가 사라진 항목을 따라 위쪽으로 옮겨온 것처럼 보여요. 원인은 `key={i}`에 있어요.
+
+## key가 React에게 알려주는 것
+
+React는 렌더 사이에 화면을 통째로 다시 그리지 않아요. 이전 렌더와 현재 렌더를 비교해서 달라진 노드만 건드리죠. 이 비교가 어디서 시작되는지는 [Virtual DOM이 왜 필요한지](/posts/why-react-uses-virtual-dom) 글에서 다뤘어요.
+
+배열 자식에서는 이 비교가 특히 까다로워져요. 위치만 봐서는 "이게 원래 있던 항목이 옆으로 이동한 건지, 아니면 아예 다른 항목이 그 자리를 차지한 건지" 구분이 안 돼요. 그래서 React는 형제들 사이에 붙어 있는 key를 보고 짝을 맞추죠.<Cite id="react-rendering-lists" />
+
+<Callout variant="info">
+"Keys tell React which array item each component corresponds to, so that it can match them up later." - React Docs
+
+key는 배열 항목과 컴포넌트를 짝지어주는 꼬리표예요. 이 꼬리표가 있어야 React가 다음 렌더에서 "아, 이 녀석은 저번에도 여기 있던 그 녀석이구나" 하고 알아봐요.
+
+</Callout>
+
+## index를 key로 쓰면 왜 꼬이나요
+
+아까 체크박스 문제로 돌아갈게요. 맨 위 항목을 지우면 뒤따르던 두 항목의 인덱스가 한 칸씩 앞당겨져요. `todos[0]`에는 원래 1번이던 값이 들어오고, `todos[1]`에는 원래 2번이 들어오죠. React는 각 `<li>`의 key를 확인해요. 첫 번째 `<li>` key는 여전히 `0`, 두 번째는 여전히 `1`. React 입장에서는 "어, key 0과 1은 저번에도 여기 있었네" 싶어요.
+
+그래서 React는 DOM과 state를 유지한 채 안쪽 텍스트만 교체해요. 체크박스는 원래 0번 자리에 있던 DOM 노드를 재활용하니까, 체크된 상태도 그대로 남고요. 우리 눈에는 "체크가 엉뚱한 행으로 옮겨갔다"로 보이는 거예요.
+
+<Callout variant="warning">
+"Index as a key often leads to subtle and confusing bugs." - React Docs
+
+subtle이라는 표현이 정확해요. 처음엔 잘 동작하는 것처럼 보이다가, 항목이 섞이거나 삽입, 삭제될 때에만 어긋나니까요.
+
+</Callout>
+
+해결은 간단해요. 항목의 안정적인 ID를 key로 넘기면 돼요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+
+  const INITIAL = [
+    { id: "a", text: "우유 사기" },
+    { id: "b", text: "이메일 답장" },
+    { id: "c", text: "러닝 30분" },
+  ];
+
+  function App() {
+    const [todos, setTodos] = useState(INITIAL);
+    const remove = (id) => setTodos(todos.filter((t) => t.id !== id));
+
+    return (
+      <ul className="todo">
+        {todos.map((todo) => (
+          <li key={todo.id}>
+            <label>
+              <input type="checkbox" />
+              <span>{todo.text}</span>
+            </label>
+            <button onClick={() => remove(todo.id)}>삭제</button>
+          </li>
+        ))}
+      </ul>
+    );
+  }`}
+  css={`.todo {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .todo li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+  }
+
+  .todo button {
+    margin-left: auto;
+    padding: 2px 8px;
+  }`}
+/>
+
+이제 React는 "id가 b인 항목이 사라졌구나"로 판단하고, 그 행의 DOM 전체를 걷어내요. 체크가 다른 행으로 따라다니지 않죠.
+
+## 안정적이고 고유한 key 고르기
+
+React 문서가 권하는 key의 조건은 크게 세 가지예요. 하나는 안정성이에요. 같은 데이터 항목이라면 여러 렌더를 거쳐도 같은 key가 유지돼야 해요. 렌더 중에 `Math.random()`으로 만든 값을 key로 넘기면 두 번째 렌더에서 key가 싹 바뀌고, React가 "전부 새 항목"으로 판단해서 매 렌더마다 DOM과 state를 초기화하게 돼요.<Cite id="react-rendering-lists" />
+
+다음 조건은 고유성인데, 범위가 형제 간만이에요. 서로 다른 배열끼리는 같은 숫자를 써도 문제 없어요. 왼쪽 사이드바의 게시글 리스트와 오른쪽의 댓글 리스트가 각자 1번 key를 쓰고 있어도 React는 헷갈리지 않아요.
+
+마지막으로 key는 자식 컴포넌트가 prop으로 받을 수 없어요. React가 내부 식별자로 꺼내가는 특수한 자리라서, `<Profile key={user.id} />` 안에서 `props.key`로 접근하면 `undefined`가 나와요. 자식이 그 ID 자체를 써야 하면 별도 prop을 하나 더 넘겨야 하죠. 흔히 `<Profile key={user.id} userId={user.id} />`처럼 씁니다.
+
+## key로 state를 통째로 리셋해요
+
+여기까지가 key의 "리스트용" 얼굴이에요. 같은 개념이 리스트 밖에서도 쓰여요. 그러려면 React가 컴포넌트 state를 무엇에 묶어두는지 먼저 짚어야 해요.
+
+<Callout variant="info">
+"It's the position in the UI tree--not in the JSX markup--that matters to React!" - React Docs
+
+React에게 중요한 건 JSX 코드 모양이 아니라 UI 트리 안에서의 자리예요. 같은 자리에 같은 컴포넌트 타입이 계속 그려지면 state가 유지되고, 타입이 바뀌거나 자리가 달라지면 state가 파괴되죠.
+
+</Callout>
+
+여기에 한 줄이 더 있어요. key를 주면 React는 "순서"가 아니라 "key"를 자리의 일부로 취급해요.<Cite id="react-preserving-resetting-state" /> key가 바뀌는 순간 그 자식은 같은 자리에 있어도 다른 컴포넌트로 간주되면서 언마운트되고, 새 인스턴스가 마운트돼요. 서브트리 state와 DOM이 통째로 새로 태어나는 거죠.
+
+가장 쉬운 예가 채팅 초안이에요. 수신인을 바꿨을 때 이전 상대에게 쓰던 초안이 그대로 남아 있으면 곤란하잖아요. 먼저 key 없이 그대로 두면 어떻게 되는지 볼게요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+
+  const CONTACTS = [
+    { id: 1, name: "Alice" },
+    { id: 2, name: "Bob" },
+  ];
+
+  function App() {
+    const [contactId, setContactId] = useState(1);
+    const contact = CONTACTS.find((c) => c.id === contactId);
+    return (
+      <div>
+        <div className="tabs">
+          {CONTACTS.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setContactId(c.id)}
+              className={c.id === contactId ? "active" : ""}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+        <Chat contact={contact} />
+      </div>
+    );
+  }
+
+  function Chat({ contact }) {
+    const [draft, setDraft] = useState("");
+    return (
+      <div className="chat">
+        <p>To. {contact.name}</p>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="메시지를 입력하세요"
+        />
+      </div>
+    );
+  }`}
+  css={`.tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .tabs button {
+    padding: 4px 10px;
+    border: 1px solid #ccc;
+    background: white;
+  }
+
+  .tabs button.active {
+    background: #222;
+    color: white;
+    border-color: #222;
+  }
+
+  .chat p {
+    margin: 0 0 6px;
+    font-weight: 600;
+  }
+
+  .chat textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 8px;
+    box-sizing: border-box;
+  }`}
+/>
+
+Alice에게 "hi"를 쓰다가 Bob 버튼을 눌러보세요. 방금 쓰던 초안이 Bob한테도 그대로 따라와요. React 입장에서 `<Chat />`은 트리의 같은 자리에 있는 같은 컴포넌트 타입이거든요. 그래서 수신인만 갈아 끼운 걸로 판단하고 draft state를 그대로 살려둬요.
+
+해결은 `<Chat>`에 수신인 ID를 key로 붙이는 것뿐이에요. key가 바뀌는 순간 React는 같은 자리에 다른 컴포넌트가 들어온 걸로 간주하니까 draft도 새로 태어나요.
+
+<CodePlayground
+  template="react"
+  code={`import { useState } from "react";
+
+  const CONTACTS = [
+    { id: 1, name: "Alice" },
+    { id: 2, name: "Bob" },
+  ];
+
+  function App() {
+    const [contactId, setContactId] = useState(1);
+    const contact = CONTACTS.find((c) => c.id === contactId);
+    return (
+      <div>
+        <div className="tabs">
+          {CONTACTS.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setContactId(c.id)}
+              className={c.id === contactId ? "active" : ""}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+        <Chat key={contactId} contact={contact} />
+      </div>
+    );
+  }
+
+  function Chat({ contact }) {
+    const [draft, setDraft] = useState("");
+    return (
+      <div className="chat">
+        <p>To. {contact.name}</p>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="메시지를 입력하세요"
+        />
+      </div>
+    );
+  }`}
+  css={`.tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .tabs button {
+    padding: 4px 10px;
+    border: 1px solid #ccc;
+    background: white;
+  }
+
+  .tabs button.active {
+    background: #222;
+    color: white;
+    border-color: #222;
+  }
+
+  .chat p {
+    margin: 0 0 6px;
+    font-weight: 600;
+  }
+
+  .chat textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 8px;
+    box-sizing: border-box;
+  }`}
+/>
+
+이번에는 수신인 버튼을 누를 때마다 `<textarea>`가 통째로 새로 만들어져서 draft가 `""`로 초기화돼요.
+
+이 패턴은 `useEffect`로 contactId를 감시해서 `setDraft("")`로 초기화하는 방식을 대체해요. React 공식 문서도 effect 대신 key를 권해요.<Cite id="react-you-might-not-need-effect" /> key 전환은 리렌더가 아니라 "언마운트 후 마운트"라서, [리렌더 조건](/posts/react-rerender-conditions)을 정리한 글과 함께 보면 흐름이 자연스럽게 맞아떨어져요.
+
+## 한 걸음 더
+
+key는 두 얼굴을 가진 prop이에요. 리스트 안에서는 항목을 짝지어 DOM 재활용을 가능하게 하고, 리스트 밖에서는 서브트리 state를 깨끗이 리셋하는 스위치가 돼요. 같은 원리에서 두 용례가 나온다는 감각을 잡고 나면, "순서만 바꿨는데 왜 state가 엉키지" 하는 순간이 훨씬 덜 당황스러워져요.
+
+참고로 key와 ref는 React가 내부에서 꺼내가는 특수 prop이라 `element.props.key`로는 읽을 수 없어요. `element.key`로만 접근됩니다.<Cite id="react-create-element" /> 수천 개 DOM 노드를 다뤄야 하는 [가상 리스트](/posts/virtual-list-dom-cost)에서도 이 key 규칙이 그대로 중요해지고요.
+
+<References
+  items={[
+    {
+      id: "react-rendering-lists",
+      title: "React Docs - Rendering Lists",
+      href: "https://react.dev/learn/rendering-lists",
+      description: "key의 역할, index key의 함정, 안정적 key 선택 기준 원문",
+    },
+    {
+      id: "react-preserving-resetting-state",
+      title: "React Docs - Preserving and Resetting State",
+      href: "https://react.dev/learn/preserving-and-resetting-state",
+      description: "UI 트리 위치 기반 state 보존과 key로 state 리셋하는 패턴",
+    },
+    {
+      id: "react-you-might-not-need-effect",
+      title: "React Docs - You Might Not Need an Effect",
+      href: "https://react.dev/learn/you-might-not-need-an-effect",
+      description: "prop 변경 시 effect 대신 key로 state 리셋을 권장하는 문서",
+    },
+    {
+      id: "react-create-element",
+      title: "React Docs - createElement",
+      href: "https://react.dev/reference/react/createElement",
+      description: "key와 ref가 element.props로 접근되지 않는 특수 prop이라는 설명",
+    },
+  ]}
+/>
