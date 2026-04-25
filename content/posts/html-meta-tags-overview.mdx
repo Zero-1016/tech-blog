@@ -1,0 +1,186 @@
+---
+title: "meta 태그는 모드 4개로 끝나요"
+description: "head에 들어갈 meta 태그가 매번 헷갈렸어요. 모드 4개로 보면 정리돼요."
+date: 2026-04-25
+tags: ["HTML", "브라우저", "SEO", "Open Graph"]
+published: true
+---
+
+새 페이지를 만들 때마다 `<head>` 안에 어떤 meta 태그를 넣어야 하는지 매번 검색하게 돼요. 저도 마찬가지였어요. SEO 글에서 본 한 줄, 모바일 가이드에서 본 한 줄을 복붙하다 보면 비슷한 태그가 두 번 들어가거나, 정작 필요한 게 빠져 있거나 하죠.
+
+분류만 잡으면 의외로 간단해요. WHATWG가 정한 규칙 한 줄만 보면 모든 meta 태그가 4개 카테고리로 떨어져요.
+
+## `<meta>`엔 모드가 4개 있다
+
+HTML 명세는 `<meta>` 요소에 대해 단호하게 말해요.
+
+<Callout variant="info">
+"Exactly one of the name, http-equiv, charset, and itemprop attributes must be specified." - WHATWG HTML
+
+`name`, `http-equiv`, `charset`, `itemprop` 중에 정확히 하나만 지정하라는 뜻이에요. 두 개를 같이 쓰면 안 되고, 하나도 없으면 의미가 없고요.
+
+</Callout>
+
+이 4가지가 곧 4가지 사용 모드예요.<Cite id="whatwg-meta" />
+
+먼저 `charset`. 문서 인코딩을 선언하는 전용 모드예요. 한 페이지에 한 번만 쓰고, UTF-8을 박아두면 끝입니다.<Cite id="mdn-meta" />
+
+`name`은 문서 레벨 메타데이터의 키예요. description, viewport, robots, theme-color, author 같은 게 전부 여기 속하고요. 우리가 흔히 "meta 태그"라고 부를 때 떠올리는 대부분이 이 모드라고 보면 됩니다.
+
+`http-equiv`는 약자가 "HTTP-equivalent"예요. HTTP 응답 헤더와 같은 효과를 HTML 안에서 흉내 내는 자리죠. CSP, refresh, content-type 같은 게 들어가요.
+
+마지막 `itemprop`은 microdata 구조 참여용이라 일반 블로그 본문에서는 거의 안 봐요. 이 글은 앞 세 모드만 다룰게요.
+
+## 거의 모든 페이지에 들어가는 두 줄
+
+어떤 페이지를 만들든 거의 빠짐없이 들어가는 두 줄이 있어요. `charset`과 `viewport`예요.
+
+```html
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+```
+
+`charset`은 위치가 까다로워요. **문서 첫 1024바이트 안에** 들어가야 합니다. 브라우저가 HTML 파싱 첫 단계에서 인코딩부터 결정하기 때문에, 그 전에 charset 정보가 있어야 다음 바이트를 어떻게 해석할지 알 수 있거든요. [브라우저는 어떻게 화면을 그릴까](/posts/how-browsers-render-pages)에서 다룬 파싱 단계의 맨 첫머리에 해당해요. 그래서 `<head>` 안에서도 사실상 첫 줄에 둡니다.
+
+`viewport`는 모바일 렌더링의 시작점이에요. 권장값은 `width=device-width, initial-scale=1`. 디바이스 너비에 맞춰 뷰포트를 잡고 초기 줌을 1로 두라는 뜻이에요.
+
+여기서 함정이 하나 있어요. 가끔 보이는 `user-scalable=no` 옵션이요.
+
+<Callout variant="warning">
+"Disabling zooming capabilities by setting user-scalable to a value of no prevents people experiencing low vision conditions from being able to read and understand page content." - MDN
+
+저시력 사용자가 페이지를 읽을 수 있게 줌을 막지 말라는 얘기예요. WCAG는 최소 2배 줌을 요구하고, best practice는 5배 권장이에요. 디자인이 깨질까 봐 막아두고 싶을 때가 있는데, 접근성을 깎는 거라 권장하지 않아요.
+
+</Callout>
+
+`user-scalable=no`로 줌을 막아두면 저시력 사용자가 페이지를 못 읽어요.<Cite id="mdn-viewport" /> 디자인이 망가지는 게 걱정이라면 그건 줌이 아니라 레이아웃 쪽에서 풀어야 할 문제죠.
+
+## 검색엔진과 소셜이 읽는 자리
+
+description, robots, [Open Graph](https://ogp.me/), Twitter Card는 전부 페이지가 다른 시스템에 어떻게 보일지를 정하는 자리예요. 검색 결과 스니펫, 소셜 미리보기, 크롤러 정책이 여기 묶여요.
+
+```html
+<meta name="description" content="페이지 설명 한 줄" />
+<meta name="robots" content="index, follow" />
+
+<!-- Open Graph -->
+<meta property="og:title" content="페이지 제목" />
+<meta property="og:description" content="설명" />
+<meta property="og:image" content="https://example.com/thumb.png" />
+<meta property="og:url" content="https://example.com/page" />
+<meta property="og:type" content="article" />
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="페이지 제목" />
+<meta name="twitter:image" content="https://example.com/thumb.png" />
+```
+
+`name="robots"`는 크롤러 정책이에요. `noindex`, `nofollow`, `noimageindex` 같은 디렉티브를 쉼표로 나열할 수 있고, 같은 정보를 응답 헤더 `X-Robots-Tag`로도 보낼 수 있어요.<Cite id="google-robots" /> 헤더 쪽이 HTML이 아닌 리소스(PDF, 이미지)에도 적용 가능해서 더 범용적입니다.
+
+여기서 Open Graph와 Twitter Card가 헷갈리는 지점이 있어요. 잘 보면 속성 이름이 달라요. Open Graph는 `<meta property="og:..." />`처럼 `property` 속성을 쓰고, Twitter Card는 `<meta name="twitter:..." />`처럼 `name` 속성을 써요. OG는 RDFa 방식이라 `property`를 쓰는데, 헷갈려서 `name="og:title"`로 쓰면 OG 파서가 무시해요.<Cite id="ogp" />
+
+다행히 Twitter 파서는 `twitter:*`가 없으면 OG 태그를 fallback으로 읽어요.<Cite id="twitter-card" /> 그래서 OG만 잘 채워두면 Twitter Card는 `twitter:card` 한 줄만 추가해도 미리보기가 동작합니다.
+
+## 모바일과 PWA에서만 보이는 효과
+
+주소창 색을 바꾸거나, 홈화면 아이콘을 등록하거나, 다크 모드를 선언하는 meta 태그들이에요. 데스크톱 브라우저에서는 거의 효과가 없고, iOS 사파리와 Chrome on Android, PWA 환경에서만 의미가 있어요.
+
+```html
+<meta name="theme-color" content="#0e1116" />
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0e1116" media="(prefers-color-scheme: dark)" />
+
+<meta name="color-scheme" content="light dark" />
+
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="앱 이름" />
+```
+
+`theme-color`는 사용자 에이전트에게 페이지 또는 주변 UI를 어떤 색으로 칠하면 좋을지 제안해요.<Cite id="mdn-theme-color" /> Chrome on Android에서는 주소창이, iOS 사파리에서는 일부 chrome이 이 색으로 바뀌어요. `media` 속성으로 라이트/다크 모드를 분기할 수도 있고요.
+
+다만 모든 브라우저가 따라주지는 않아요. Firefox 데스크톱은 무시하고, 지원 범위가 Baseline에 들지 못한 상태예요. "지원하면 더 예쁜 정도"로 두는 게 안전합니다.
+
+`apple-mobile-web-app-*` 시리즈는 iOS 홈화면에 추가했을 때 풀스크린으로 띄우거나, 상태바 스타일을 바꾸는 데 쓰여요. 다만 지금 시점에서 PWA를 정식으로 만들려면 Web App Manifest(`<link rel="manifest" href="..." />`)가 더 표준적이에요. apple-* 시리즈는 manifest로 옮겨가는 중인 보조 수단으로 보는 게 맞아요.
+
+## http-equiv는 HTTP 헤더 흉내자리
+
+`http-equiv` 모드는 응답 헤더를 HTML 안에서 흉내 내는 자리예요. 보안 정책, 리프레시, 호환 모드 같은 게 들어갑니다.
+
+```html
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'" />
+<meta http-equiv="Refresh" content="5; url=/new-page" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+```
+
+원칙은 간단해요. **응답 헤더로 보낼 수 있으면 헤더가 우선이에요.** 서버 설정으로 헤더를 보낼 수 있는 환경이라면 meta보다 응답 헤더가 더 일찍, 더 신뢰성 있게 적용돼요. CSP 같은 보안 정책은 특히 헤더로 보내는 게 권장됩니다. meta로 쓰면 HTML 파싱이 시작된 뒤에야 적용되니까, 그 전 단계에서 로드된 리소스에는 정책이 안 걸리거든요.
+
+`http-equiv="Refresh"`는 접근성 측면에서 비권장이에요. 사용자가 멈출 수 없는 자동 리다이렉트라 스크린 리더 사용자나 시각 장애인 독자에게 혼란을 줘요. 가능하면 서버 측 301/302 리다이렉트로 처리하는 게 낫습니다.
+
+## 정리하면
+
+`<meta>`는 4가지 모드 중 정확히 하나를 쓴다는 규칙 하나만 잡으면, 나머지는 카테고리로 정리됩니다. `charset`은 인코딩 한 줄, `name`은 문서 메타데이터(viewport, description, robots, OG/Twitter, theme-color), `http-equiv`는 헤더 흉내(CSP, refresh)예요.
+
+처음 페이지를 만들 때 들어가는 최소 세트는 이 정도면 충분해요.
+
+```html
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="..." />
+<meta name="theme-color" content="#0e1116" />
+<meta property="og:title" content="..." />
+<meta property="og:description" content="..." />
+<meta property="og:image" content="..." />
+<meta property="og:url" content="..." />
+<meta name="twitter:card" content="summary_large_image" />
+```
+
+여기서 더 깊이 들어가고 싶다면 CSP 정책 설계나 Web App Manifest 쪽이 다음 자연스러운 가지예요.
+
+<References
+  items={[
+    {
+      id: "mdn-meta",
+      title: "MDN - HTML `<meta>` element",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta",
+      description: "4가지 속성 모드와 charset, http-equiv 의미",
+    },
+    {
+      id: "whatwg-meta",
+      title: "WHATWG HTML - the meta element",
+      href: "https://html.spec.whatwg.org/multipage/semantics.html#the-meta-element",
+      description: "name, http-equiv, charset, itemprop 상호 배타 규칙",
+    },
+    {
+      id: "mdn-viewport",
+      title: "MDN - Viewport meta element",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Guides/Viewport_meta_element",
+      description: "권장값과 user-scalable 접근성 경고",
+    },
+    {
+      id: "mdn-theme-color",
+      title: "MDN - meta theme-color",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/theme-color",
+      description: "주소창 색과 prefers-color-scheme media 분기",
+    },
+    {
+      id: "ogp",
+      title: "Open Graph protocol",
+      href: "https://ogp.me/",
+      description: "property 속성 사용과 og:title, og:image 등 필수 필드",
+    },
+    {
+      id: "google-robots",
+      title: "Google Search Central - Robots meta tag",
+      href: "https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag",
+      description: "robots 디렉티브와 X-Robots-Tag 헤더 동등성",
+    },
+    {
+      id: "twitter-card",
+      title: "Twitter Card markup overview",
+      href: "https://developer.twitter.com/en/docs/twitter-for-websites/cards/overview/summary",
+      description: "twitter:card 카드 타입과 OG fallback 동작",
+    },
+  ]}
+/>

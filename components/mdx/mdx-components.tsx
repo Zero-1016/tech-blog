@@ -6,6 +6,7 @@ import { AnimatedStep } from "@/components/ui/animated-step";
 import { VideoEmbed } from "@/components/ui/video-embed";
 import { References } from "@/components/ui/references";
 import { Cite } from "@/components/ui/cite";
+import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { CodeBlock } from "@/components/mdx/code-block";
 
 function slugify(text: string): string {
@@ -35,6 +36,12 @@ export const mdxComponents: MDXComponents = {
   h2: (props) => <Heading level={2} {...props} />,
   h3: (props) => <Heading level={3} {...props} />,
   pre: (props) => <CodeBlock>{<pre {...props} />}</CodeBlock>,
+  table: Table,
+  thead: THead,
+  tbody: TBody,
+  tr: TR,
+  th: TH,
+  td: TD,
   Callout,
   CodePlayground,
   AnimatedStep,

@@ -20,6 +20,7 @@ export type MotifKey =
   | "measurement"
   | "network"
   | "event-loop"
+  | "html"
   | "default";
 
 export interface BannerPalette {
@@ -63,6 +64,7 @@ const TAG_TO_MOTIF: Array<[RegExp, MotifKey]> = [
   [/^(DOM 측정|offsetWidth|offsetHeight|측정|리플로우|reflow|DOM)$/i, "measurement"],
   [/^(네트워크|HTTP|HTTP\/1\.1|HTTP\/2|HTTP\/3|QUIC|TCP|multiplexing)$/i, "network"],
   [/^(이벤트 루프|event loop|microtask|마이크로태스크|task queue|scheduler)$/i, "event-loop"],
+  [/^HTML$/i, "html"],
   [/^(브라우저|렌더링|렌더링 파이프라인|Critical Rendering Path|CRP)$/i, "rendering"],
   [/^(성능|애니메이션|Hooks)$/i, "performance"],
   [/^(Flexbox|Grid|레이아웃|박스 모델|aspect-ratio)$/i, "layout"],
@@ -87,6 +89,7 @@ const MOTIF_PRIORITY: MotifKey[] = [
   "measurement",
   "network",
   "event-loop",
+  "html",
   "rendering",
   "performance",
   "layout",
@@ -241,6 +244,13 @@ const PALETTES: Record<MotifKey, BannerPalette> = {
     primary: "#facc15",
     accent: "#a78bfa",
     text: "#e0e7ff",
+  },
+  html: {
+    bg: "#1a1024",
+    bgAccent: "#3a1e2a",
+    primary: "#e34c26",
+    accent: "#fbbf24",
+    text: "#fde68a",
   },
   default: {
     bg: "#0a1428",
