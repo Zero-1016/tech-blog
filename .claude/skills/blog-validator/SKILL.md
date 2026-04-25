@@ -584,8 +584,8 @@ grep -oE '<Cite\s+id="([^"]+)"' <file> | sed 's/.*id="//;s/"//'
 **4-3-a. 접두사/형식 필터** (확정 에러)
 
 ```bash
-# 잘못된 접두사
-grep -nE '\]\((?!/posts/|/series/|https?://|#)' <file>
+# 잘못된 접두사 (허용 접두사 제외)
+grep -nE '\]\([^)]+\)' <file> | grep -vE '\]\((/posts/|/series/|https?://|#)'
 grep -nE '\]\(/blog/|\]\(/post/|\]\(/article' <file>
 
 # .mdx 확장자
@@ -888,6 +888,23 @@ Phase별로 섹션을 나누고, 각 검출 건을 아래 형식으로 보고:
 
 어떻게 할까요?
 ```
+
+---
+
+## Phase 5: 메타 피드백 핸드오프
+
+(SHARED.md §META-FEEDBACK-HANDOFF 참조)
+
+검증 작업 종료 후, 실행 중 사용자 메시지에서 **메타 피드백** (규칙·스킬 자체에
+대한 변경 요청) 을 자동 감지한다. 패턴이 발견되면:
+
+1. 한 문장씩 요약
+2. AskUserQuestion 으로 "blog-rule-editor 로 넘길까요?" 확인
+3. 승인 시 `Skill(skill="blog-rule-editor", args="[META-FEEDBACK from blog-validator] ...")` 호출
+
+발견 없으면 조용히 skip.
+
+`dry_run: true` 모드에서도 이 단계는 실행 (Edit 이 아니라 Skill 호출이라 무관).
 
 ---
 

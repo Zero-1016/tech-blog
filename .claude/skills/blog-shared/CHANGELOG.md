@@ -5,6 +5,233 @@
 
 ---
 
+## 2026-04-25 23:21
+
+### blog-write GATE 1 피드백 자동 로그 (`content/tmp/draft-feedback.md`)
+
+**변경**: GATE 1 응답 (C/D/E) 직후 사용자 자유 텍스트 + 기획안 메타를
+`content/tmp/draft-feedback.md` 에 append 하는 메커니즘 추가. Phase 0 시작 시
+누적 로그를 읽어 `complexity` 태그 3건 이상이면 알림.
+
+- `blog-write/SKILL.md`:
+  - Phase 0: 누적 GATE 1 피드백 로그 확인 블록 추가 (`FEEDBACK_COUNT`,
+    `COMPLEXITY_COUNT` 집계 → 임계치 알림)
+  - 새 Step GATE-1-LOG 추가 (Phase 3 GATE 1 응답 처리 직후, C/D/E 모두 기록)
+  - GATE 1 응답 분기 (C/D/E) 에 "**자동 로그 기록**: Step GATE-1-LOG" 표기
+  - 제약 섹션: `writer-failures.md` 와 `draft-feedback.md` append 원칙 명시
+- `AGENTS.md`: 빠른 참조 표에 "GATE 1 피드백 로그 확인 |
+  `cat content/tmp/draft-feedback.md`" 한 줄 추가
+
+**이유**: 사용자가 GATE 1 에서 "기획안이 복잡하다" 류 피드백을 반복하는 패턴을
+감지해 `blog-rule-editor` 가 D2 (복잡도 판단) 또는 Phase 3 가이드 개선으로
+라우팅할 수 있도록 데이터 축적. `writer-failures.md` 와 동일한 학습 루프 구조.
+
+**기록 원칙**: 분류·해석 안 함, 자유 텍스트 원문 그대로 저장, 키워드 태깅은
+검색 보조용 (자동 분류 X), A/B 응답은 기록 안 함, E (취소) 는 사유 패턴 분석을
+위해 기록.
+
+**수정 유형**: 기능 추가 (학습 루프, 사용자 인지 부담 변화 없음)
+
+**영향 범위**:
+
+- 사용자: 변경 없음 (백그라운드 로그)
+- writer / 리뷰어 / revise: 변경 없음
+- `content/tmp/` gitignored 유지
+
+**후속**: 누적된 후 `/blog-rule-editor draft-feedback 분석해줘` 시나리오 추가
+검토 가능.
+
+---
+
+## 2026-04-25 14:12
+
+### SHARED.md §RULE-LINK-PATH 검출 전략 · blog-validator 4-3-a 접두사 필터
+
+**변경**: negative lookahead `(?!...)` 패턴을 pipe 조합으로 교체
+
+**이유**: `grep -E` (ERE)는 `(?!...)` (PCRE 전용)를 지원하지 않아 1번 패턴(접두사
+위반 검출)이 실제로 동작하지 않는 버그. 표준 ERE pipe 조합으로 교체해 macOS/Linux
+어디서나 동작하도록 수정.
+
+**수정 파일**:
+
+- `SHARED.md` L507: 패턴 설명을 pipe 조합 방식으로 변경
+- `blog-validator/SKILL.md` L588: `grep -nE ... | grep -vE ...` pipe 조합으로 교체
+
+**수정 유형**: 버그 수정 (검출 로직)
+
+**영향 범위**:
+
+- blog-writer: §RULE-LINK-PATH 참조만, grep 패턴 직접 미사용 (수정 불필요)
+- 기존 글 영향: 없음 (검출 로직 수정, 규칙 자체 변경 아님)
+
+**백업**: `.backups/SHARED-20260425-141212.md`, `.backups/blog-validator-SKILL-20260425-141212.md`
+
+---
+
+## 2026-04-25 13:30
+
+### blog-write Phase 4.5 (신규 GATE 2) · blog-writer 입력 계약 · blog-draft-review D3 가제 모드
+
+**변경**: 제목·설명을 본문 작성 후로 이동. 사용자가 GATE 1 에서 본문 없는 상태로 제목 후보를 판단해야 하는 부담 제거.
+
+새 흐름:
+
+```
+Phase 3 (기획안)
+  Step 3-2 (변경): "가제(working title) 1개" 만 (품질 바 낮춤)
+  Step 3-7 (변경): 기획안 포맷의 "제목 후보 1/2/3" → "가제" + 안내문
+Phase 3.5 (draft-review): D3 가제 모드 (표면 금지만 체크)
+GATE 1: 기획안 + 가제 검토 (가벼움)
+Phase 4 (writer): 가제로 frontmatter 작성, 본문 작성
+Phase 4.5 (NEW): 제목/설명 확정 (GATE 2)
+  Step 4.5-1: 본문 통독
+  Step 4.5-2: 제목 후보 3개 자동 생성 (§META-TITLE 적용)
+  Step 4.5-3: 설명 후보 3개 자동 생성 (§META-DESCRIPTION 적용)
+  Step 4.5-4: AskUserQuestion (제목 선택)
+  Step 4.5-5: AskUserQuestion (설명 선택)
+  Step 4.5-6: frontmatter Edit
+  Step 4.5-7: slug 변경 검토 (선택, 기본 유지)
+Phase 5+ (validator/review): 그대로
+```
+
+- `blog-write/SKILL.md`:
+  - Step 3-2: "후보 2~3개" → "가제 1개" 로 단순화
+  - Step 3-7 기획안 포맷: "## 제목 후보 1/2/3" → "## 가제 (working title)" + 안내문
+  - 새 Phase 4.5 추가 (Phase 4 성공 후 Phase 5 진입 전)
+  - Phase 4 성공 시 진입점 변경: "Phase 5 진입" → "Phase 4.5 진입"
+  - 시리즈 모드: 시리즈 제목은 가제 그대로 유지, 편 제목만 본문 기반 갱신
+- `blog-writer/SKILL.md` Step 1:
+  - 오케스트레이터 경유 시 입력 `title` 이 가제일 수 있음 명시
+  - 가제 모드에서는 표면 금지 (콜론·em-dash·`**`) 만 지키고, §META-TITLE 의 호기심·군더더기 등 품질은 Phase 4.5 책임
+  - 단독 실행 시는 기존대로 §META-TITLE 전체 기준 적용
+- `blog-draft-review/SKILL.md` D3:
+  - 제목/설명 품질 검사를 가제 모드로 변경
+  - 검사: 가제 존재 + 표면 금지 (콜론·em-dash·`**`) + 임시 설명 존재 (가벼움)
+  - 호기심 유발·군더더기·약어 풀어쓰기 등은 Phase 4.5 위임
+
+**이유**: 사용자 페인 포인트 — "주제, 설명에 대해서 내가 다시 수정하는 경우가 많은데" / "글이랑 설명에 대한게 어렵게 보여서 수정하는 경우가 많았자나". 본문 없이 제목·설명을 결정하는 게 어려워서 GATE 1 에서 자주 수정. 본문이 있어야 호기심 유발 포인트 / 막히는 지점이 명확해지므로, 본문 작성 후 본문 기반으로 후보 생성하는 게 자연스러움.
+
+**수정 유형**: blog-write 파이프라인 구조 변경 (큰 변경 — 새 Phase + 새 GATE)
+
+**영향 범위**:
+
+- 사용자 인지 부담: 1회 무거운 GATE 1 → 2회 가벼운 GATE (가제 + 제목/설명 선택)
+- writer: 가제 모드 입력 받아도 정상 동작 (frontmatter 표면 금지만 지키면 됨)
+- draft-review: D3 가벼워짐 (Phase 4.5 가 무거운 검사 담당)
+- validator: 변경 없음 (Phase 4.5 후에 호출되니 최종 제목 검사 그대로)
+- expression-review/coherence-review: 변경 없음
+- blog-revise: 변경 없음 (Phase 4 wrapper 형태로만 blog-write 호출)
+- 기존 글: 영향 없음 (이미 작성된 글의 제목·설명 그대로)
+
+**slug 처리**: 기본은 가제 기반 slug 유지. 가제와 최종 제목이 크게 달라진 경우만 사용자에게 확인 (Step 4.5-7). 묻지 않고 넘어가는 게 디폴트 (한 번 더 물으면 짜증 — Rail 5 회피 원칙).
+
+**시리즈 처리**: 시리즈 제목 (`series` 필드) 은 Phase 3 가제 그대로 유지 (시리즈 통일성 우선). 편 제목 (`title`) 만 각 편 본문 기반으로 후보 3개 → GATE 2 진행.
+
+**백업**: `.backups/blog-write-SKILL-20260425-125901.md` (요청 1 백업과 동일 — 추가 백업 생략, 같은 세션 내 변경)
+
+**재검증 결과**: 새 글 작성 시 통합 테스트 필요 — 사용자가 다음 `/blog-write` 호출 시 새 흐름 검증 권장.
+
+---
+
+## 2026-04-25 13:13
+
+### SHARED.md 신규 §META-FEEDBACK-HANDOFF · blog-validator · blog-expression-review · blog-coherence-review · AGENTS.md
+
+**변경**: validator / expression-review / coherence-review 가 메인 작업 종료 후 사용자 메시지에서 **메타 피드백** (규칙·스킬 자체에 대한 변경 요청) 을 자동 감지해 `blog-rule-editor` 로 라우팅하는 핸드오프 메커니즘 추가.
+
+- `SHARED.md`: 신규 섹션 §META-FEEDBACK-HANDOFF 추가 (감지 패턴, 핸드오프 흐름, 적용 범위, 안전 장치 정의)
+- `blog-validator/SKILL.md`: 새 Phase 5 추가 (검증 후 메타 피드백 핸드오프, dry_run 무관)
+- `blog-expression-review/SKILL.md`: 새 Phase X 추가 (제약 섹션 직전)
+- `blog-coherence-review/SKILL.md`: 새 Phase X 추가 (제약 섹션 직전)
+- `AGENTS.md`: 참조 관계 표 업데이트 (3개 reviewer 의 §META-FEEDBACK-HANDOFF 참조 추가)
+
+핸드오프 흐름:
+
+```
+스킬 메인 작업 종료
+  → 실행 중 사용자 메시지 스캔 (감지 패턴 기준)
+  → 발견 시 한 문장씩 요약
+  → AskUserQuestion: "blog-rule-editor 로 넘길까요?"
+  → 승인 시 Skill(skill="blog-rule-editor", args="[META-FEEDBACK from <스킬>] ...")
+  → blog-rule-editor 가 자체 Rails 로 처리
+발견 없으면 조용히 skip
+```
+
+**이유**: 사용자 요청 — "각 스킬 실행이 끝났을 때, 메타 작업 (스킬·규칙 자체 변경) 의견을 자동으로 적용". 기존엔 매번 `/blog-rule-editor` 수동 호출 필요. 자동 라우팅으로 마찰 제거. 단, blog-rule-editor 의 Rail 1 (사용자 승인 없는 수정 금지) 은 보존 — "자동" 의 범위는 라우팅까지만.
+
+**수정 유형**: 신규 SHARED.md 섹션 추가 + 3개 SKILL.md final step 추가 + AGENTS.md 표 업데이트
+
+**영향 범위**:
+
+- 패턴 감지 false positive 가능 → AskUserQuestion 1회 확인으로 완화
+- 메타 피드백 없는 일반 실행 시 동작 변경 없음 (조용히 skip)
+- blog-research / blog-writer / blog-rule-editor 자체에는 미적용 (의도적)
+- blog-revise 는 향후 확장 가능 (현재는 미적용)
+
+**백업**: `.backups/SHARED-20260425-131252.md`, `.backups/blog-validator-SKILL-20260425-131252.md`, `.backups/blog-expression-review-SKILL-20260425-131252-r2.md`, `.backups/blog-coherence-review-SKILL-20260425-131252-r2.md`, `.backups/AGENTS-20260425-131252.md`
+
+**재검증 결과**: 기존 글 영향 없음. validator/reviewer 의 메인 동작 변경 없음 (Phase 추가만).
+
+---
+
+## 2026-04-25 12:59
+
+### blog-write · blog-revise · blog-coherence-review · blog-expression-review SKILL.md
+
+**변경**: AskUserQuestion 코드 블록 (`questions=[{...}]` JSON wrapper) 을 한 줄 헤더 + bullet 형식으로 압축. boilerplate 도입문 ("그 다음 **반드시 `AskUserQuestion` 툴 호출** (§UI-USER-CHOICE 준수):") 과 SHARED.md 와 중복되는 "**절대 금지**: 번호 리스트..." 경고문 제거.
+
+- `blog-write/SKILL.md`: 13개 코드블록 변환 + 4개 boilerplate 제거
+- `blog-revise/SKILL.md`: 8개 코드블록 변환 + 3개 boilerplate 제거
+- `blog-coherence-review/SKILL.md`: 2개 코드블록 변환
+- `blog-expression-review/SKILL.md`: 1개 코드블록 변환
+- `blog-banner/SKILL.md`: 변경 없음 (이미 압축 형식)
+
+변환 패턴:
+
+```
+# 변경 전
+AskUserQuestion(
+  questions=[{
+    "question": "...",
+    "options": ["A", "B", "C"]
+  }]
+)
+
+# 변경 후
+AskUserQuestion("..."):
+- A
+- B
+- C
+```
+
+**이유**: SKILL.md 파일들이 너무 길어져서 SSOT 원칙 (SHARED.md §UI-USER-CHOICE 가 단일 정의처) 위반 없이 길이 절감 필요. 옵션 wording 은 100% 보존, JSON wrapper + 중복 경고문만 제거.
+
+**수정 유형**: 4개 SKILL.md 일괄 boilerplate 압축 (옵션 B — 적극적 압축)
+
+**영향 범위**:
+
+- SHARED.md 자체는 변경 없음 (SSOT 보존)
+- §UI-USER-CHOICE 의 의미 변경 없음 (writer 가 여전히 AskUserQuestion 호출하도록 SHARED.md 가 강제)
+- 옵션 wording 100% 보존 → writer 출력 결과 동일
+- blog-rule-editor/SKILL.md 는 Rail 5 (자기 자신 수정 금지) 로 별도 처리 필요 (8개 코드블록 잔존)
+
+**Line count 변화**:
+
+| 파일                   | 변경 전  | 변경 후  | 절감     |
+| ---------------------- | -------- | -------- | -------- |
+| blog-write             | 1323     | 1235     | -88      |
+| blog-revise            | 885      | 831      | -54      |
+| blog-coherence-review  | 604      | 592      | -12      |
+| blog-expression-review | 664      | 658      | -6       |
+| **합계**               | **3476** | **3316** | **-160** |
+
+**백업**: `.backups/blog-{write,revise,coherence-review,expression-review,banner}-SKILL-20260425-125901.md`
+
+**재검증 결과**: 기존 글 영향 없음 (SKILL.md 만 수정, content/posts/\* 변경 없음). validator/writer 동작 변경 없음.
+
+---
+
 ## 2026-04-16 15:36
 
 ### SHARED.md §RULE-CITE · blog-validator Phase 4-2 · blog-writer Step 6

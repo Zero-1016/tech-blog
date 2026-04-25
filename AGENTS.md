@@ -10,19 +10,20 @@
 
 ## 빠른 참조
 
-| 작업                   | 명령                                               |
-| ---------------------- | -------------------------------------------------- |
-| 새 글 작성             | `/blog-write <주제> [URL ...]`                     |
-| 기존 글 다듬기         | `/blog-revise <파일> [의도]`                       |
-| 규칙 수정              | `/blog-rule-editor`                                |
-| validator 단독 실행    | `/blog-validator content/posts/<slug>.mdx`         |
-| expression-review 단독 | `/blog-expression-review content/posts/<slug>.mdx` |
-| coherence-review 단독  | `/blog-coherence-review content/posts/<slug>.mdx`  |
-| 배너 모티프 추천       | `/blog-banner content/posts/<slug>.mdx`            |
-| writer 실패 로그 확인  | `cat content/tmp/writer-failures.md`               |
-| 글 백업 확인           | `ls content/posts/.backups/`                       |
-| 스킬 백업 확인         | `ls .claude/skills/blog-shared/.backups/`          |
-| CHANGELOG 확인         | `cat .claude/skills/blog-shared/CHANGELOG.md`      |
+| 작업                    | 명령                                               |
+| ----------------------- | -------------------------------------------------- |
+| 새 글 작성              | `/blog-write <주제> [URL ...]`                     |
+| 기존 글 다듬기          | `/blog-revise <파일> [의도]`                       |
+| 규칙 수정               | `/blog-rule-editor`                                |
+| validator 단독 실행     | `/blog-validator content/posts/<slug>.mdx`         |
+| expression-review 단독  | `/blog-expression-review content/posts/<slug>.mdx` |
+| coherence-review 단독   | `/blog-coherence-review content/posts/<slug>.mdx`  |
+| 배너 모티프 추천        | `/blog-banner content/posts/<slug>.mdx`            |
+| writer 실패 로그 확인   | `cat content/tmp/writer-failures.md`               |
+| 글 백업 확인            | `ls content/posts/.backups/`                       |
+| 스킬 백업 확인          | `ls .claude/skills/blog-shared/.backups/`          |
+| CHANGELOG 확인          | `cat .claude/skills/blog-shared/CHANGELOG.md`      |
+| GATE 1 피드백 로그 확인 | `cat content/tmp/draft-feedback.md`                |
 
 ---
 
@@ -163,19 +164,22 @@ blog-banner (배너 모티프 관리, 독립 실행)
 모든 스킬이 `blog-shared/SHARED.md` 의 필요한 섹션을 Read 로 주입받아 참조합니다.
 대표적인 참조:
 
-| 스킬                     | 주로 참조하는 SHARED.md 섹션                                                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `blog-research`          | §SOURCE-PRIORITY, §DOMAIN-WHITELIST                                                                                                |
-| `blog-writer`            | §BLOG-VOICE, §META-_, §FRONTMATTER, §MDX-_, §RULE-\* (전체)                                                                        |
-| `blog-validator`         | §FRONTMATTER, §FILE-LAYOUT, §RULE-EMDASH, §RULE-COLON-HEADING, §RULE-BOLD, §RULE-BARE-LIST, §RULE-ENGLISH-QUOTE, §DOMAIN-WHITELIST |
-| `blog-expression-review` | §BLOG-VOICE, §RULE-FORBIDDEN-PATTERNS, §RULE-RHYTHM, §RULE-SELF-VOICE                                                              |
-| `blog-coherence-review`  | (논리 구조 검사, 표면 규칙 참조 안 함)                                                                                             |
-| `blog-draft-review`      | §SOURCE-PRIORITY, §META-\*, §COMPLEXITY                                                                                            |
-| `blog-write`             | §SOURCE-PRIORITY, §META-\*, §COMPLEXITY, §FILE-LAYOUT, §UI-USER-CHOICE                                                             |
-| `blog-revise`            | §FILE-LAYOUT, §FRONTMATTER, §UI-USER-CHOICE                                                                                        |
-| `blog-rule-editor`       | §UI-USER-CHOICE                                                                                                                    |
+| 스킬                     | 주로 참조하는 SHARED.md 섹션                                                                                                                               |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `blog-research`          | §SOURCE-PRIORITY, §DOMAIN-WHITELIST                                                                                                                        |
+| `blog-writer`            | §BLOG-VOICE, §META-_, §FRONTMATTER, §MDX-_, §RULE-\* (전체)                                                                                                |
+| `blog-validator`         | §FRONTMATTER, §FILE-LAYOUT, §RULE-EMDASH, §RULE-COLON-HEADING, §RULE-BOLD, §RULE-BARE-LIST, §RULE-ENGLISH-QUOTE, §DOMAIN-WHITELIST, §META-FEEDBACK-HANDOFF |
+| `blog-expression-review` | §BLOG-VOICE, §RULE-FORBIDDEN-PATTERNS, §RULE-RHYTHM, §RULE-SELF-VOICE, §META-FEEDBACK-HANDOFF                                                              |
+| `blog-coherence-review`  | (논리 구조 검사, 표면 규칙 참조 안 함), §META-FEEDBACK-HANDOFF                                                                                             |
+| `blog-draft-review`      | §SOURCE-PRIORITY, §META-\*, §COMPLEXITY                                                                                                                    |
+| `blog-write`             | §SOURCE-PRIORITY, §META-\*, §COMPLEXITY, §FILE-LAYOUT, §UI-USER-CHOICE                                                                                     |
+| `blog-revise`            | §FILE-LAYOUT, §FRONTMATTER, §UI-USER-CHOICE                                                                                                                |
+| `blog-rule-editor`       | §UI-USER-CHOICE                                                                                                                                            |
 
 모든 스킬이 `§UI-USER-CHOICE` 를 참조해야 합니다 (사용자 선택지가 있는 경우).
+validator / expression-review / coherence-review 는 메인 작업 종료 후
+`§META-FEEDBACK-HANDOFF` 흐름을 실행해 메타 피드백을 `blog-rule-editor` 로
+자동 라우팅합니다.
 
 ---
 

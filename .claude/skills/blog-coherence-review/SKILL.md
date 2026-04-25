@@ -534,35 +534,23 @@ C) 유지 (의도한 대조라면)
 
 (오케스트레이터 호출 시 skip)
 
-각 항목에 대해 순차적으로 AskUserQuestion (§UI-USER-CHOICE 준수):
+각 항목에 대해 순차적으로 AskUserQuestion 호출:
 
 ```
-AskUserQuestion(
-  questions=[{
-    "question": "L8 도입-L145 마무리 불일치 — 어떻게 처리할까요?",
-    "options": [
-      "A) 마무리에 오프닝 의문 답변 추가",
-      "B) 오프닝을 마무리에 맞게 수정",
-      "C) 유지 (의도한 흐름)"
-    ]
-  }]
-)
+AskUserQuestion("L8 도입-L145 마무리 불일치 — 어떻게 처리할까요?"):
+- A) 마무리에 오프닝 의문 답변 추가
+- B) 오프닝을 마무리에 맞게 수정
+- C) 유지 (의도한 흐름)
 ```
 
 선택 후 Edit 으로 반영. 단, **글의 의미를 바꾸는 수정은 사용자가 직접 문장을
 입력하도록 유도**하는 게 안전:
 
 ```
-AskUserQuestion(
-  questions=[{
-    "question": "마무리에 오프닝 답변을 추가하시려면 어떻게 할까요?",
-    "options": [
-      "내가 직접 문장을 줄게요 — 다음 메시지에서 입력",
-      "제안 1 그대로 적용",
-      "취소"
-    ]
-  }]
-)
+AskUserQuestion("마무리에 오프닝 답변을 추가하시려면 어떻게 할까요?"):
+- 내가 직접 문장을 줄게요 — 다음 메시지에서 입력
+- 제안 1 그대로 적용
+- 취소
 ```
 
 ---
@@ -587,6 +575,21 @@ AskUserQuestion(
 다음 단계:
   pnpm dev
 ```
+
+---
+
+## Phase X: 메타 피드백 핸드오프
+
+(SHARED.md §META-FEEDBACK-HANDOFF 참조)
+
+리뷰 작업 종료 후, 실행 중 사용자 메시지에서 **메타 피드백** (규칙·스킬 자체에
+대한 변경 요청) 을 자동 감지한다. 패턴이 발견되면:
+
+1. 한 문장씩 요약
+2. AskUserQuestion 으로 "blog-rule-editor 로 넘길까요?" 확인
+3. 승인 시 `Skill(skill="blog-rule-editor", args="[META-FEEDBACK from blog-coherence-review] ...")` 호출
+
+발견 없으면 조용히 skip.
 
 ---
 
