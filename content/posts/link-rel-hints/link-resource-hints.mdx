@@ -1,0 +1,235 @@
+---
+title: "link 태그 어디까지 활용하시나요?"
+description: "preload 만 거는데 LCP 가 그대로면, 5종이 자리를 잘못 잡은 거예요."
+date: 2026-04-25
+tags: ["성능", "브라우저", "HTML"]
+series: "브라우저에 미리 보내는 신호"
+seriesOrder: 2
+published: true
+---
+
+처음 `<link rel="preload">` 를 발견했을 때, "이걸로 다 해결되겠다" 싶어서 head 에 우다닥 박았어요. 그런데 LCP 가 줄어든 글도 있고, 콘솔에 `unused preload` 경고만 잔뜩 뜨는 글도 있더라고요. [1편](/posts/preload-and-friends) 에서 자원 hint 셋이 정확히 뭐하는 애인지 풀었다면, 이번 편은 5종을 한 표 위에 올려놓고 자리부터 잡아볼게요. 자리를 잘못 잡으면 critical 자원의 대역폭만 잠식하기도 하고요.
+
+## preload scanner 가 못 찾는 자원
+
+브라우저는 HTML 을 받자마자 preload scanner 라는 빠른 파서로 본문을 한 번 훑어요. `<img src>`, `<script src>`, `<link href>` 같은 외부 자원을 발견하면 곧장 받기 시작해요. 본문 파싱이 끝나기 전에 이미 다운로드가 진행되도록요.
+
+문제는 scanner 가 못 보는 자원이에요. CSS `@font-face` 안의 폰트 URL, JS 가 런타임에 만드는 fetch URL, dynamic import 의 모듈 경로 같은 건 본문 파싱이 거기까지 가야 발견돼요. 발견이 늦으면 다운로드도 늦죠. [preload](https://web.dev/articles/preload-critical-assets) 가 푸는 게 정확히 이 "늦은 발견" 문제예요. 나머지 hint 도 결국 같은 결을 따라요.<Cite id="webdev-preload-critical" />
+
+| rel | 어디까지 미리 | 적용 시점 | 명세 강도 |
+| --- | --- | --- | --- |
+| `dns-prefetch` | DNS 해석 | 현재 | should |
+| `preconnect` | DNS + TCP + TLS | 현재 | should |
+| `preload` | 다운로드 + 캐시 | 현재 | must |
+| `prefetch` | 다운로드 + 디스크 캐시 | 다음 페이지 | should |
+| `modulepreload` | 다운로드 + parse + compile + module map | 현재 | should |
+
+명세 강도 차이가 꽤 흥미로워요. [WHATWG HTML](https://html.spec.whatwg.org/multipage/links.html) 은 preload 만 "must preemptively fetch", 나머지는 "should" 라고 적어요.<Cite id="whatwg-link-types" /> 이게 "왜 preload 만 unused 경고가 뜨는가" 와 연결돼요. 강제로 받아왔는데 안 쓰니까 콘솔이 화내는 거죠.
+
+## 연결을 미리 하는 두 친구
+
+새 origin 에 처음 요청을 보내려면 DNS 해석, TCP 핸드셰이크, TLS 협상을 거쳐야 해요. 합치면 100ms 에서 500ms 가 한 origin 마다 들어요. 외부 CDN 같은 origin 이 본문 중간에 발견되면 그만큼 늦어지죠. head 에 hint 를 박아두면 이 연결 단계가 본문 파싱과 병렬로 진행돼요.
+
+<AnimatedStep
+  steps={[
+    {
+      title: "DNS 해석",
+      content: "도메인 이름을 IP 로 바꿔요. 리졸버 응답까지 보통 20에서 120ms.",
+    },
+    {
+      title: "TCP 핸드셰이크",
+      content: "3-way handshake. 한 RTT 가 더 들어가요.",
+    },
+    {
+      title: "TLS 협상",
+      content: "HTTPS 면 ClientHello, ServerHello, 인증서 검증까지. 한 RTT 또는 두 RTT.",
+    },
+    {
+      title: "첫 요청 송신",
+      content: "여기까지 끝나야 그제야 진짜 자원 다운로드가 시작돼요.",
+    },
+  ]}
+/>
+
+`dns-prefetch` 는 1단계만 미리 해둬요. 비용이 거의 안 들어서 망설일 필요가 없는 hint 죠.<Cite id="mdn-dns-prefetch" />
+
+`preconnect` 는 4단계 전부 미리 끝내요. 그래서 가장 비싸지만 효과도 가장 큽니다.<Cite id="mdn-preconnect" />
+
+<Callout variant="info">
+"The `<link rel='preconnect'>` hint is best used for only the most critical connections. For the others, just use `<link rel='dns-prefetch'>` to save time on the first step, the DNS lookup." - MDN
+
+진짜 critical 한 origin 한두 개만 preconnect 로 두고, 그 외는 dns-prefetch 로 1단계만 미리. 그래서 셋 다 박아도 되는 자리가 거의 없어요.
+
+</Callout>
+
+```html
+<!-- DNS 해석만 -->
+<link rel="dns-prefetch" href="https://cdn.example.com">
+
+<!-- DNS + TCP + TLS, 폰트는 crossorigin 필수 -->
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<!-- Safari 폴백, 두 link 로 분리 -->
+<link rel="preconnect" href="https://api.example.com" crossorigin>
+<link rel="dns-prefetch" href="https://api.example.com">
+```
+
+조합 함정도 한번 정리할게요.
+
+<Callout variant="warning">
+**연결 hint 안티패턴**
+
+• 자기 도메인 preconnect 는 무의미 (이미 연결돼 있어요)<br/>
+• 외부 origin 을 너무 많이 preconnect 하면 critical 자원 대역폭이 깎여요<br/>
+• 폰트 fetch 는 항상 anonymous CORS 모드라 `crossorigin` 빠뜨리면 효과가 DNS 수준으로 떨어져요<br/>
+• 사파리는 한 link 태그에 `rel="preconnect dns-prefetch"` 를 같이 쓰면 preconnect 를 취소해요. 두 태그로 분리하세요
+
+</Callout>
+
+## 자원을 미리 받는 두 친구
+
+여기서 "자원" 은 실제 파일이에요. 이미지, 폰트, JS, CSS 같은 거요. preload 와 prefetch 가 이 영역을 맡는데, 적용 시점이 결정적으로 달라요.
+
+`preload` 는 **현재 페이지에서 곧 쓸 자원** 이에요.<Cite id="mdn-preload" /> WHATWG 가 must 라고 강하게 적은 이유죠. 우선순위는 `as` 에 따라 결정되고, `fetchpriority` 로 더 끌어올릴 수 있어요. preload 는 발견 시점을 앞당기는 도구, fetchpriority 는 다운로드 순서를 조정하는 도구라 둘이 서로 직교해요. [이미지·폰트 글](/posts/core-web-vitals-images-fonts) 에서 hero 이미지에 `preload` 와 `fetchpriority="high"` 를 같이 거는 예시를 봤는데, 그게 이 둘의 좋은 조합이에요.
+
+`prefetch` 는 **다음 내비게이션을 위한** 힌트예요. 결과는 메모리가 아니라 디스크 캐시에 저장되어 페이지 이동 후에도 남아요.<Cite id="mdn-prefetch" />
+
+Chrome 에서 우선순위가 명시적으로 "Lowest" 라서 현재 페이지 자원 다운로드가 끝날 때까지 기다리고, 그래서 현재 페이지 성능을 잠식하지 않아요.<Cite id="webdev-link-prefetch" />
+
+```html
+<!-- 현재 페이지 LCP 이미지, as 필수, fetchpriority 권장 -->
+<link rel="preload" as="image" href="/hero.webp" fetchpriority="high">
+
+<!-- 다음에 갈 가능성 있는 페이지 -->
+<link rel="prefetch" as="document" href="/checkout">
+
+<!-- 폰트 preload, as=font + type + crossorigin 셋 다 -->
+<link rel="preload" as="font" type="font/woff2" href="/inter.woff2" crossorigin>
+```
+
+<Callout variant="warning">
+"The attribute needs to be set to match the resource's CORS and credentials mode, even when the fetch is not cross-origin." - MDN
+
+`as` 가 없거나 잘못되면 XHR 우선순위로 받아져서 효과가 반감돼요. 폰트는 `crossorigin` 이 빠지면 두 번 다운로드되고요. preload 는 표면적으로 한 줄이지만 속성 세 개가 합쳐져야 의미가 살아요.
+
+</Callout>
+
+## modulepreload 가 한 단계 더 가는 이유
+
+ES 모듈은 일반 JS 파일이랑 처리 방식이 달라요. `<script type="module">` 로 로드되면 module map 에 등록되고, 거기서 의존 그래프가 풀려요. preload 로 받아두면 디스크엔 있지만 module map 엔 없어서 실행 시점에 다시 파싱하고 컴파일해야 해요.<Cite id="mdn-modulepreload" />
+
+<Callout variant="info">
+"The main difference is that `preload` just downloads the file and stores it in the cache, while `modulepreload` gets the module, parses and compiles it, and puts the results into the module map so that it is ready to execute." - MDN
+
+preload 가 "받아만" 두는 거고, modulepreload 는 "실행 준비" 까지 끝낸다고 보면 돼요. Vite 나 Rollup 빌드 결과의 head 에서 자주 보이는 그 link 태그가 바로 이거예요.
+
+</Callout>
+
+함정이 하나 더 있어요. 브라우저가 modulepreload 된 모듈의 import 의존성을 자동으로 따라 받을 수도 있는데, 이건 "구현 최적화" 라서 모든 브라우저가 보장하지 않아요. 의존 모듈이 확실히 미리 받아지길 원하면 각각 명시해야 해요.
+
+```html
+<link rel="modulepreload" href="/app.js">
+<link rel="modulepreload" href="/utils.js">
+<link rel="modulepreload" href="/state.js">
+```
+
+## 실제 head 에서는 어떻게 모이나
+
+지금까지 다섯을 따로따로 봤는데, 한 페이지 head 에서 어떻게 어우러지는지 한 번 보면 감이 잡혀요. 외부 폰트 호스트와 hero 이미지를 가진 흔한 랜딩 페이지를 가정해볼게요.
+
+```html
+<head>
+  <!-- 외부 origin 연결을 미리 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="dns-prefetch" href="https://www.google-analytics.com">
+
+  <!-- 현재 페이지 critical 자원 미리 -->
+  <link rel="preload" as="image" href="/hero.webp" fetchpriority="high">
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/inter-400.woff2" crossorigin>
+
+  <!-- 번들러가 자동으로 박는 ES 모듈 -->
+  <link rel="modulepreload" href="/assets/app-a3f4.js">
+  <link rel="modulepreload" href="/assets/router-b2c1.js">
+
+  <!-- 다음에 갈 가능성이 있는 페이지 -->
+  <link rel="prefetch" as="document" href="/about">
+</head>
+```
+
+직접 손으로 다 박는 경우는 사실 드물고, 환경별로 자동 처리되는 부분이 달라요. 바닐라 HTML 이나 정적 사이트라면 보통 head 에 직접 박는 게 가장 단순해요. React + Vite 같은 SPA 환경이라면 Vite 가 modulepreload 를 자동으로 채우고, 폰트 preload 와 hero 이미지 preload, 외부 origin preconnect 는 `index.html` 에 직접 박아요. Next.js 는 한 단계 더 가서 폰트도 hero 이미지도 다음 라우트 prefetch 도 컴포넌트 레벨에서 자체 처리해요. 결과적으로 head 에 박히는 모양은 셋 다 거의 같아요.
+
+흔한 실수 두 가지가 있어요. 첫째, preload 를 너무 많이 박는 것. "어차피 곧 쓸 거야" 싶어서 위 fold 자원을 다 preload 하면 critical 자원의 대역폭이 깎여서 진짜 LCP 자원이 늦어져요. 둘째, preconnect 를 5개 이상 박는 것. 분석 도구나 광고 SDK 까지 외부 origin 마다 preconnect 를 박으면 그 비용으로 진짜 critical 한 origin 이 밀려요.
+
+## 한 걸음 더, 서버에서 보내는 hint
+
+지금까지 본 link 태그는 전부 클라이언트가 HTML 을 받은 다음에 동작해요. HTTP 103 Early Hints 는 그 한 단계 앞을 노려요. 서버가 200 응답 본문을 만들기 전에 informational status 103 을 먼저 흘려보내면서 `Link:` 헤더로 hint 를 같이 줘요. RFC 8297 표준이고, [HTTP/2 글](/posts/http-multiplexing) 에서 봤던 Server Push 가 빠진 자리를 이 흐름이 메우고 있어요.<Cite id="chrome-early-hints" />
+
+지원되는 hint 는 `preload` 와 `preconnect` 두 가지예요. 서버가 DB 쿼리나 외부 API 응답을 기다리는 think-time 동안 브라우저가 미리 자원을 받아둘 수 있어서, LCP 가 수백 ms 에서 1초까지 빨라진다는 보고가 있어요. prefetch 는 아직 지원 안 돼요.
+
+hint 5종은 결국 "어디까지 미리 할까" 의 깊이가 다를 뿐이에요. 자기 자리에 들어가면 효과가 누적되고, 자리를 잘못 잡으면 critical 자원의 대역폭만 잠식해요. 한 줄을 끄고 켤 때마다 Network 탭에서 직접 확인하는 습관이 가장 안전하고요. preload 를 썼는데 LCP 가 그대로면 보통 `as` 가 빠졌거나 폰트 `crossorigin` 이 빠진 거예요. preconnect 를 썼는데 큰 변화가 없으면 너무 많이 박아서 critical 자원이 밀린 경우가 흔해요.
+
+<References
+  items={[
+    {
+      id: "mdn-preload",
+      title: "MDN - rel=\"preload\"",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/preload",
+      description: "as 속성, crossorigin 함정, 같은 자원 여러 포맷 동시 preload 안티패턴",
+    },
+    {
+      id: "mdn-prefetch",
+      title: "MDN - rel=\"prefetch\"",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/prefetch",
+      description: "다음 내비게이션용, 디스크 캐시 저장, Sec-Purpose 헤더",
+    },
+    {
+      id: "mdn-preconnect",
+      title: "MDN - rel=\"preconnect\"",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/preconnect",
+      description: "DNS + TCP + TLS 단계 정의, critical 한 origin 한정 권고",
+    },
+    {
+      id: "mdn-dns-prefetch",
+      title: "MDN - rel=\"dns-prefetch\"",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/dns-prefetch",
+      description: "DNS 해석만 미리 하는 가벼운 fallback",
+    },
+    {
+      id: "mdn-modulepreload",
+      title: "MDN - rel=\"modulepreload\"",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/modulepreload",
+      description: "fetch + parse + compile + module map 등록까지, 의존 모듈 자동 보장 안 됨",
+    },
+    {
+      id: "whatwg-link-types",
+      title: "WHATWG HTML - Link types",
+      href: "https://html.spec.whatwg.org/multipage/links.html#link-type-preload",
+      description: "preload 의 must vs 다른 hint 의 should 명세 강도 차이",
+    },
+    {
+      id: "webdev-preload-critical",
+      title: "web.dev - Preload critical assets to improve loading speed",
+      href: "https://web.dev/articles/preload-critical-assets",
+      description: "preload scanner 가 못 찾는 자원, unused 경고, 폰트 crossorigin 함정",
+    },
+    {
+      id: "webdev-preconnect",
+      title: "web.dev - Establish network connections early",
+      href: "https://web.dev/articles/preconnect-and-dns-prefetch",
+      description: "연결 비용 100ms 에서 500ms, Safari 합치기 함정, 사용 안 한 preconnect 폐쇄 시점",
+    },
+    {
+      id: "webdev-link-prefetch",
+      title: "web.dev - Link prefetch",
+      href: "https://web.dev/articles/link-prefetch",
+      description: "Chrome 우선순위 Lowest, 캐시 파티셔닝, 현대적 대안 Speculation Rules",
+    },
+    {
+      id: "chrome-early-hints",
+      title: "Chrome for Developers - Early Hints",
+      href: "https://developer.chrome.com/docs/web-platform/early-hints",
+      description: "103 status 로 preload, preconnect 헤더 미리 보내기, LCP 개선 사례",
+    },
+  ]}
+/>
