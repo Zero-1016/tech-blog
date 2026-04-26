@@ -100,19 +100,19 @@ flowchart TD
 
 각 Phase 의 책임:
 
-| Phase  | 스킬                     | 역할                                                     |
-| ------ | ------------------------ | -------------------------------------------------------- |
-| 0      | (오케스트레이터)         | 입력 파싱, content/tmp 준비, 누적 실패 로그 확인         |
-| 1      | (오케스트레이터)         | content/posts/ 에서 관련 글 grep, 내부 링크 후보 추출    |
-| 2      | `blog-research`          | sub-agent 로 격리 실행, 자료 수집, 1순위/2순위 출처 분류 |
-| 3      | (오케스트레이터)         | 자료 기반 기획안 작성 (제목 후보, 섹션 구조, 자료 매핑)  |
-| 3.5    | `blog-draft-review`      | 기획안 검토 (자료 충분성, 복잡도, 제목, 섹션, 링크)      |
-| GATE 1 | (오케스트레이터)         | 사용자 승인 — `AskUserQuestion` 클릭 UI                  |
-| 4      | `blog-writer`            | MDX 파일 작성, Step 1~9 자가 체크리스트                  |
-| 5      | `blog-validator`         | 정규식 검증 + 자동 수정, velite 빌드                     |
-| 5.5    | `blog-expression-review` | 어조, 호흡, 메타 문장, 자기 목소리 등 표현 검토          |
-| 5.6    | `blog-coherence-review`  | 도입-결론 호응, 섹션 흐름, 모순 등 논리 완결성           |
-| 6      | (오케스트레이터)         | validator 와 리뷰어 전체 리포트, 다음 단계 안내          |
+| Phase  | 스킬                                                                         | 역할                                                     |
+| ------ | ---------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 0      | (오케스트레이터)                                                             | 입력 파싱, content/tmp 준비, 누적 실패 로그 확인         |
+| 1      | (오케스트레이터)                                                             | content/posts/ 에서 관련 글 grep, 내부 링크 후보 추출    |
+| 2      | [`blog-research`](./.claude/skills/blog-research/SKILL.md)                   | sub-agent 로 격리 실행, 자료 수집, 1순위/2순위 출처 분류 |
+| 3      | (오케스트레이터)                                                             | 자료 기반 기획안 작성 (제목 후보, 섹션 구조, 자료 매핑)  |
+| 3.5    | [`blog-draft-review`](./.claude/skills/blog-draft-review/SKILL.md)           | 기획안 검토 (자료 충분성, 복잡도, 제목, 섹션, 링크)      |
+| GATE 1 | (오케스트레이터)                                                             | 사용자 승인 — `AskUserQuestion` 클릭 UI                  |
+| 4      | [`blog-writer`](./.claude/skills/blog-writer/SKILL.md)                       | MDX 파일 작성, Step 1~9 자가 체크리스트                  |
+| 5      | [`blog-validator`](./.claude/skills/blog-validator/SKILL.md)                 | 정규식 검증 + 자동 수정, velite 빌드                     |
+| 5.5    | [`blog-expression-review`](./.claude/skills/blog-expression-review/SKILL.md) | 어조, 호흡, 메타 문장, 자기 목소리 등 표현 검토          |
+| 5.6    | [`blog-coherence-review`](./.claude/skills/blog-coherence-review/SKILL.md)   | 도입-결론 호응, 섹션 흐름, 모순 등 논리 완결성           |
+| 6      | (오케스트레이터)                                                             | validator 와 리뷰어 전체 리포트, 다음 단계 안내          |
 
 기존 글을 다듬는 흐름은 별도 스킬 `blog-revise` 가 담당합니다. 5가지 패턴 (재검증
 /부분 수정/자료 보강/완전 재작성/분석만) 을 지원하며, 내부적으로 위 파이프라인의
@@ -123,30 +123,21 @@ flowchart TD
 
 `.claude/skills/` 하위에 10개 스킬과 SSOT 저장소 (`blog-shared`) 가 있습니다.
 
-```
-.claude/skills/
-├── blog-write/                ← 오케스트레이터 (새 글 작성)
-├── blog-revise/               ← 오케스트레이터 (기존 글 다듬기)
-├── blog-research/             ← 자료 수집 (sub-agent)
-├── blog-writer/               ← 집필
-├── blog-validator/            ← 정규식 검증 + 자동 수정
-├── blog-draft-review/         ← 기획안 검토
-├── blog-expression-review/    ← 표현 의미 판단
-├── blog-coherence-review/     ← 논리 완결성
-├── blog-rule-editor/          ← 메타 관리
-├── blog-banner/               ← 배너 모티프 추천 + SVG 생성
-└── blog-shared/
-    ├── SHARED.md              ← SSOT (모든 규칙)
-    ├── config/domains.md      ← 도메인 화이트리스트
-    ├── CHANGELOG.md           ← 자동 생성
-    └── .backups/              ← 자동 생성
-
-content/
-├── posts/
-│   └── .backups/              ← blog-revise 자동 생성 (gitignored)
-└── tmp/
-    └── .gitkeep
-```
+- [blog-write/](./.claude/skills/blog-write/SKILL.md) — 오케스트레이터 (새 글 작성)
+- [blog-revise/](./.claude/skills/blog-revise/SKILL.md) — 오케스트레이터 (기존 글 다듬기)
+- [blog-research/](./.claude/skills/blog-research/SKILL.md) — 자료 수집 (sub-agent)
+- [blog-writer/](./.claude/skills/blog-writer/SKILL.md) — 집필
+- [blog-validator/](./.claude/skills/blog-validator/SKILL.md) — 정규식 검증 + 자동 수정
+- [blog-draft-review/](./.claude/skills/blog-draft-review/SKILL.md) — 기획안 검토
+- [blog-expression-review/](./.claude/skills/blog-expression-review/SKILL.md) — 표현 의미 판단
+- [blog-coherence-review/](./.claude/skills/blog-coherence-review/SKILL.md) — 논리 완결성
+- [blog-rule-editor/](./.claude/skills/blog-rule-editor/SKILL.md) — 메타 관리
+- [blog-banner/](./.claude/skills/blog-banner/SKILL.md) — 배너 모티프 추천 + SVG 생성
+- [blog-shared/](./.claude/skills/blog-shared/) — SSOT 저장소
+  - [SHARED.md](./.claude/skills/blog-shared/SHARED.md) — 모든 글쓰기 규칙
+  - [config/domains.md](./.claude/skills/blog-shared/config/domains.md) — 도메인 화이트리스트
+  - [CHANGELOG.md](./.claude/skills/blog-shared/CHANGELOG.md) — 자동 생성
+  - `.backups/` — 자동 생성
 
 각 스킬의 상세 역할과 호출 관계는 [AGENTS.md](./AGENTS.md) 의 "스킬 관계"
 섹션을 참조하세요.
@@ -168,8 +159,9 @@ content/
 
 ## SHARED.md SSOT 구조
 
-`blog-shared/SHARED.md` 는 모든 글쓰기 규칙의 단일 출처입니다. 각 스킬은 필요한
-섹션을 Read 로 주입받아 참조하며, 규칙을 자기 파일에 복사하지 않습니다.
+[`blog-shared/SHARED.md`](./.claude/skills/blog-shared/SHARED.md) 는 모든 글쓰기
+규칙의 단일 출처입니다. 각 스킬은 필요한 섹션을 Read 로 주입받아 참조하며,
+규칙을 자기 파일에 복사하지 않습니다.
 
 주요 섹션:
 
@@ -181,21 +173,25 @@ content/
 - **§MDX-CODEPLAYGROUND** — 코드 컴포넌트 사용 규칙
 - **§RULE-\* (10여 개)** — em-dash, 콜론, bold, bare 리스트, 인용, 병렬 삼단,
   과장 형용사, 메타 문장, 호흡, 자기 목소리 등 글쓰기 금지/권장 패턴
-- **§DOMAIN-WHITELIST** — 신뢰 가능 도메인 (`config/domains.md` 로 분리)
+- **§DOMAIN-WHITELIST** — 신뢰 가능 도메인
+  ([`config/domains.md`](./.claude/skills/blog-shared/config/domains.md) 로 분리)
 - **§UI-USER-CHOICE** — 사용자 선택지는 항상 `AskUserQuestion` 툴 호출
 
-규칙을 수정하려면 `blog-rule-editor` 를 사용하세요. 직접 SHARED.md 를 편집하는
-것보다 안전합니다 (백업 + 영향 범위 분석 + CHANGELOG 자동 기록).
+규칙을 수정하려면 [`blog-rule-editor`](./.claude/skills/blog-rule-editor/SKILL.md)
+를 사용하세요. 직접 SHARED.md 를 편집하는 것보다 안전합니다 (백업 + 영향 범위
+분석 + CHANGELOG 자동 기록).
 
 ## 메타 관리: blog-rule-editor
 
-블로그 스킬 패밀리 자체를 관리하는 전용 스킬입니다. 안전 장치 7개를 거쳐 SHARED.md,
-config, 개별 스킬 파일을 수정합니다.
+[블로그 스킬 패밀리 자체를 관리하는 전용 스킬](./.claude/skills/blog-rule-editor/SKILL.md)
+입니다. 안전 장치 7개를 거쳐 SHARED.md, config, 개별 스킬 파일을 수정합니다.
 
 지원 작업:
 
-- 규칙 수정 (SHARED.md §RULE-\* 추가/제거/완화)
-- config 파일 편집 (domains.md 등)
+- 규칙 수정 ([SHARED.md](./.claude/skills/blog-shared/SHARED.md) §RULE-\*
+  추가/제거/완화)
+- config 파일 편집
+  ([domains.md](./.claude/skills/blog-shared/config/domains.md) 등)
 - 스킬 파일 Phase/Step 수정
 - 새 스킬 추가
 - writer 실패 로그 (`content/tmp/writer-failures.md`) 패턴 분석
@@ -205,19 +201,13 @@ config, 개별 스킬 파일을 수정합니다.
 
 ## 디렉토리 구조
 
-```
-.
-├── .claude/
-│   └── skills/                  ← 블로그 스킬 패밀리 (10개 + blog-shared)
-├── content/
-│   ├── posts/                   ← MDX 글 (글 작성 출력)
-│   │   └── .backups/            ← blog-revise 백업 (gitignored)
-│   └── tmp/                     ← 로컬 로그 (gitignored)
-│       ├── .gitkeep
-│       └── writer-failures.md   ← writer 실패 로그 (자동 생성)
-├── README.md                    ← 이 파일
-└── AGENTS.md                    ← AI 에이전트 작업 가이드
-```
+- [.claude/skills/](./.claude/skills/) — 블로그 스킬 패밀리 (10개 + blog-shared)
+- [content/posts/](./content/posts/) — MDX 글 (글 작성 출력)
+  - `.backups/` — `blog-revise` 백업 (gitignored)
+- [content/tmp/](./content/tmp/) — 로컬 로그 (gitignored)
+  - `writer-failures.md` — writer 실패 로그 (자동 생성)
+- [README.md](./README.md) — 이 파일
+- [AGENTS.md](./AGENTS.md) — AI 에이전트 작업 가이드
 
 ## 기술 스택
 
@@ -233,5 +223,8 @@ config, 개별 스킬 파일을 수정합니다.
 ## 더 알아보기
 
 - 글 작성 작업 가이드: [AGENTS.md](./AGENTS.md)
-- 스킬 패밀리 변경 이력: `.claude/skills/blog-shared/CHANGELOG.md` (첫 수정 후 자동 생성)
-- 공통 규칙 정의: `.claude/skills/blog-shared/SHARED.md`
+- 스킬 패밀리 변경 이력:
+  [`.claude/skills/blog-shared/CHANGELOG.md`](./.claude/skills/blog-shared/CHANGELOG.md)
+  (첫 수정 후 자동 생성)
+- 공통 규칙 정의:
+  [`.claude/skills/blog-shared/SHARED.md`](./.claude/skills/blog-shared/SHARED.md)
