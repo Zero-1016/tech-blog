@@ -1,0 +1,201 @@
+---
+title: "제어 흐름 분석으로 보는 타입 가드"
+description: "타입 가드들이 사실은 한 메커니즘이라는 걸 알면, 함정도 같이 보여요."
+date: 2026-04-26
+tags: ["TypeScript", "타입 시스템", "타입 가드", "제어 흐름 분석"]
+published: true
+---
+
+`if (typeof x === 'string')` 안쪽에서 빨간 줄이 사라지는 게, 처음엔 신기했어요. typeof 라는 런타임 연산자랑 TypeScript 의 정적 타입이 어떻게 통하는 거지 싶었거든요. 사용자 정의 가드 (`x is Foo`) 까지 마주치고 나서야 깨달은 게 있어요. 타입 가드는 따로따로 외우는 문법이 아니라, 같은 한 가지 일을 다른 각도에서 묻는 도구라는 점이요.
+
+## 타입 가드는 도구 모음이 아니에요
+
+```ts
+function format(x: string | number) {
+  if (typeof x === "string") {
+    return x.toUpperCase(); // 여기서 x 는 string
+  }
+  return x.toFixed(2); // 여기서 x 는 number
+}
+```
+
+if 가지 안에서만 `x` 가 `string` 으로 인정되는 게, 사실 별도 기능이 아니에요. 컴파일러가 if/else, switch, 삼항, 루프 같은 자바스크립트 제어 흐름을 따라가면서 타입을 같이 좁혀나가요. 핸드북도 이걸 명시적으로 말합니다.<Cite id="ts-handbook-narrowing" />
+
+<Callout variant="info">
+"TypeScript overlays type analysis on JavaScript's runtime control flow constructs like if/else, conditional ternaries, loops, truthiness checks, etc." - TypeScript Handbook
+
+if 가지나 switch case 안에서 변수 타입이 좁아져 보이는 건, 따로 만든 기능이 아니라 자바스크립트 제어 흐름 위에 타입 분석을 한 겹 덧칠한 결과예요.
+
+</Callout>
+
+이 관점이 왜 중요하냐면, 도구 카탈로그로만 외우면 새로 등장하는 패턴 (assertion functions, 추론된 type predicate) 을 따로따로 또 외우게 돼요. 같은 무대 위 도구라고 보면 한 자리에 놓고 이해할 수 있어요.
+
+## 내장 가드는 네 가지 질문이에요
+
+타입 가드 종류를 외우는 대신, 각 가드가 어떤 질문을 던지는지로 구분해보면 머리에 잘 남아요.
+
+<AnimatedStep
+  steps={[
+    { title: "typeof", content: "값이 어느 분류에 속하나요? string, number, boolean 같은 원시 타입을 좁힐 때 써요." },
+    { title: "===", content: "이 값이 정확히 어떤 리터럴인가요? 공통 필드를 리터럴로 비교할 때 들어가요." },
+    { title: "in", content: "이 속성이 객체에 있나요? 두 객체 타입을 속성 유무로 갈라낼 때 써요." },
+    { title: "instanceof", content: "프로토타입 체인에 이 생성자가 있나요? 클래스 인스턴스 분기에 써요." }
+  ]}
+/>
+
+각 가드는 자기만의 함정도 같이 가져와요.
+
+`typeof` 가 인식하는 문자열은 정확히 8개 (`"string"`, `"number"`, `"bigint"`, `"boolean"`, `"symbol"`, `"undefined"`, `"object"`, `"function"`) 예요.<Cite id="mdn-typeof" /> 한 글자라도 다르면 (예: `"Object"`) 좁히기 자체가 일어나지 않아요.
+
+`in` 연산자는 객체의 자기 속성과 프로토타입에서 상속된 속성을 구별하지 않아요.<Cite id="mdn-in" /> 그래서 프로토타입에 올라간 메서드도 잡혀요. 자기 속성만 보고 싶으면 `Object.hasOwn()` 쪽이 안전해요.
+
+`instanceof` 는 우변 생성자의 prototype 이 좌변 객체의 프로토타입 체인 어딘가에 있는지 봐요.<Cite id="mdn-instanceof" /> 프로토타입 체인 기반이라서, iframe 같은 다른 실행 컨텍스트에서 만들어진 객체는 우리 쪽 `Array` 와 다른 `Array` 라고 판단돼요. 배열 판별에 `Array.isArray()` 를 쓰는 게 권장인 이유가 여기 있어요.
+
+## 사용자 정의 가드, TypeScript 는 일단 믿어요
+
+내장 가드만으로 부족할 때 직접 만들 수 있어요. 반환 타입에 `pet is Fish` 같은 type predicate 를 적으면 돼요.
+
+```ts
+type Fish = { swim: () => void };
+type Bird = { fly: () => void };
+
+function isFish(pet: Fish | Bird): pet is Fish {
+  return (pet as Fish).swim !== undefined;
+}
+
+function move(pet: Fish | Bird) {
+  if (isFish(pet)) {
+    pet.swim(); // pet 은 Fish
+  } else {
+    pet.fly(); // pet 은 Bird (역방향 좁힘 무료)
+  }
+}
+```
+
+여기 한 가지 위험이 있어요. TypeScript 는 `isFish` 함수 본문이 정말 `pet is Fish` 라는 약속을 지키는지 검사하지 않거든요. 본문에 `return true` 만 적어도 컴파일을 통과해요. 약속을 지킬 책임은 함수 작성자에게 넘어와요.
+
+assertion functions 는 다른 모양으로 같은 일을 해요 (TS 3.7 부터).
+
+```ts
+function assertString(val: unknown): asserts val is string {
+  if (typeof val !== "string") {
+    throw new Error("not a string");
+  }
+}
+
+function shout(val: unknown) {
+  assertString(val);
+  return val.toUpperCase(); // val 은 string
+}
+```
+
+`asserts val is string` 이라고 적으면, 그 함수 호출 후로 `val` 이 string 으로 좁혀진 채 유지돼요. Node 의 `assert` 같은 invariant 함수가 타입 시스템에 들어오는 길이에요. 여기도 마찬가지로 함수가 정말 throw 하는지는 TypeScript 가 검사 안 해요. 약속이에요.
+
+## discriminated union 이 가장 단단한 패턴인 이유
+
+사용자 정의 가드의 위험을 피하는 가장 좋은 방법은, 도구를 안 만드는 거예요. 데이터 모양 자체에 분류 정보를 넣고 그걸로 분기하면 돼요.
+
+```ts
+type Shape =
+  | { kind: "circle"; radius: number }
+  | { kind: "square"; size: number };
+
+function area(shape: Shape) {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.radius ** 2;
+    case "square":
+      return shape.size ** 2;
+    default:
+      const _exhaustive: never = shape;
+      throw new Error(_exhaustive);
+  }
+}
+```
+
+`kind` 같은 공통 리터럴 필드가 있으면, switch 가지에서 자동으로 그 분기에 맞는 멤버로 좁아져요. 별도 type guard 함수가 필요 없고, 가드 작성자의 약속도 필요 없어요.
+
+`default` 절의 `never` 가 이 패턴의 백미예요. 나중에 `Triangle` 을 union 에 추가하고 이 함수를 안 고치면, default 에 도달한 `shape` 가 `Triangle` 로 좁혀져서 `never` 에 할당 못 한다는 컴파일 에러가 떠요. 미래의 내가 케이스를 빠뜨리는 걸 컴파일러가 잡아주는 셈이죠.
+
+TS 4.6 부터는 구조 분해된 변수에서도 좁히기가 동작해요. `const { kind, ...rest } = shape` 후에 `if (kind === "circle")` 가지 안에서 `rest.radius` 를 정상적으로 읽을 수 있어요. 좁힘이 변수 단위로 흘러가는 셈이에요.
+
+## 같은 관점에서 보이는 함정 셋
+
+이 무대 (제어 흐름 분석) 관점에서 보면, 흔한 함정들도 이상한 예외가 아니라 무대의 작동 방식이 드러나는 자리예요.
+
+**typeof null 의 함정**
+
+```ts
+function isObject(x: unknown) {
+  return typeof x === "object";
+}
+isObject(null); // true
+```
+
+`typeof null` 이 `"object"` 인 건 자바스크립트 초기 구현의 잔재예요. 객체의 type tag 가 0 이었고 null 도 NULL 포인터 (0x00) 였기 때문에 같은 태그가 됐죠. 수정 제안이 있었지만 호환성 때문에 거부됐어요. 그래서 `typeof x === "object"` 로 객체 좁히기를 하면 `null` 이 항상 같이 들어와요. 한 줄을 더 붙여야 안전해요.
+
+```ts
+if (typeof x === "object" && x !== null) {
+  // 진짜 객체
+}
+```
+
+**콜백 안에서 좁힘이 풀리는 현상**
+
+```ts
+function process(value: string | undefined) {
+  if (value === undefined) return;
+  // 여기서 value 는 string
+
+  [1, 2].forEach(() => {
+    value.toUpperCase(); // TS 5.4 이전: 다시 string | undefined
+  });
+}
+```
+
+TypeScript 5.4 이전에는 콜백 안으로 들어가는 순간 좁힘이 풀렸어요. 클로저 안에서 그 변수가 변할 수 있다고 컴파일러가 보수적으로 가정했거든요. 5.4 부터는 변수가 콜백 사이에서 바뀌지 않으면 좁힘을 유지해요. 다만 콜백 안에서 변수를 다시 할당하면 또 풀려요.
+
+5.5 부터는 `array.filter(x => x !== undefined)` 같은 패턴에서 type predicate 가 자동 추론돼요.<Cite id="ts-release-5-4" /> 자주 보던 짜증 한 가지가 사라졌죠. 다만 자동 추론에 한계가 있어서, 복잡한 가드는 여전히 명시적으로 적어주는 게 안전해요.
+
+**instanceof 의 cross-realm**
+
+iframe, Web Worker, Node 의 vm 모듈 같은 데서 만들어진 객체는 그쪽 realm 의 `Array.prototype` 을 가져요. 우리 쪽 `Array` 와 다른 객체죠. 그래서 `arr instanceof Array` 가 false 로 나와요. 평소엔 안 마주치지만 마주치면 한참 디버깅하게 돼요. `Array.isArray()` 는 cross-realm 에서도 안전하게 동작하도록 만들어져 있어서, 배열 판별에는 항상 이쪽이 권장이에요.
+
+## 한 무대 위에서 보면
+
+타입 가드의 무대는 결국 제어 흐름 분석이에요. 내장 가드든 사용자 정의 가드든 같은 무대 위에서 도는 도구라서, 새 패턴이 나와도 같은 자리에 놓고 보면 돼요. discriminated union 은 그 도구를 아예 만들 필요가 없도록 데이터 자체를 정리하는 패턴이고요. 함정들도 같은 관점에서 보면 무대의 작동 방식이 드러나는 자리예요.
+
+<References
+  items={[
+    {
+      id: "ts-handbook-narrowing",
+      title: "TypeScript Handbook - Narrowing",
+      href: "https://www.typescriptlang.org/docs/handbook/2/narrowing.html",
+      description: "타입 가드와 제어 흐름 분석의 정의, 사용자 정의 가드와 assertion functions",
+    },
+    {
+      id: "mdn-typeof",
+      title: "MDN - typeof operator",
+      href: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/typeof",
+      description: "typeof 가 반환하는 8개 문자열과 typeof null 함정의 역사적 배경",
+    },
+    {
+      id: "mdn-instanceof",
+      title: "MDN - instanceof operator",
+      href: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/instanceof",
+      description: "프로토타입 체인 검사 동작과 cross-realm 함정",
+    },
+    {
+      id: "mdn-in",
+      title: "MDN - in operator",
+      href: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/in",
+      description: "자기 속성과 상속 속성 모두 검사하는 동작",
+    },
+    {
+      id: "ts-release-5-4",
+      title: "TypeScript 5.4 Release Notes",
+      href: "https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-4.html",
+      description: "콜백 안에서 좁힘이 보존되는 개선과 한계, 5.5 의 추론된 type predicate",
+    },
+  ]}
+/>
