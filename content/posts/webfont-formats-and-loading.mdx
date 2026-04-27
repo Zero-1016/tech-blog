@@ -1,0 +1,261 @@
+---
+title: "웹폰트 다섯 종류, 결국 한 줄"
+description: "다섯 포맷 다 올리지 않아도 돼요, WOFF2 한 줄로 끝나거든요."
+date: 2026-04-27
+tags: ["웹폰트", "CSS", "성능"]
+published: true
+---
+
+브랜드 폰트를 처음 올릴 때 가장 많이 헷갈리는 게 파일 종류예요. `.ttf`, `.otf`, `.woff`, `.woff2`까지 다섯 개를 다 받아서 한꺼번에 올리는 분들도 있고, `.woff2` 하나만 올리는 분들도 있어요. 옛날 글은 다 올리라고 하고 최신 글은 WOFF2 한 줄이면 끝이라고 하니까 누구 말이 맞나 싶어지죠. 저도 그랬거든요.
+
+그래서 다섯 포맷이 어떻게 흘러왔고, 지금 한국어 사이트에 폰트 한 줄을 거는 게 왜 진짜로 한 줄로 끝나는지 한 번에 정리해 봤어요.
+
+## 다섯 포맷이 다 필요했던 시절
+
+지금 쓰는 포맷들은 시기마다 한 가지 문제를 풀려고 하나씩 추가됐어요.
+
+먼저 TTF (TrueType)와 OTF (OpenType)는 데스크톱 폰트 표준이에요. 운영체제가 그대로 받아 쓰는 형식이라 압축이 없고 파일이 무거워요. 웹용으로 그대로 쓰면 다운로드가 부담이고요.
+
+EOT (Embedded OpenType)는 인터넷 익스플로러 전용 포맷이었어요. IE 6~11이 다른 브라우저와 다른 길을 갔던 흔적이에요. IE 지원이 끝난 지금은 의미가 없어요.
+
+WOFF (Web Open Font Format)는 2010년 W3C가 만든 웹 전용 압축 컨테이너예요. 안에 zlib 압축이 들어가 있고 메타데이터도 같이 담을 수 있어요. 그러다 2018년에 WOFF2가 권고안이 되면서 압축 알고리즘이 Brotli로 바뀌었어요.<Cite id="webdev-reduce-font" />
+
+<Callout variant="info">
+"WOFF 2.0's internal compression uses Brotli, and offers up to 30% better compression than WOFF." - web.dev
+
+WOFF에서 WOFF2로 넘어가면서 같은 폰트가 30% 더 작아져요. 한국어 폰트처럼 원래 무거운 파일에서는 이 차이가 더 크게 느껴지고요.
+
+</Callout>
+
+SVG fonts도 한 시절 모바일 사파리 우회용으로 썼어요. 지금은 모든 주류 브라우저에서 deprecated 됐고 위 목록에 굳이 넣을 이유가 없어요.
+
+정리하면 지금 신경 쓸 건 WOFF2예요. WOFF는 안드로이드 4 이전 같은 아주 오래된 환경용 폴백, 나머지는 잊어도 돼요.
+
+## `@font-face` 와 src 디스크립터
+
+CSS에 폰트를 등록하는 건 `@font-face` 한 블록으로 끝나요. 핵심은 `src` 디스크립터의 동작 방식이에요.
+
+```css
+@font-face {
+  font-family: "MyFont";
+  src: local("MyFont"),
+       url("/fonts/myfont.woff2") format("woff2") tech(variations),
+       url("/fonts/myfont.woff") format("woff");
+  font-weight: 100 900;
+  font-display: swap;
+}
+```
+
+`src` 안에 쉼표로 구분된 여러 후보가 보이죠. 브라우저는 위에서부터 차례로 시도해요. 먼저 `local("MyFont")`로 사용자 기기에 같은 이름 폰트가 설치돼 있는지 확인하고, 없으면 첫 번째 `url()`을 받으려 해요.<Cite id="mdn-font-face" />
+
+각 `url()` 뒤에 붙은 `format()`은 "이 파일은 woff2 형식이에요"라는 힌트예요. 브라우저가 지원하지 못하는 형식이면 다음 후보로 넘어가죠. `tech()`는 좀 더 세밀한 요구로, `tech(variations)`는 "이 파일은 variable font 기능이 필요해요"라고 알려요. 옛날 자료에 자주 보이는 `format("woff2-variations")`는 비표준이고, 지금 표준은 `format("woff2") tech(variations)` 조합이에요.
+
+`local()`을 맨 앞에 두는 이유는 다운로드를 줄이기 위해서예요. 사용자 기기에 이미 깔린 폰트라면 네트워크 요청 자체를 안 해요.
+
+## `font-display` 다섯 값의 트레이드오프
+
+폰트 파일을 받는 동안 텍스트를 어떻게 보여줄지 결정하는 게 `font-display`예요. 다섯 값이 있고 각자 다른 트레이드오프를 가져요.
+
+폰트 다운로드 수명은 세 구간으로 나뉘어요. 폴백 폰트조차 안 보이는 block period, 폴백을 일단 보여 주는 swap period, 그리고 다운로드 실패가 확정되는 failure period. `font-display` 값마다 이 구간 길이를 다르게 정해요.<Cite id="mdn-font-display" />
+
+`block`은 short block + 무한 swap이에요. 폰트가 도착할 때까지 텍스트가 잠깐 안 보이는 FOIT(Flash of Invisible Text)를 감수하고서라도 처음부터 브랜드 폰트로 보여주려는 선택이에요.
+
+`swap`은 extremely small block + 무한 swap이에요. 거의 즉시 폴백 폰트로 텍스트가 뜨고, 폰트가 도착하면 교체돼요. FOUT(Flash of Unstyled Text)가 발생하지만 가장 빨리 본문을 읽을 수 있어요.
+
+`fallback`은 extremely small block + short swap이에요. 폰트가 빨리 도착하면 교체하고, 늦으면 그냥 폴백을 유지해요. 네트워크가 좋을 때만 교체되는 절충안이에요.
+
+`optional`은 extremely small block + swap 없음이에요. 첫 방문에 폰트가 늦게 도착하면 그냥 폴백을 그대로 두고, 백그라운드로 받아 캐시에만 넣어요. 다음 방문에 캐시에서 즉시 적용되는 거죠.
+
+`auto`는 UA가 알아서 정하는데, 보통 `block`과 비슷하게 동작해요.
+
+본문 가독성이 우선이라면 `swap`이 무난하고, 본문이 길고 폰트 차이가 그렇게 크지 않으면 `optional`이 깔끔해요. 브랜드 일관성이 절대 중요한 헤더 같은 자리는 `block`을 고려할 수 있고요. `<link rel="preload">`로 폰트를 일찍 가져오면 FOUT 자체를 줄일 수 있어요. 자세한 건 [preload 와 그 형제들](/posts/preload-and-friends)에서 다뤘어요.
+
+## Variable font, 파일 하나로 끝나는 폰트
+
+옛날 방식으로는 브랜드 폰트 하나에 weight별로 별도 파일을 받아야 했어요. Light, Regular, Bold, ExtraBold만 해도 4개. 거기에 italic까지 곁들이면 8개. 이걸 다 받으려면 무겁고 복잡해요.
+
+Variable font는 OpenType 명세의 확장이에요. 한 파일 안에 weight, width, italic, slant, optical size 같은 여러 변형을 담아서 보내는 형식이죠.<Cite id="mdn-variable-fonts" /> 보통 4 weight를 합친 정적 폰트보다 variable 한 파일이 더 작아요.
+
+<Callout variant="info">
+"Variable fonts are an evolution of the OpenType specification that enables many different variations of a typeface to be incorporated into a single file, rather than having separate font files for every width, weight, or style." - MDN
+
+쉽게 말하면 굵기 9가지 받지 말고 폰트 하나 받아서 그 안에서 굵기를 조절하자, 가 핵심이에요.
+
+</Callout>
+
+표준에 등록된 다섯 가지 축이 있어요. `wght` (weight, 1~1000)는 `font-weight`로, `wdth` (width, %)는 `font-stretch`로, `ital` (italic, 0/1)과 `slnt` (slant, deg)는 `font-style`로 매핑돼요. `opsz` (optical size)는 `font-optical-sizing`으로 다루고요.
+
+축 자체를 직접 만지려면 `font-variation-settings`를 써요.
+
+```css
+.title {
+  font-family: "Roboto Flex", sans-serif;
+  font-variation-settings: "wght" 580, "wdth" 95;
+}
+```
+
+다만 `font-variation-settings`는 한 축만 바꿔도 다른 축까지 다 다시 써야 해요. 그래서 CSS 변수랑 같이 쓰는 게 보통이에요. 그래도 가능하면 `font-weight` 같은 표준 속성을 먼저 쓰는 게 다른 CSS 도구와 잘 맞아요.
+
+직접 슬라이더로 weight를 움직여 보면 한 파일이 어떻게 변하는지 감이 와요.
+
+<CodePlayground
+  template="react"
+  showPreview={true}
+  code={`function VariableFontDemo() {
+    const [weight, setWeight] = React.useState(400);
+    const [width, setWidth] = React.useState(100);
+
+    return (
+      <div className="demo">
+        <div
+          className="sample"
+          style={{
+            fontFamily: '"Roboto Flex", sans-serif',
+            fontWeight: weight,
+            fontStretch: width + "%",
+          }}
+        >
+          Variable Font ABC 123
+        </div>
+
+        <label className="row">
+          <span>weight ({weight})</span>
+          <input
+            type="range"
+            min={100}
+            max={1000}
+            value={weight}
+            onChange={(e) => setWeight(Number(e.target.value))}
+          />
+        </label>
+
+        <label className="row">
+          <span>width ({width}%)</span>
+          <input
+            type="range"
+            min={50}
+            max={150}
+            value={width}
+            onChange={(e) => setWidth(Number(e.target.value))}
+          />
+        </label>
+      </div>
+    );
+  }`}
+  css={`@import url("https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght,wdth@8..144,100..1000,25..151&display=swap");
+
+  body {
+    font-family: -apple-system, sans-serif;
+    padding: 0;
+    margin: 0;
+  }
+
+  .demo {
+    padding: 16px;
+  }
+
+  .sample {
+    font-size: 32px;
+    padding: 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+
+  .row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+    font-size: 14px;
+  }
+
+  .row input {
+    width: 100%;
+  }`}
+/>
+
+슬라이더를 양쪽 끝까지 움직여 봐도 추가 폰트 파일 요청이 일어나지 않아요. 한 파일이 다 책임지는 거죠.
+
+## 한국어 웹폰트와 `unicode-range` 서브셋
+
+한국어 사이트는 폰트 무게라는 별도의 문제가 있어요. 라틴 문자 폰트는 글리프 수가 수백 개 수준이지만, 한국어 폰트는 완성형 11,172자에 한자, 영문, 기호까지 합치면 글리프가 훨씬 많아요. 그래서 한국어 정적 폰트 한 weight가 1~3MB는 우습게 나와요. variable font도 한국어용은 오히려 더 크기도 하고요.
+
+이걸 줄이는 도구가 `unicode-range`예요. 같은 `font-family` 이름으로 `@font-face`를 여러 개 등록하고, 각각 다른 코드포인트 범위를 맡기는 방식이에요.
+
+```css
+@font-face {
+  font-family: "Noto Sans KR";
+  src: url("/fonts/noto-kr-hangul.woff2") format("woff2");
+  unicode-range: U+AC00-D7A3; /* 한글 음절 */
+}
+
+@font-face {
+  font-family: "Noto Sans KR";
+  src: url("/fonts/noto-kr-latin.woff2") format("woff2");
+  unicode-range: U+0000-007F; /* 기본 라틴 */
+}
+```
+
+브라우저는 페이지에 등장한 문자가 어느 범위에 속하는지 보고 필요한 파일만 받아요. 영어만 적힌 페이지에서는 한글 청크를 아예 다운로드하지 않아요.<Cite id="mdn-unicode-range" />
+
+<Callout variant="info">
+"The purpose of this descriptor is to allow the font resources to be segmented so that a browser only needs to download the font resource needed for the text content of a particular page." - MDN
+
+한 페이지에 쓰인 글자만 받자, 가 unicode-range의 핵심이에요. CJK 언어처럼 글자 수가 많을수록 효과가 커요.
+
+</Callout>
+
+[Google Fonts](https://fonts.google.com/)의 노토 산스 KR을 보면 unicode-range로 100여 개 청크로 잘게 쪼개져 있어요. 사용자가 보고 있는 페이지에 등장한 글자가 들어 있는 청크 몇 개만 다운로드하는 거죠.
+
+페이지에 그 범위 글자가 단 하나라도 있으면 그 파일은 통째로 받아요. 부분 다운로드가 아니에요. 그래서 청크를 너무 잘게 나누는 것도 만능이 아니고, 사이트 컨텐츠 분포에 맞게 묶는 게 좋아요. CJK 사이트라면 자주 쓰이는 한글 빈도 묶음 + 한자 묶음 + 라틴 묶음 정도가 적당해요.
+
+좀 더 적극적으로 줄이고 싶으면 [fonttools](https://fonttools.readthedocs.io/)의 `pyftsubset` 같은 도구로 사이트 본문에 등장하는 글자만 추려서 폰트 자체를 다이어트할 수도 있어요. 이 경우 `unicode-range`까지 안 써도 되고요.
+
+## 정리
+
+요약하자면 다섯 포맷 중 신경 쓸 건 WOFF2 하나예요. `@font-face`에 `local()` 우선, `format("woff2") tech(variations)` 힌트, `font-display` 값을 본문 우선이면 `swap` 또는 `optional`로 잡고, variable font를 쓸 수 있다면 weight별 파일 여러 개 대신 한 파일을 받으세요. 한국어 사이트라면 `unicode-range`로 청크를 나눠 페이지에 등장한 글자만 받게 하는 게 핵심이고요.
+
+폰트 로딩이 LCP/CLS 같은 성능 지표에 어떻게 묶이는지는 [이미지와 폰트만 잡아도 점수가 돌아온다](/posts/core-web-vitals-images-fonts)에서 다뤘어요. `font-display`와 `size-adjust` 같은 메트릭 오버라이드까지 함께 보면 폰트 한 줄로 점수가 오르내리는 게 보여요.
+
+<References
+  items={[
+    {
+      id: "mdn-font-face",
+      title: "MDN - CSS `@font-face`",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face",
+      description: "src 디스크립터의 local/url/format/tech 동작과 메트릭 오버라이드 확인",
+    },
+    {
+      id: "mdn-font-display",
+      title: "MDN - CSS `font-display`",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face/font-display",
+      description: "block/swap/fallback/optional/auto 다섯 값의 타임라인 정의",
+    },
+    {
+      id: "mdn-variable-fonts",
+      title: "MDN - Variable fonts guide",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_fonts/Variable_fonts_guide",
+      description: "wght, wdth, ital, slnt, opsz 다섯 등록 축과 font-variation-settings 사용",
+    },
+    {
+      id: "mdn-unicode-range",
+      title: "MDN - CSS `unicode-range`",
+      href: "https://developer.mozilla.org/en-US/docs/Web/CSS/@font-face/unicode-range",
+      description: "코드포인트 범위로 폰트를 분할해 필요한 청크만 다운로드",
+    },
+    {
+      id: "webdev-reduce-font",
+      title: "web.dev - Reduce web font size",
+      href: "https://web.dev/articles/reduce-webfont-size",
+      description: "WOFF2 Brotli 압축률과 CJK 서브셋팅 권장",
+    },
+    {
+      id: "webdev-optimize-loading",
+      title: "web.dev - Optimize WebFont loading",
+      href: "https://web.dev/articles/optimize-webfont-loading",
+      description: "preload 와 font-display 조합으로 폰트 로딩 최적화",
+    },
+  ]}
+/>
