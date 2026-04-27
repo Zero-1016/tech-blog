@@ -1,0 +1,187 @@
+---
+title: "이미지 포맷, 무엇을 언제 쓸까"
+description: "사진 한 장에 .avif, .webp, .jpg를 함께 두라는 가이드, 정말 필요할까요?"
+date: 2026-04-27
+tags: ["이미지", "성능", "HTML", "브라우저"]
+published: true
+---
+
+같은 사진을 `.avif`, `.webp`, `.jpg` 세 가지로 만들어두라는 가이드를 처음 봤을 때 좀 머리가 아팠어요. 한 이미지를 위해 파일을 세 벌씩 두라고요? 그런데 막상 들여다보면 다 이유가 있어요. 압축률, 알파 채널, 애니메이션, 색역에서 포맷마다 푸는 문제가 다르거든요.
+
+## 같은 사진에 포맷이 여러 개인 이유
+
+이미지 포맷이 많은 건 압축, 알파 채널, 애니메이션, 색역 같은 영역에서 서로 다른 트레이드오프를 풀고 있기 때문이에요.
+
+JPEG는 사진을 작게 만드는 데 강하지만 투명 배경을 못 다뤄요. PNG는 투명 배경과 무손실을 챙기는 대신 사진엔 비효율적이고요. GIF는 256색 제한 때문에 사진엔 어울리지 않아요. 이 빈틈을 메우려고 새 포맷이 등장했어요. WebP는 손실, 무손실, 투명, 애니메이션을 한 포맷에 담았고, AVIF는 거기에 더해 압축률을 다시 절반으로 줄였죠.
+
+문제는 새 포맷일수록 브라우저 지원이 늦게 따라온다는 점이에요. 그래서 "같은 사진을 여러 포맷으로 두기" 가 등장하는 거예요. 가장 압축률 좋은 AVIF를 우선 보여주고, 못 읽는 브라우저에는 WebP, 그마저 안 되면 JPEG로 떨어지는 식이죠.
+
+## 래스터 포맷 다섯 가지가 자리 잡은 순서
+
+다섯 포맷이 어떤 빈틈을 채우려고 등장했는지 시간 순으로 보면 흐름이 또렷해져요.
+
+<AnimatedStep
+  steps={[
+    {
+      title: "JPEG (1992)",
+      content: "손실 압축으로 사진을 잘 줄이는 데 집중. 알파 채널과 무손실 모드가 없어요. 8-bit 컴포넌트만 지원해요."
+    },
+    {
+      title: "PNG (1996)",
+      content: "GIF의 256색 제약과 라이선스 문제를 풀려고 등장. 무손실, 알파 채널, 트루컬러를 챙겼지만 사진에는 비효율이라 JPEG와 역할이 갈렸어요."
+    },
+    {
+      title: "GIF (1987)",
+      content: "단순 애니메이션을 표준으로 가진 첫 포맷. 256색 제한 때문에 지금은 짧은 밈이나 도식 정도로만 남았어요."
+    },
+    {
+      title: "WebP (2010)",
+      content: "구글이 공개. 손실, 무손실, 투명, 애니메이션을 한 포맷에 담았고 JPEG보다 작은 결과를 같은 품질에서 보여줘요."
+    },
+    {
+      title: "AVIF (2019)",
+      content: "AV1 코덱을 이미지 컨테이너에 담은 포맷. 10-bit, HDR, wide color gamut을 지원하면서 JPEG 대비 약 절반 크기로 줄였어요."
+    }
+  ]}
+/>
+
+GIF가 1987년으로 가장 먼저 나온 셈인데, 사진 압축 흐름과는 결이 달라서 자리를 따로 뒀어요. 나머지 넷은 "사진 또는 풍부한 색조 이미지" 라는 같은 트랙에서 자리를 다투는 포맷이에요.
+
+## 압축률을 수치로 비교하기
+
+수치 얘기를 안 하고 넘어가긴 어려워요. WebP가 만들어진 이유가 이 숫자에 다 들어 있거든요.<Cite id="mdn-image-types" />
+
+<Callout variant="info">
+"Lossy WebP images are on average 25–35% smaller than JPEG images of visually similar compression levels. Lossless WebP images are typically 26% smaller than the same images in PNG format." - MDN
+
+같은 시각 품질 기준으로 손실 WebP는 JPEG보다 평균 25~35% 작고, 무손실 WebP는 PNG보다 26% 정도 작다는 얘기예요.
+
+</Callout>
+
+사진 영역에서는 JPEG의 자리를, 투명 배경 영역에서는 PNG의 자리를 동시에 갉아먹는 게 WebP의 위치예요. 구글의 공식 페이지는 SSIM 동등 품질에서 25~34% 절감으로 표기하니 출처마다 1%포인트 정도 차이는 있어요.<Cite id="google-webp" />
+
+AVIF는 한 단계 더 나아가요.<Cite id="webdev-avif" />
+
+<Callout variant="info">
+"lossy AVIF images are around 50% smaller than JPEG images" - web.dev
+
+손실 AVIF 이미지는 JPEG 대비 약 50% 작다는 얘기인데, 이게 콘텐츠와 품질에 따라 달라지긴 해요. 그래도 같은 화면을 절반 용량에 보낼 수 있다는 건 매번 와닿는 차이예요.
+
+</Callout>
+
+여기서 한 가지 짚어둘 게 있어요. WebP나 AVIF의 압축률은 같은 SSIM(또는 비슷한 품질 지표) 기준이지, 같은 quality 숫자가 아니에요. JPEG의 quality 80과 WebP의 quality 80은 의미가 달라요. 저도 처음에 quality 숫자만 보고 비교했다가 "어 비슷한데?" 하고 넘긴 적이 있어서, 한 번 짚어두고 싶었어요.
+
+## picture로 fallback 체인 만들기
+
+여러 포맷을 동시에 두는 건 `<picture>` 와 `<source type="...">` 로 해요. 브라우저는 위에서부터 source의 type을 검사하고, 자기가 디코딩 가능한 첫 번째 source를 골라요.<Cite id="mdn-picture" />
+
+<CodePlayground
+  template="react"
+  showPreview={false}
+  code={`function ResponsiveImage() {
+    return (
+      <picture>
+        <source srcSet="/hero.avif" type="image/avif" />
+        <source srcSet="/hero.webp" type="image/webp" />
+        <img src="/hero.jpg" alt="히어로 이미지" width={1280} height={720} />
+      </picture>
+    );
+  }`}
+/>
+
+핵심은 source의 순서예요. 압축률이 가장 좋은 AVIF를 맨 위에 두고, 그 다음 WebP, 마지막 fallback으로 JPEG. 브라우저가 AVIF를 못 읽으면 자동으로 다음 source를 봐요. `<img>` 는 어떤 source도 매치 안 될 때 또는 picture 자체가 미지원인 브라우저에서의 최종 fallback이에요.
+
+알아둘 점 한 가지. AVIF는 progressive rendering을 지원하지 않아요. JPEG처럼 위에서부터 점점 선명해지는 효과가 안 나와요.
+
+<Callout variant="warning">
+"AVIF does not support progressive rendering, so files must be fully downloaded before they can be displayed." - MDN
+
+AVIF는 파일이 완전히 도착하기 전까지 화면에 그려주지 않아요. 다만 AVIF는 같은 품질의 JPEG보다 워낙 작은 편이라 실제 체감은 크지 않을 때가 많아요. 정말 큰 hero 이미지라면 한 번 더 따져볼 가치가 있고요.
+
+</Callout>
+
+srcset 얘기도 빠뜨릴 수 없어요. 디바이스 픽셀 밀도(`1x`, `2x`)와 너비(`w`)를 같이 쓸 수 있는데, 둘을 한 srcset 안에 섞으면 안 돼요. MDN이 명시적으로 금지해놓은 부분이거든요.<Cite id="mdn-img" />
+
+<CodePlayground
+  template="react"
+  showPreview={false}
+  code={`function HeroPicture() {
+    return (
+      <picture>
+        <source
+          type="image/avif"
+          srcSet="/hero-800.avif 800w, /hero-1600.avif 1600w"
+          sizes="(max-width: 768px) 100vw, 800px"
+        />
+        <source
+          type="image/webp"
+          srcSet="/hero-800.webp 800w, /hero-1600.webp 1600w"
+          sizes="(max-width: 768px) 100vw, 800px"
+        />
+        <img
+          src="/hero-1600.jpg"
+          srcSet="/hero-800.jpg 800w, /hero-1600.jpg 1600w"
+          sizes="(max-width: 768px) 100vw, 800px"
+          alt="히어로 이미지"
+          width={1600}
+          height={900}
+        />
+      </picture>
+    );
+  }`}
+/>
+
+각 source 안에서는 같은 종류(여기서는 width descriptor `w`)로만 후보를 나열해요. 픽셀 밀도까지 한 번에 다루고 싶으면 sizes로 표현해서 브라우저가 effective pixel density를 계산하게 두면 돼요.
+
+## 그래서 무엇을 언제 쓸까
+
+사진처럼 풍부한 색조를 가진 이미지에는 AVIF, WebP, JPEG 순으로 fallback 체인을 만드는 게 일반적이에요. picture로 묶고, 가능하면 srcset까지 붙여 화면 크기에 맞춘 선택을 브라우저에 맡기는 거죠.
+
+투명 배경이 필요한 그래픽이라면 AVIF, WebP, PNG 순서로 둬요. PNG가 fallback인 이유는 알파 채널 호환 때문이에요. JPEG는 투명도를 못 다루니 이 자리엔 못 들어가요.
+
+로고나 아이콘은 SVG가 거의 항상 정답이에요. 벡터라 어떤 화면 크기에도 깨지지 않고, 작은 파일 크기, CSS로 색을 바꾸는 유연함까지 갖췄어요. CSS로 채워야 하는 단색 아이콘이라면 [data URL로 인라인하는 선택지](/posts/data-url-when-to-use)도 있고요.
+
+LCP 이미지처럼 핵심 자원이라면 포맷만 잡지 말고 [읽힘 속도와 레이아웃 안정성](/posts/core-web-vitals-images-fonts)까지 함께 봐야 해요. width와 height를 안 적어두면 포맷이 아무리 좋아도 CLS가 튀거든요.
+
+마지막 한 줄. "같은 사진을 세 벌씩 둬야 하나" 의 답은 "가능하면 그렇게" 예요. 빌드 시 자동으로 인코딩하는 도구([Sharp](https://sharp.pixelplumbing.com), [libvips](https://www.libvips.org), [ImageMagick](https://imagemagick.org))를 쓰면 한 번 설정으로 끝낼 수 있고, 사용자에게 돌아오는 절감 용량은 매번 측정해서 확인할 수 있거든요.
+
+<References
+  items={[
+    {
+      id: "mdn-image-types",
+      title: "MDN - Image file type and format guide",
+      href: "https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Image_types",
+      description: "JPEG, PNG, WebP, AVIF 등 포맷별 특성과 브라우저 지원 범위 정리"
+    },
+    {
+      id: "mdn-picture",
+      title: "MDN - The picture element",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/picture",
+      description: "source의 type/media 평가 순서와 fallback 동작"
+    },
+    {
+      id: "mdn-img",
+      title: "MDN - The img element",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/img",
+      description: "srcset의 width/density descriptor 사용 규칙"
+    },
+    {
+      id: "google-webp",
+      title: "Google for Developers - WebP",
+      href: "https://developers.google.com/speed/webp",
+      description: "WebP의 JPEG/PNG 대비 압축률 공식 수치"
+    },
+    {
+      id: "webdev-avif",
+      title: "web.dev - Compress images with the AVIF codec",
+      href: "https://web.dev/articles/compress-images-avif",
+      description: "AVIF 압축 효과와 인코더 도구 가이드"
+    },
+    {
+      id: "webdev-webp",
+      title: "web.dev - Serve images in modern formats",
+      href: "https://web.dev/articles/serve-images-webp",
+      description: "WebP 도입 시 사례별 효과 정리"
+    }
+  ]}
+/>
