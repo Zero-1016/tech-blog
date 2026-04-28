@@ -10,6 +10,23 @@ interface ReferencesProps {
   items: ReferenceItem[];
 }
 
+function renderInlineCode(text: string) {
+  const parts = text.split(/(`[^`]+`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
+      return (
+        <code
+          key={i}
+          className="rounded bg-code-bg px-[0.4em] py-[0.15em] font-mono text-[0.875em]"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+}
+
 export function References({ title = "참고 자료", items }: ReferencesProps) {
   return (
     <section id="references" className="not-prose my-12 scroll-mt-24">
@@ -33,7 +50,7 @@ export function References({ title = "참고 자료", items }: ReferencesProps) 
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm leading-snug font-medium text-foreground no-underline transition-colors group-hover:text-accent">
-                      {item.title}
+                      {renderInlineCode(item.title)}
                     </span>
                     {external && (
                       <svg
@@ -54,7 +71,7 @@ export function References({ title = "참고 자료", items }: ReferencesProps) 
                   </div>
                   {item.description && (
                     <p className="mt-1 text-xs leading-relaxed text-secondary/55 no-underline">
-                      {item.description}
+                      {renderInlineCode(item.description)}
                     </p>
                   )}
                 </div>
