@@ -1,0 +1,212 @@
+---
+title: "선언적인 코드라는 말이 어렵게 느껴질 때"
+description: "'선언적이라 가독성 좋다' 와 '더 어렵다' 가 갈리는 진짜 이유를 짚어요"
+date: 2026-04-28
+tags: ["가독성", "선언형", "코드 품질", "리팩터링"]
+published: true
+---
+
+같은 코드를 보고 누구는 "선언적이라 가독성이 좋다" 고 하고, 누구는 "오히려 더 어렵다" 고 해요. 저도 그런 글을 처음 읽었을 땐 양쪽 말이 다 그럴듯해서 한참 헤맸거든요. 결국 발견한 건, "선언적" 이라는 단어 자체를 사람마다 다르게 쓰고 있다는 거였어요.
+
+## 같은 코드인데 의견이 갈리는 이유
+
+흔한 예시 하나가 조건부 렌더링이에요. 같은 결과를 만드는 두 코드가 이렇게 갈리거든요.
+
+```jsx
+// A 방식: && 또는 삼항
+{isLoggedIn && <UserMenu />}
+
+// B 방식: <If> 같은 선언적 컴포넌트
+<If condition={isLoggedIn}>
+  <UserMenu />
+</If>
+```
+
+B 방식을 옹호하는 쪽은 "If 라는 단어가 그대로 코드에 보여서 일상 언어처럼 읽힌다" 고 해요. 반대쪽은 "B 처럼 보여도 자바스크립트가 알아서 챙겨주던 안전장치를 잃는다" 고 반박하죠.<Cite id="toss-discussion-4" />
+
+같은 결과물을 만드는 두 코드를 두고 의견이 이렇게 갈리는 건, "선언적" 이라는 말이 모호하기 때문이에요. 그러니 단어부터 정리하고 가는 게 빠르겠어요.
+
+## 선언적이라는 말의 진짜 뜻
+
+위키피디아의 정의는 짧아요.<Cite id="wiki-declarative" />
+
+<Callout variant="info">
+"expresses the logic of a computation without describing its control flow." - Wikipedia
+
+계산의 결과만 적고, 그 결과에 도달하는 과정은 적지 않는다는 뜻이에요. "무엇을" 만 쓰는 게 선언형, "어떻게" 까지 한 단계씩 적어주는 게 명령형이에요.
+
+</Callout>
+
+이 정의가 가장 직관적으로 와 닿는 예시는 SQL 이에요. `SELECT name FROM users WHERE age > 18` 이라고 쓰면, 데이터베이스가 인덱스를 어떻게 타고 어떤 순서로 행을 훑을지는 우리가 모르고 끝나요. HTML 도 마찬가지예요. `<h1>Hello</h1>` 이라고 적으면 브라우저가 알아서 그려줘요.
+
+[React](https://react.dev) 의 JSX 도 같은 가족이에요. 공식 문서의 표현이 이걸 잘 짚어줘요.<Cite id="react-state" />
+
+<Callout variant="info">
+"In React, you don't directly manipulate the UI. Instead, you declare what you want to show, and React figures out how to update the UI." - React 공식 문서
+
+UI 를 직접 켜고 끄는 게 아니라, "어떤 상태에서 무엇을 보여줄지" 만 적어둔다는 뜻이에요. 전환은 React 가 알아서 해요.
+
+</Callout>
+
+물론 React 도 가끔은 명령형 탈출구가 필요해요. 자식의 input 에 포커스를 직접 꽂아야 할 때처럼요. 그럴 때를 위해 [`useImperativeHandle`](/posts/react-use-imperative-handle) 같은 명령형 인터페이스가 따로 마련돼 있죠. 평소엔 선언형이고, 정말 필요할 때만 명령형으로 빠지는 구조예요.
+
+## 가독성이라는 기준
+
+한 프론트엔드 가이드는 이렇게 출발해요.<Cite id="toss-ff-code" />
+
+<Callout variant="info">
+"좋은 프론트엔드 코드는 변경하기 쉬운 코드입니다."
+
+내일 다시 열어도, 옆자리 동료가 처음 봐도, 어디를 어떻게 고쳐야 할지 막히지 않는 코드라는 뜻이에요.
+
+</Callout>
+
+이 가이드는 변경하기 쉬운 코드를 네 가지 기준으로 나눠요. 가독성, 예측 가능성, 응집도, 결합도. 이 글에서는 그중에서 **가독성** 만 다뤄볼게요. 그 의견 차이가 결국 "이 코드가 더 읽기 쉽냐" 의 문제거든요.
+
+가독성의 정의는 의외로 짧게 정리돼요. "맥락을 적게 유지하면서 위에서 아래로 자연스럽게 읽히는 정도." 머릿속에 들고 있어야 할 사전 지식이 적고, 코드를 위아래로 왔다갔다 하지 않아도 흐름이 잡힌다면 가독성이 좋은 코드예요.
+
+말로 풀면 추상적이니, 가이드가 제시한 두 가지 실천법을 코드로 보면 감이 잡혀요.
+
+## 매직 넘버에 이름 붙이기
+
+가장 친절한 출발점이에요.<Cite id="toss-ff-magic-number" />
+
+<Callout variant="info">
+"매직 넘버란 정확한 뜻을 밝히지 않고 소스 코드 안에 직접 숫자 값을 넣는 것을 말해요."
+
+300, 0.5, 1024 같은 숫자가 코드에 그대로 박혀 있을 때, 그 숫자가 무엇을 위한 것인지 따로 찾아야 한다는 뜻이에요.
+
+</Callout>
+
+예시는 좋아요 버튼이에요. 좋아요를 누르면 카운트가 올라가고, 일정 시간이 지난 뒤 서버에 기록을 보내요.
+
+```ts
+async function onLikeClick() {
+  await delay(300);
+  await postLike(url);
+}
+```
+
+이 코드를 읽다 보면 `300` 에서 한 번 멈추게 돼요. "이 300 은 뭘까. 네트워크 지연 흉내인가, 애니메이션 끝나길 기다리는 건가, 아니면 디바운스인가." 답을 찾으려면 함수 호출 위치를 찾아 거슬러 올라가거나, git blame 을 떠야 해요. 그게 바로 맥락을 추가로 들고 있어야 하는 상태예요.
+
+이름을 붙이면 그 부담이 사라져요.
+
+```ts
+const ANIMATION_DELAY_MS = 300;
+
+async function onLikeClick() {
+  await delay(ANIMATION_DELAY_MS);
+  await postLike(url);
+}
+```
+
+300 이라는 숫자를 그대로 보존하면서, "이건 애니메이션이 끝나길 기다리는 시간" 이라는 의도가 코드 표면에 드러났어요. 변경할 때도 친절해요. 다른 누군가 `delay(500)` 으로 바꾸려다가도, 이름이 `ANIMATION_DELAY_MS` 라는 걸 보고 "애니메이션 길이부터 확인해야겠네" 하고 멈추게 되거든요.
+
+이게 "선언적" 의 첫 번째 얼굴이에요. 숫자가 아니라 **의도** 가 코드 표면에 적혀 있는 상태.
+
+## 시점 이동을 줄이기
+
+가독성을 깨는 진짜 범인은 시점 이동이에요.<Cite id="toss-ff-eye-traveling" />
+
+<Callout variant="info">
+"코드를 읽을 때 코드의 위아래를 왔다갔다 하면서 읽거나, 여러 파일이나 함수, 변수를 넘나들면서 읽는 것"
+
+읽는 사람이 한 자리에 머물지 못하고 계속 다른 곳으로 끌려다니는 상태예요.
+
+</Callout>
+
+권한 체크 코드를 예로 들어볼게요. 어드민 페이지에서 "초대" 버튼을 보일지 말지 결정하는 부분이에요.
+
+```tsx
+function InviteButton({ user }) {
+  const policy = getPolicyByRole(user.role);
+  if (!policy.canInvite) return null;
+
+  return <button>초대하기</button>;
+}
+```
+
+코드 자체는 깔끔해 보여요. 그런데 막상 "어떤 역할이면 초대 버튼이 보이지?" 라는 질문에 답하려면, `getPolicyByRole` 함수로 한 번, 그 안에서 참조하는 `POLICY_SET` 상수로 또 한 번 점프해야 해요. 세 단계를 따라가야 비로소 "아, admin 과 manager 만 초대할 수 있구나" 가 보이거든요.
+
+판단을 한 자리에 모으면 시점 이동이 사라져요.
+
+```tsx
+function InviteButton({ user }) {
+  if (user.role !== "admin" && user.role !== "manager") {
+    return null;
+  }
+
+  return <button>초대하기</button>;
+}
+```
+
+물론 정책이 100 개쯤 되는 큰 시스템에서는 이 방식이 또 다른 문제를 만들어요. 그땐 추상화가 필요해지죠. 다만 정책이 한두 개라면, 추상화 자체가 시점 이동을 만든다는 점을 의식하고 있어야 해요.
+
+코드를 [트리 구조로 바라보는 시각](/posts/reading-code-as-tree) 도 비슷한 결의 이야기예요. 위에서 아래로, 한 자리에서, 한 흐름을 다 읽어낼 수 있을 때 가독성이 좋은 코드가 돼요.
+
+## 그래서 컴포넌트로 감싸면 선언적인가
+
+이제 처음 이야기로 돌아갈 수 있어요. `<If>` 컴포넌트가 정말 선언적이냐는 질문이요.
+
+```tsx
+// 1번 방식
+{query.status === "success" && <Result data={query.data} />}
+
+// 2번 방식
+<If condition={query.status === "success"}>
+  <Result data={query.data} />
+</If>
+```
+
+겉보기엔 2번이 일상 언어 같아서 더 친절해 보여요. 그런데 이 점을 정확히 짚어준 의견이 있어요. **`Math.max()` 처럼 결과만 드러나는 게 선언적이지, JS 문법을 컴포넌트로 감쌌다고 선언적이 되는 건 아니다** 라는 거죠.
+
+실제로 2번 방식엔 함정이 있어요. 1번의 `&&` 는 자바스크립트 문법이라, 왼쪽이 거짓이면 오른쪽은 아예 평가하지 않아요. 이걸 short-circuit 이라고 불러요. 그래서 'success 일 때만 `data` 를 꺼내쓴다' 는 흐름이 자연스럽게 보장돼요. 반면 2번의 `<If>` 는 일반 컴포넌트라서 안쪽 `<Result data={query.data} />` 가 condition 과 무관하게 미리 평가돼요. 같은 약속이 깨져서, 아직 success 가 아닌데 `data` 에 손을 대는 코드가 통과될 수 있죠.
+
+즉 2번이 일상 언어처럼 보여도, 실제로는 자바스크립트가 보장해 주던 안전장치를 잃은 거예요. 형식이 선언적으로 보일 뿐이지 의미는 더 명령형에 가까워졌죠.
+
+여기서 "React 같은 선언형 도구를 쓰는 것 자체가 이미 선언적이지 않냐" 싶을 수 있어요. 도구 자체는 그래요. 다만 그 안에 적는 코드까지 자동으로 선언형이 되는 건 아니에요. JSX 안에서 호출되는 함수가 매직 넘버 투성이거나 시점 이동이 심하면, 형식만 선언형이고 의미는 그대로 명령형이 따라 들어와요.
+
+이 가이드도 그 긴장을 인정해요. 가독성이 늘 최우선이 아니에요. 함께 수정해야 하는 코드들이 있다면 응집도를 우선하고, 독립적으로 변하는 코드라면 가독성을 우선해요.
+
+진짜 선언적인 코드는 컴포넌트로 감싸는 모양이 아니라, **이 코드가 무엇을 하려는지** 가 표면에 드러나는 코드예요. 매직 넘버에 이름을 붙이는 것도, 시점 이동을 줄이는 것도 결국 그 한 가지 목표를 향한 두 가지 방법이에요.
+
+<References
+  items={[
+    {
+      id: "react-state",
+      title: "React Docs - Reacting to Input with State",
+      href: "https://react.dev/learn/reacting-to-input-with-state",
+      description: "선언적 UI 정의와 명령형 대비 설명",
+    },
+    {
+      id: "wiki-declarative",
+      title: "Wikipedia - Declarative programming",
+      href: "https://en.wikipedia.org/wiki/Declarative_programming",
+      description: "선언형 프로그래밍의 표준 정의와 예시",
+    },
+    {
+      id: "toss-ff-code",
+      title: "Frontend Fundamentals - 변경하기 쉬운 코드",
+      href: "https://frontend-fundamentals.com/code-quality/code/",
+      description: "가독성, 예측 가능성, 응집도, 결합도 4가지 기준",
+    },
+    {
+      id: "toss-ff-magic-number",
+      title: "Frontend Fundamentals - 매직 넘버에 이름 붙이기",
+      href: "https://frontend-fundamentals.com/code-quality/code/examples/magic-number-readability.html",
+      description: "매직 넘버 정의와 좋아요 버튼 예시",
+    },
+    {
+      id: "toss-ff-eye-traveling",
+      title: "Frontend Fundamentals - 시점 이동 줄이기",
+      href: "https://frontend-fundamentals.com/code-quality/code/examples/user-policy.html",
+      description: "권한 정책 예시로 본 시점 이동",
+    },
+    {
+      id: "toss-discussion-4",
+      title: "GitHub - frontend-fundamentals discussion #4",
+      href: "https://github.com/toss/frontend-fundamentals/discussions/4",
+      description: "조건부 렌더링과 선언적 컴포넌트 논쟁",
+    },
+  ]}
+/>
