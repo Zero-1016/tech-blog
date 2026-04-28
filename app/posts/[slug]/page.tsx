@@ -11,6 +11,7 @@ import { MobileToc } from "@/components/ui/mobile-toc";
 import { PostHeader } from "@/components/ui/post-header";
 import { ScrollProgress } from "@/components/ui/scroll-progress";
 import { RelatedPosts } from "@/components/ui/related-posts";
+import { pickRelatedPosts } from "@/lib/related-posts";
 import { Comments } from "@/components/ui/comments";
 import { OverflowTags } from "@/components/ui/overflow-tags";
 import { CopyArticle } from "@/components/ui/copy-article";
@@ -184,22 +185,7 @@ export default async function PostPage({ params }: Props) {
               />
             )}
             <Comments />
-            <RelatedPosts
-              posts={posts
-                .filter(
-                  (p) =>
-                    p.published &&
-                    p.slug !== post.slug &&
-                    (p.series === post.series || p.tags.some((t) => post.tags.includes(t)))
-                )
-                .slice(0, 4)
-                .map((p) => ({
-                  slug: p.slug,
-                  title: p.title,
-                  description: p.description,
-                  date: p.date,
-                }))}
-            />
+            <RelatedPosts posts={pickRelatedPosts(post, posts)} />
           </article>
           {toc.length > 0 && <Toc items={toc} />}
         </div>
