@@ -1,0 +1,161 @@
+---
+title: "Zustand 와 Jotai, 어디서 갈리나"
+description: "큰 store 를 자르거나, 작은 atom 을 합치거나. 두 라이브러리는 출발점이 정반대예요."
+date: 2026-04-29
+tags: ["React", "상태관리", "Zustand", "Jotai"]
+published: true
+---
+
+[Redux](https://redux.js.org) 를 한참 쓰다가 [Zustand](https://zustand.docs.pmnd.rs/) 로 갈아탔을 때 저는 "이게 더 가벼운 redux 구나" 정도로 받아들였어요. 그러다 다른 팀에서 [Jotai](https://jotai.org) 를 쓴다는 얘기를 듣고 코드를 처음 봤는데, `atom` 을 import 하고 `useAtom` 으로 꺼내 쓰는데 store 가 어디 있는지 안 보이더라고요. 머릿속에서 그림이 안 그려지는 거예요. 그때 알았어요. 이 둘은 도구의 무게 차이가 아니라 사상 자체가 다른 친구들이라는 걸요.
+
+## 같은 문제, 다른 출발점
+
+[React](https://react.dev) 의 [Context 만으로는 안 되는 순간](/posts/react-context-split-value-dispatch) 이 오면 다음 선택지로 외부 store 가 자연스럽게 등장해요. 검색해보면 zustand, jotai, recoil, redux 같은 이름들이 같은 자리에서 함께 거론돼요. 그러다 보니 "다 그게 그건가" 싶다가도 막상 코드를 보면 모양이 너무 달라서 뭐가 기준인지 헷갈리거든요.
+
+답은 jotai 공식 문서가 본인 입으로 한 줄로 정리해줘요.<Cite id="jotai-comparison" />
+
+<Callout variant="info">
+"The major difference is the state model. Zustand is a single store, while Jotai consists of primitive atoms and allows composing them together." - Jotai Comparison
+
+상태 모델이 다르다는 얘기예요. Zustand 는 store 하나를 큼지막하게 두는 쪽이고, Jotai 는 작은 atom 들을 따로따로 두고 필요할 때 합쳐 쓰는 쪽이고요.
+
+</Callout>
+
+이 한 문장 안에 두 라이브러리 차이의 거의 다가 들어있어요. 어느 쪽이 더 좋은가 보다는 "어디서부터 그릴 건가" 가 다른 거죠.
+
+## top-down 으로 큰 그림부터 그리기
+
+Zustand 공식 가이드는 단일 store 권장을 박아둬요.<Cite id="zustand-flux" />
+
+<Callout variant="info">
+"Your application's global state should be located in a single Zustand store." - Zustand Flux Inspired Practice
+
+큰 그림 (store) 을 모듈 한 곳에서 정해놓고, 컴포넌트는 거기서 필요한 조각만 selector 로 잘라 가져가요.
+
+</Callout>
+
+코드로 보면 이렇게 생겼어요.
+
+```tsx
+import { create } from "zustand";
+
+const useStore = create((set) => ({
+  count: 0,
+  user: null,
+  increment: () => set((s) => ({ count: s.count + 1 })),
+}));
+
+function Counter() {
+  const count = useStore((s) => s.count);
+  const increment = useStore((s) => s.increment);
+  return <button onClick={increment}>{count}</button>;
+}
+```
+
+`create` 가 모듈 최상단에서 한 번만 호출되고, 그 안에 앱 전역 상태가 한 객체로 들어있어요. 컴포넌트는 `useStore((s) => s.count)` 처럼 selector 함수를 직접 짜서 필요한 부분만 떼어냅니다. selector 를 안 쓰고 `useStore()` 만 부르면 store 가 한 키라도 바뀔 때마다 그 컴포넌트가 다시 그려져요. 최적화 책임이 selector 를 쓰는 사람한테 있는 거죠.<Cite id="zustand-comparison" />
+
+[그 selector 가 사실은 옵저버 패턴의 listener 였다는 얘기](/posts/observer-pattern-redux-zustand) 는 따로 정리해뒀어요. 동작 원리가 궁금하면 보시면 돼요.
+
+앱이 커지면 store 한 객체가 무거워지는데, 이때 zustand 는 store 를 분리하는 대신 slice 패턴을 권장해요. `StateCreator` 로 도메인별 slice 를 정의하고 한 store 안에 합치는 방식이에요. 그러니까 zustand 의 분할은 "store 여러 개" 가 아니라 "한 store 안의 논리적 슬라이스" 인 거예요. 큰 그림은 끝까지 하나로 유지돼요.
+
+## bottom-up 으로 작은 단위부터 합치기
+
+Jotai 는 출발점이 반대예요. 큰 store 를 먼저 정하지 않아요. atom 을 하나하나 선언하고, 그것들을 조합해서 모델을 빚어 올려요. 공식 문서가 이 사상을 한 줄로 단정해요.<Cite id="jotai-concepts" />
+
+<Callout variant="info">
+"Composing atoms will create your app state!" - Jotai Concepts
+
+atom 을 합치는 게 곧 앱 상태가 된다는 뜻이에요. 미리 정해진 큰 그릇이 없어요.
+
+</Callout>
+
+여기서 흔히 헷갈리는 게 "atom 이 변수냐" 예요. 답은 아니에요. atom 은 값 그 자체가 아니라 값을 어떻게 만들지에 대한 정의거든요.<Cite id="jotai-atom" />
+
+<Callout variant="warning">
+"An atom config is an immutable object. The atom config object doesn't hold a value. The atom value exists in a store." - Jotai Atom
+
+atom 은 immutable 한 config 객체이고, 진짜 값은 별도의 store 안에 살아있어요. 그래서 같은 atom 을 다른 Provider 에 꽂으면 다른 값이 됩니다.
+
+</Callout>
+
+코드로 보면 이렇게 생겼어요.
+
+```tsx
+import { atom, useAtom, useAtomValue } from "jotai";
+
+const countAtom = atom(0);
+const doubledAtom = atom((get) => get(countAtom) * 2);
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom);
+  const doubled = useAtomValue(doubledAtom);
+  return (
+    <div>
+      <p>{count} 의 두 배는 {doubled}</p>
+      <button onClick={() => setCount(count + 1)}>+1</button>
+    </div>
+  );
+}
+```
+
+`countAtom` 은 그냥 정의예요. `atom(0)` 한 줄이 어디서도 store 를 만들지 않아요. `doubledAtom` 은 `get(countAtom)` 으로 다른 atom 을 읽어오는 derived atom 이고요. jotai 는 이 의존 관계를 자동으로 추적해서 `countAtom` 이 바뀔 때만 `doubledAtom` 을 다시 계산해요. selector 를 따로 쓸 필요가 없고 memo 도 안 붙여요. 의존성 그래프가 곧 구독 범위거든요.
+
+## 진짜 갈림길은 선언 위치
+
+여기까지 보면 "top-down vs bottom-up" 이 두 라이브러리의 정확한 비교처럼 들리는데, 사실 좀 더 정직하게 말하면 이 표현은 jotai 측이 자기 자신을 bottom-up 이라 부르면서 zustand 를 대비 용어로 부른 거예요. zustand 는 자기 입으로 "우리는 top-down" 이라고 한 적이 없어요. 그냥 single store 라고 부르죠.
+
+그러면 이 둘이 진짜로 갈라지는 자리는 어디일까요. jotai 의 같은 페이지가 다른 한 줄로 답을 줘요.<Cite id="jotai-comparison" />
+
+<Callout variant="info">
+"Jotai is context first, module second. Zustand is module first, context second." - Jotai Comparison
+
+선언이 어디서 시작하느냐가 다르다는 얘기예요. jotai 의 atom 은 React tree 의 Provider scope 가 값을 결정해요. 같은 atom 도 다른 Provider 에서는 다른 값으로 살아있어요. zustand 의 store 는 모듈 최상단에서 한 번 만들어지고, 어느 컴포넌트에서나 import 한 줄로 그 값에 닿아요.
+
+</Callout>
+
+이 차이가 실전에서 어떻게 갈리냐면, 같은 폼 상태를 여러 인스턴스로 격리하고 싶을 때 jotai 는 Provider 를 분리하는 것만으로 자연스럽게 가능해요. zustand 는 같은 걸 하려면 store 를 여러 개 만들거나 React Context 로 store 인스턴스를 직접 내려야 해요. 반대로 "어느 컴포넌트에서든 한 줄로 같은 store 에 닿고 싶다" 가 목표면 zustand 의 모듈 호출이 더 직관적이고요. 도구가 다른 게 아니라 만들고 싶은 모양이 다른 거예요.
+
+## 그래서 언제 어떤 걸 쓸까요
+
+선택은 그릴 그림이 결정해요. 글로벌 단일 출처가 명확하고 모듈 어디서든 같은 값을 참조해야 하는 영역, 예를 들어 로그인 사용자 정보나 알림 큐 같은 거라면 zustand 의 single store 가 결이 맞아요. [Flux 가 깔아둔 단방향 흐름](/posts/flux-pattern) 사상도 그대로 이어받고 있어서 dispatch 흐름에 익숙한 팀이면 적응이 빠르고요.
+
+반면 한 화면 안에서 자잘한 파생 값이 많이 생기고, 코드 분할 단위로 상태도 같이 따라가야 하는 구조라면 jotai 가 자연스러워요. atom 단위로 lazy 하게 선언되고, 의존 그래프가 자동으로 구독 범위를 좁혀줘서 잘게 쪼개기 좋거든요.
+
+그리고 둘은 한 앱에서 같이 써도 돼요. 글로벌 모듈 store 는 zustand 로, 화면 안 자잘한 파생은 jotai 로 같은 식이에요. zustand 와 jotai 는 같은 메인테이너가 만든 자매 프로젝트라 의도적으로 영역이 안 겹치게 디자인된 면도 있고요.
+
+저는 처음에 "둘 중 뭐가 더 좋아요" 라는 질문이 잘못된 거였다는 걸 한참 뒤에야 알았어요. 도구가 아니라 그리고 싶은 모양이 결정하는 거였거든요.
+
+<References
+  items={[
+    {
+      id: "jotai-comparison",
+      title: "Jotai - Comparison",
+      href: "https://jotai.org/docs/basics/comparison",
+      description: "Jotai 가 자기 자신을 bottom-up atomic 모델로, Zustand 를 top-down single object store 로 분류하는 원문",
+    },
+    {
+      id: "jotai-concepts",
+      title: "Jotai - Concepts",
+      href: "https://jotai.org/docs/basics/concepts",
+      description: "atom 합성으로 앱 상태를 만든다는 멘탈 모델",
+    },
+    {
+      id: "jotai-atom",
+      title: "Jotai - atom",
+      href: "https://jotai.org/docs/core/atom",
+      description: "atom 은 immutable config 객체이고 값은 store 에 따로 존재한다는 정의",
+    },
+    {
+      id: "zustand-comparison",
+      title: "Zustand - Comparison",
+      href: "https://zustand.docs.pmnd.rs/learn/getting-started/comparison",
+      description: "Zustand 의 single store 사상과 Redux 와의 차이, selector 수동 최적화의 근거",
+    },
+    {
+      id: "zustand-flux",
+      title: "Zustand - Flux Inspired Practice",
+      href: "https://zustand.docs.pmnd.rs/learn/guides/flux-inspired-practice",
+      description: "전역 상태는 단일 store 에 두고 slice 로 분할하라는 공식 권장",
+    },
+  ]}
+/>
