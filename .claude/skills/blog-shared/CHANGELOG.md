@@ -5,6 +5,82 @@
 
 ---
 
+## 2026-04-30 16:49
+
+### §RULE-TERM-INTRODUCTION 신설 — 약어·기술 용어 도입 검사
+
+**변경**:
+
+SHARED.md (1곳, 신규 섹션 추가):
+
+- §RULE-EXTERNAL-MENTION 다음 자리에 §RULE-TERM-INTRODUCTION 신설
+- 약어 (PWA / CDN / SSR / SSG / ISR / RSC / FCP / LCP / CLS / INP / TTI),
+  이벤트 이름 (`install` / `activate` / `fetch` / `sync` / `beforeunload`),
+  라이프사이클 단계 이름, API 메서드 이름이 본문 첫 등장 시 풀어쓰기·한 줄
+  정의·인라인 링크 중 하나가 동반되어야 함을 규정
+- 결론·요약 단락에서 본문에 한 번도 풀이되지 않은 용어를 던지지 말 것
+- 예외: §META-TITLE "허용 1·2" 약어 (글의 핵심 식별자 + 대상 독자가 통상 아는
+  약어). frontmatter `tags` 와 주제 범위로 판단
+- §RULE-EXTERNAL-MENTION 과의 관계 명시 (외부 제품 링크 vs 본문 용어 풀이)
+
+blog-coherence-review/SKILL.md (4곳):
+
+- 전제 섹션에 §RULE-TERM-INTRODUCTION, §META-TITLE 참조 추가
+- "검사 흐름" 박스: Step 3 "E1~E4 동시 평가" → "E1~E5 동시 평가"
+- Step 3 본문 도입: "4개 항목" → "5개 항목"
+- E4 다음에 E5 — 용어·개념 도입 검사 항목 신설 (검사 방법, 판정 기준, 예시,
+  False Positive 주의사항)
+- Step 6 리포트 "검사 항목" 리스트에 E5 추가
+
+blog-writer/SKILL.md (3곳):
+
+- 전제 섹션에 §RULE-TERM-INTRODUCTION 참조 추가 (§RULE-EXTERNAL-MENTION 다음)
+- Step 4 작성 규칙에 §RULE-TERM-INTRODUCTION 한 줄 가이드 추가
+- Step 4-뒤 미루는 항목 리스트에 "약어·기술 용어 첫 등장 풀이" 추가
+- Step 8 자가 체크리스트에 8-13 신설 (약어·기술 용어 도입 검사)
+
+**이유**:
+
+`content/posts/service-worker-network-proxy.mdx` 작성 중에 사용자가 두 곳에서
+이해 안 됨을 지적:
+
+- "이 한 줄이 PWA 가 어디까지 책임지는지를 결정해요" 에서 PWA 가 본문에 한
+  번도 풀이되지 않음
+- 헤딩 "## install 과 activate 사이의 기다림" 에서 install / activate 가
+  무엇인지 사전 설명 없음
+
+표면 규칙은 통과했지만 "독자가 모르는 용어를 갑자기 던지지 않는가" 검사 항목이
+없었음. 같은 종류의 문제를 다시 새지 않게 하기 위해 SHARED.md 에 새 §RULE
+추가 + coherence-review 에 E5 항목 + writer 자가 체크에 8-13 추가.
+
+**수정 유형**: 신규 규칙 섹션 추가 + 두 SKILL.md 에 검사 항목 / 작성 가이드
+추가. 1회 확인.
+
+**영향 범위**:
+
+- blog-writer: 본문 작성 시 약어/이벤트 이름 첫 등장 풀이 의무 (강화)
+- blog-coherence-review: E5 항목 추가로 검사 범위 확장. 자동 수정 없음, 사용자
+  확인 카테고리
+- blog-validator / blog-expression-review: 영향 없음 (해당 영역 아님)
+- blog-write 오케스트레이터: 직접 영향 없음
+- blog-draft-review: 영향 없음 (기획안 검토)
+- 기존 글: 일부 글에 LCP / SSR / SSG / ISR / PWA 같은 약어가 풀이 없이 등장.
+  단, 새 규칙은 자동 수정 안 함이라 CI 막히지 않음. 다음 글부터 적용 + 기존
+  글은 필요 시 `/blog-revise` 로 다듬기
+
+**백업**:
+
+- `.backups/SHARED-20260430-164926.md`
+- `.backups/blog-coherence-review-SKILL-20260430-164926.md`
+- `.backups/blog-writer-SKILL-20260430-164926.md`
+
+**재검증 결과**:
+
+기존 글 영향이 자동 수정 아니라 강제 재검증 안 함. 사용자가 필요 시 단독
+호출 (`/blog-coherence-review <파일>`) 로 새 E5 항목 적용 가능.
+
+---
+
 ## 2026-04-30 16:37
 
 ### FlowDiagram MDX 컴포넌트 도입에 따른 스킬 패밀리 업데이트
