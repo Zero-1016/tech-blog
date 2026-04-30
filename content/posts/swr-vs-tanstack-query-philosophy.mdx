@@ -1,0 +1,153 @@
+---
+title: "SWR과 TanStack Query 가 다른 이유"
+description: "같은 데이터 페칭처럼 보여도 두 라이브러리의 자기 소개부터 톤이 달라요."
+date: 2026-05-01
+tags: ["React", "데이터 페칭", "SWR", "TanStack Query"]
+published: true
+---
+
+새 React 프로젝트에서 데이터 페칭 라이브러리를 고르려고 [SWR](https://swr.vercel.app) 과 [TanStack Query](https://tanstack.com/query) 의 첫 페이지를 동시에 열었어요. 둘 다 stale-while-revalidate 라는 같은 동작을 한다는 말을 들어서 비슷한 자리에서 비슷한 일을 하는 줄 알았거든요. 그런데 자기 소개부터 톤이 달라요. 그 차이가 디폴트 동작과 mutation API 모양에까지 그대로 이어지더라고요.
+
+## 자기 소개부터 다르다
+
+SWR 의 홈은 자기를 "Modern data fetching, built for React" 라고 소개해요.<Cite id="swr-home" /> 미니멀한 API, 캐싱·재검증·요청 중복 제거가 내장된 훅 하나. 한 줄에 라이브러리의 야심이 다 담겨 있죠. 데이터 페칭에 집중한다는 거예요.
+
+TanStack Query 는 같은 자리에 다른 말을 둡니다. 공식 Overview 첫 부분에 이런 문장이 있어요.
+
+<Callout variant="info">
+"Server state is totally different from client state." - TanStack Query Overview
+
+서버 상태는 클라이언트 상태와 근본적으로 다른 카테고리라는 선언이에요. 같은 도구로 처리할 수 없다는 입장이고요.
+
+</Callout>
+
+한쪽은 "데이터를 페칭하는 도구" 라고 자기를 정의하고, 다른 한쪽은 "비동기 상태 관리" 라는 카테고리 자체를 만들어버려요. 같은 React 컴포넌트 자리에 들어가지만 출발점이 다른 거죠.
+
+## SWR이라는 이름의 출처
+
+SWR 이라는 이름은 약어를 새로 만든 게 아니라 HTTP 명세에 이미 있던 단어를 그대로 가져왔어요.
+
+[RFC 5861](https://www.rfc-editor.org/rfc/rfc5861) 은 2010년에 Mark Nottingham 이 쓴 짧은 명세고, `Cache-Control` 헤더에 두 가지 확장을 추가합니다. `stale-while-revalidate` 와 `stale-if-error` 죠. 핵심 동작은 한 문장으로 끝나요.<Cite id="rfc-5861" />
+
+<Callout variant="info">
+"[stale-while-revalidate] allows a cache to immediately return a stale response while it revalidates it in the background, thereby hiding latency." - RFC 5861
+
+캐시가 만료된 응답을 일단 그대로 돌려주고, 그 사이 백그라운드에서 새 응답을 받아오라는 신호예요. 사용자 입장에서는 기다리는 시간이 사라지죠.
+
+</Callout>
+
+이 패턴은 HTTP 응답 헤더 자리에서도 쓰이고, [Service Worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) 의 캐싱 전략으로도 쓰여요. [두 자리 모두 같은 이름이지만 일하는 곳이 다르다](/posts/stale-while-revalidate-two-layers)는 점은 따로 정리해둔 게 있어요.
+
+SWR 라이브러리는 이 패턴을 컴포넌트 자리로 옮긴 거예요. 캐시된 응답을 컴포넌트에 먼저 보여주고, 백그라운드로 fetch 가 나가고, 새 응답이 오면 컴포넌트가 업데이트돼요. 그래서 첫 인상이 단순합니다. `useSWR(key, fetcher)` 두 인자만 있고, key 가 캐시 식별자이자 중복 제거 기준이고요.
+
+```tsx
+const { data, error, isLoading } = useSWR("/api/user", fetcher);
+```
+
+같은 key 로 여러 컴포넌트가 동시에 호출해도 요청은 한 번만 나가요. 캐시는 라이브러리가 알아서 관리해주고요. SWR 공식 문서가 이 모델을 한 문장으로 요약해요.<Cite id="swr-getting-started" />
+
+<Callout variant="info">
+"Data is now bound to the components which need the data, and all components are independent to each other." - SWR Getting Started
+
+데이터를 필요한 컴포넌트에 직접 묶어두는 거예요. 컴포넌트는 자기가 필요한 데이터를 선언만 하고, 페칭이나 동기화는 라이브러리에 맡깁니다.
+
+</Callout>
+
+이게 SWR 의 출발점이에요. HTTP 캐시 전략 하나를 컴포넌트 단위로 옮기고, 그 위에 React 친화 API 를 얇게 얹은 도구죠.
+
+## TanStack Query가 자임한 카테고리
+
+TanStack Query 의 출발점은 더 큰 자리에서 시작해요. 라이브러리 이름이 한때 React Query 였다는 걸 떠올리면 더 분명한데, "데이터 페칭" 보다 "서버 상태 관리" 자체를 자기 영역으로 잡거든요.
+
+공식 문서가 server state 의 특징 네 가지를 나열해요. 원격에 있어서 내가 직접 통제하지 못하고, 비동기 API 를 거쳐야 가져올 수 있고, 다른 사람도 바꿀 수 있는 공유 자원이고, 가만히 두면 stale 돼요.<Cite id="tanstack-overview" /> client state 는 가지지 않는 성질들이고, 그래서 [Redux](https://redux.js.org) 같은 client state 라이브러리만으로 풀기엔 어색하다는 입장이죠.
+
+비동기 상태 관리가 풀어야 할 문제 목록도 SWR 보다 길어요. 캐싱과 dedupe 는 기본이고, stale 판정 시점, 백그라운드 갱신, 페이지네이션, 가비지 컬렉션, 옵저버 변경 시 빠른 반영, 응답 사이의 structural sharing 까지 한 라이브러리 안에 들어와요.
+
+그래서 API 표면적이 SWR 과 다릅니다. `useQuery` 외에도 `useInfiniteQuery`, `useSuspenseQuery`, `useMutation`, `useQueryClient`, devtools, query invalidation 같은 도구가 1급 시민으로 들어와 있어요. [Suspense 와 useSuspenseQuery 가 어떻게 맞물리는지](/posts/react-suspense-internals-and-tanstack-query)는 따로 정리한 적이 있고요.
+
+같은 컴포넌트 자리에 들어가지만 라이브러리가 자임한 영역의 크기가 달라요. SWR 은 "fetcher 를 React 답게 다루는 훅" 이고, TanStack Query 는 "서버 상태가 거치는 라이프사이클 전체" 예요.
+
+## 디폴트가 보여주는 톤
+
+설계 철학은 디폴트 값에서 가장 잘 드러나요. 사용자가 명시적으로 설정하지 않을 때 라이브러리가 무엇을 잡아두는지가 그 라이브러리가 세상을 어떻게 보는지를 보여주거든요.
+
+TanStack Query 의 디폴트는 적극적이에요. 공식 문서가 자기 디폴트를 이렇게 부릅니다.<Cite id="tanstack-defaults" />
+
+<Callout variant="info">
+"Out of the box, TanStack Query is configured with aggressive but sane defaults." - TanStack Query Important Defaults
+
+별도 설정 없이도 적극적으로 동작한다는 뜻이에요. 처음 써보는 사람이 "왜 이렇게 자주 fetch 하지" 라고 놀랄 수 있는 그 디폴트요.
+
+</Callout>
+
+가장 눈에 띄는 건 `staleTime: 0` 입니다. 캐시에 막 들어온 데이터도 바로 stale 로 간주해요. 같은 query 가 새 컴포넌트에서 mount 되거나, 윈도우 focus 가 돌아오거나, 네트워크가 reconnect 되면 즉시 재요청이 나가죠. 데이터 신선함을 디폴트로 우선하는 톤이고요. 사용자가 "이건 5분 동안 고정해도 돼" 라고 명시적으로 `staleTime` 을 늘려야 그제야 가만히 있어요.
+
+SWR 도 focus 와 reconnect 재검증이 디폴트로 켜져 있다는 점은 같아요. 다만 SWR 쪽은 `staleTime` 같은 명시적 정책이 더 가볍고, 옵션 표면적도 좁아요. 둘 다 stale-while-revalidate 패러다임을 따르지만 "어디까지 자동화하고 어디까지 사용자가 설정하느냐" 의 톤이 달라요. TanStack Query 가 "이 정도까진 우리가 책임진다" 라면, SWR 은 "필요하면 위에서 다듬어 쓰세요" 에 가까워요.
+
+이 톤 차이가 번들 크기에서도 드러나요. 더 많은 일을 책임지는 만큼 코드도 더 따라 들어오거든요.
+
+## mutation을 어디에 두느냐
+
+페칭만 보면 두 라이브러리가 비슷해 보이지만 mutation 에서 설계 의도가 갈라져요.
+
+SWR 은 mutation 을 페칭의 연장으로 다뤄요. 글로벌 `mutate` 함수와 `useSWRMutation` 훅이 둘 다 캐시 키를 중심으로 동작하거든요. "이 키의 캐시를 새 값으로 바꿔라" 와 "이 키로 서버에 보낸다" 가 같은 표면에서 처리됩니다. 데이터를 가져오던 자리에서 데이터를 바꾸는 자리로 자연스럽게 이어져요.
+
+TanStack Query 는 mutation 을 따로 둡니다. `useMutation` 은 `useQuery` 와 별개로 살아요. 비동기 작업을 시작하고, 진행 상태(`isPending`, `isError`, `isSuccess`)를 따로 추적하고, 성공한 다음에 어느 query 를 invalidate 할지 명시적으로 호출해야 해요.
+
+```tsx
+const mutation = useMutation({
+  mutationFn: postUser,
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["user"] });
+  },
+});
+```
+
+같은 일을 다른 모양으로 푸는 거죠. SWR 쪽은 "데이터 페칭의 다른 방향" 으로 보고, TanStack Query 쪽은 "비동기 작업의 다른 종류" 로 봐요. 후자가 query 와 mutation 의 관심사 분리가 더 뚜렷한 대신, 같은 키를 두 번 적어야 하는 비용이 따라옵니다.
+
+어느 쪽이 옳다기보다 "두 라이브러리가 mutation 을 어디에 위치시켰는가" 의 차이예요.
+
+## 어느 쪽을 골라야 할까
+
+이 질문에 일반적인 답은 없어요. 다만 출발점이 다르다는 걸 인지하고 있으면 결정이 쉬워집니다.
+
+대부분의 페이지가 단순한 데이터 표시와 자동 재검증으로 끝나면 SWR 이 더 자연스러워요. 번들이 가볍고, 옵션이 적고, [Next.js](https://nextjs.org) 와 같은 회사에서 만들어 그쪽 생태계와 잘 맞물리거든요.
+
+비동기 흐름이 복잡한 앱이면 TanStack Query 가 잘 맞아요. infinite query, optimistic update, query invalidation 같은 도구가 자주 쓰이거나, devtools 로 캐시를 직접 들여다봐야 하거나, 여러 mutation 이 query 를 갱신하는 패턴이 자주 나오면요. React 외에 Solid, Svelte, Vue 까지 동일한 멘탈 모델로 가져갈 수 있다는 점도 무시할 수 없고요.
+
+진짜 차이는 기능 비교 표가 아니라 "내가 이 앱에서 다루는 게 페칭의 연장인가, 비동기 상태 관리 자체인가" 라는 질문이에요. SWR 은 전자에, TanStack Query 는 후자에 무게를 두고 있고, 그게 두 라이브러리의 자기 소개 한 줄에 이미 적혀 있거든요.
+
+<References
+  items={[
+    {
+      id: "swr-getting-started",
+      title: "SWR - Getting Started",
+      href: "https://swr.vercel.app/docs/getting-started",
+      description: "SWR 어원 (stale-while-revalidate 유래) 과 컴포넌트 바인딩 모델 설명",
+    },
+    {
+      id: "swr-home",
+      title: "SWR - 공식 홈",
+      href: "https://swr.vercel.app/",
+      description: "자기 소개 한 줄과 미니멀 API 정체성",
+    },
+    {
+      id: "tanstack-overview",
+      title: "TanStack Query - Overview",
+      href: "https://tanstack.com/query/latest/docs/framework/react/overview",
+      description: "server state 와 client state 의 분리 선언, 비동기 상태 관리 카테고리 정의",
+    },
+    {
+      id: "tanstack-defaults",
+      title: "TanStack Query - Important Defaults",
+      href: "https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults",
+      description: "staleTime 0, structural sharing, gcTime 등 디폴트 동작 명세",
+    },
+    {
+      id: "rfc-5861",
+      title: "RFC 5861 - HTTP Cache-Control Extensions for Stale Content",
+      href: "https://www.rfc-editor.org/rfc/rfc5861",
+      description: "stale-while-revalidate 명세 원문, hiding latency 정의",
+    },
+  ]}
+/>
