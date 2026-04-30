@@ -4,6 +4,7 @@ import { Callout } from "@/components/ui/callout";
 import { CodePlayground } from "@/components/ui/code-playground";
 import { AnimatedStep } from "@/components/ui/animated-step";
 import { VideoEmbed } from "@/components/ui/video-embed";
+import { FlowDiagram } from "@/components/ui/flow-diagram";
 import { References } from "@/components/ui/references";
 import { Cite } from "@/components/ui/cite";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
@@ -46,6 +47,7 @@ export const mdxComponents: MDXComponents = {
   CodePlayground,
   AnimatedStep,
   VideoEmbed,
+  FlowDiagram,
   References,
   Cite,
 };

@@ -1,0 +1,186 @@
+---
+title: "두 stale-while-revalidate 의 자리"
+description: "응답 헤더의 SWR 과 Service Worker 의 SWR 패턴이 헷갈렸다면 두 자리부터 나눠보세요"
+date: 2026-04-30
+tags: ["성능", "브라우저", "캐싱", "Service Worker", "HTTP"]
+published: true
+---
+
+`stale-while-revalidate` 라는 이름을 두 군데에서 봤어요. 한 번은 `Cache-Control: max-age=600, stale-while-revalidate=30` 같은 응답 헤더 자리에서, 또 한 번은 [Service Worker](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) 캐싱 가이드의 "SWR 패턴" 이라는 설명에서요. 같은 이름이라서 같은 동작이겠지 싶었는데, 막상 헤더만 박아놓고 SW 패턴을 따로 짜는 글이 있어서 한참을 헤맸거든요. 둘은 일하는 곳이 달라요. 한쪽은 HTTP 응답 헤더로 캐시에 권한을 넘겨주고, 다른 쪽은 자바스크립트로 네트워크 요청을 직접 가로채요.
+
+## 같은 이름이 두 군데 있다
+
+먼저 이름이 같은 두 자리를 나란히 놓고 보면 차이가 보여요.
+
+HTTP 헤더 쪽은 응답 한 줄이에요.
+
+```http
+Cache-Control: max-age=600, stale-while-revalidate=30
+```
+
+이게 끝이에요. 서버가 이 헤더만 내려주면 [브라우저 캐시](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control) 와 CDN 같은 공유 캐시가 알아서 동작을 해석해요. 600초 동안은 fresh, 만료 후 30초 동안은 stale 이지만 그대로 응답하면서 백그라운드에서 새 응답을 받아와 갱신하라는 신호죠.
+
+Service Worker 쪽은 자바스크립트 코드예요. fetch 이벤트를 받아 캐시와 네트워크를 직접 짜놓는 흐름이고요. 헤더처럼 한 줄로 끝나는 게 아니라 등록, 라이프사이클, 캐시 관리, 응답 결정까지 손으로 다 잡아야 해요.<Cite id="webdev-offline-cookbook" />
+
+```js
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request).then((c) => c || fetch(event.request))
+  );
+});
+```
+
+가장 단순한 모양이에요. 캐시에 있으면 캐시 응답을 그대로, 없으면 네트워크로 떨어져요. 본격적인 패턴 셋은 마지막 섹션에서 같이 보고요.
+
+자원을 먼저 받아두는 결의 최적화는 [브라우저에 미리 보내는 신호](/posts/preload-and-friends) 에서 다뤘어요. 캐싱은 그 다음 자리예요. 이미 받아온 응답을 어떤 조건에 어디까지 재활용할지를 정하는 이야기죠.
+
+## HTTP 캐시는 어디까지 자동인가
+
+배경을 먼저 잡고 가요. 브라우저와 CDN 의 HTTP 캐시는 [RFC 9111](https://www.rfc-editor.org/rfc/rfc9111) 의 freshness/validation 모델로 동작해요.
+
+응답이 fresh 이면 원본 서버를 거치지 않고 캐시에서 바로 반환해요. fresh 의 기준은 freshness lifetime 인데, 보통은 `Cache-Control: max-age=N` 의 N 초로 잡혀요. 응답이 만들어진 시점부터 N 초까지가 fresh, 그 후부터는 stale 이에요.<Cite id="rfc-9111" />
+
+stale 이 됐다고 응답이 사라지는 건 아니에요. 캐시는 보통 stale 응답을 들고 있다가 재사용하기 전에 원본 서버에 검증을 보내요. `If-None-Match` 헤더에 ETag 를 실어 보내고, 서버가 변경 없으면 `304 Not Modified` 만 돌려주죠. 그러면 캐시는 본문은 그대로 두고 freshness 만 갱신해서 다시 fresh 로 사용해요.
+
+여기까지는 max-age 가 만료될 때마다 검증 왕복이 한 번씩 끼어요. 304 라도 라운드트립이 있으면 사용자가 새 응답을 받기 전에 잠깐 기다리게 되거든요. 이 짧은 기다림을 한 줄로 줄이는 디렉티브가 따로 있어요.
+
+## RFC 5861, 한 줄로 늦지 않게
+
+[RFC 5861](https://www.rfc-editor.org/rfc/rfc5861) 이 정의하는 `stale-while-revalidate` 디렉티브는 그 짧은 기다림을 헤더 한 줄로 없애요.<Cite id="rfc-5861" />
+
+<Callout variant="info">
+"stale-while-revalidate Cache-Control extension indicates that caches MAY serve the response in which it appears after it becomes stale, up to the indicated number of seconds." - RFC 5861
+
+응답이 stale 이 된 뒤에도 지정된 초 동안은 캐시가 그 응답을 그대로 내보내도 된다는 거예요. 그 사이에 캐시는 백그라운드로 재검증을 돌려요.
+</Callout>
+
+문법은 단순해요. `max-age` 옆에 `stale-while-revalidate=N` 을 같이 적으면 돼요.
+
+```http
+Cache-Control: max-age=604800, stale-while-revalidate=86400
+```
+
+7 일 동안은 fresh 라서 그대로 반환, 만료 후 1 일 동안은 stale 응답을 즉시 내보내고 동시에 백그라운드에서 새 응답을 받아 캐시를 갱신하라는 뜻이죠. 사용자는 stale 응답을 즉시 받아서 지연을 거의 느끼지 못해요.<Cite id="mdn-cache-control" />
+
+이 동작이 깔끔한 건 두 흐름이 분리되기 때문이에요. 사용자에게 응답을 돌려주는 경로와 캐시를 갱신하는 경로가 따로 가거든요. 응답은 stale 이라도 빠르게 나가고, 갱신은 그 뒤에서 비동기로 진행돼요. 다음 요청이 왔을 때는 갱신된 응답을 fresh 로 만나게 되고요.
+
+다만 이건 어디까지나 HTTP 캐시 레이어 안에서 일어나는 일이에요. 응답을 어떤 조건에 어떻게 캐싱할지 정도만 헤더로 권한을 넘겨준 거고, 그 권한을 받아 동작하는 건 브라우저 캐시나 CDN 의 구현이에요. 개발자는 응답에 한 줄 적었을 뿐이에요.
+
+## Service Worker 는 어디서 다른가
+
+Service Worker 도 캐시를 다루지만 동작하는 자리가 달라요.
+
+[MDN](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) 은 SW 를 웹앱과 브라우저, 네트워크 사이의 프록시처럼 동작하는 이벤트 기반 워커로 정의해요. HTTPS (또는 localhost) 에서만 동작하고, DOM 접근은 안 되고요.<Cite id="mdn-service-worker" /> 별도 스레드에서 도는 워커라는 점에서 [Web Worker](/posts/web-worker-concurrency) 와 같은 패밀리지만, 역할은 메인 스레드의 보조 계산이 아니라 네트워크 요청 가로채기예요.
+
+가장 핵심은 fetch 이벤트예요. 페이지에서 발생한 모든 네트워크 요청이 SW 의 fetch 핸들러를 한 번 거쳐요. 그 안에서 `event.respondWith()` 에 어떤 응답이든 넘겨주면 그게 페이지가 받는 응답이 되거든요. 캐시에서 꺼낸 응답을 그대로 줄 수도 있고, 네트워크에서 새로 받은 응답을 줄 수도 있어요. 둘을 합쳐서 내려보내도 되고요.
+
+캐시 자체는 [Cache API](https://developer.mozilla.org/en-US/docs/Web/API/Cache) 가 담당해요. Request 와 Response 쌍을 origin 별로 명명된 저장소에 보관하는 인터페이스예요. 그런데 여기서 결정적 차이가 하나 있어요.
+
+<Callout variant="warning">
+"The caching API doesn't honor HTTP caching headers." - MDN
+
+Cache API 는 HTTP 캐싱 헤더를 해석하지 않아요. `Cache-Control: max-age` 를 응답에 박아두든 `stale-while-revalidate` 를 추가하든 Cache API 의 동작이 바뀌지 않거든요. 캐시에 무엇을 넣고, 언제 빼고, 언제 갱신할지를 전부 코드로 정해야 해요.
+</Callout>
+
+이 한 줄이 두 메커니즘을 가르는 결정타예요. HTTP 캐시는 헤더만 보고 알아서 동작하는데, Cache API 는 개발자가 캐시 상태를 직접 관리해야 해요. 같은 응답이라도 어느 캐시 레이어로 들어가느냐에 따라 일하는 주체가 달라지고요.<Cite id="mdn-cache" />
+
+## SW 패턴 셋과 두 레이어의 자리
+
+Service Worker 위에서 자주 쓰이는 캐싱 패턴은 셋이에요. Cache First, Network First, 그리고 SW 의 Stale-While-Revalidate 패턴.<Cite id="webdev-offline-cookbook" />
+
+Cache First 는 캐시에 있으면 캐시를 우선 반환, 없으면 네트워크로 떨어지는 패턴이에요. 정적 자산이나 변화가 적은 콘텐츠에 어울려요. Network First 는 반대로 네트워크를 먼저 시도하고 실패할 때만 캐시로 폴백해요. 자주 갱신되는 기사나 타임라인에 잘 맞고요.
+
+SW 의 SWR 패턴은 둘과 또 달라요. 캐시와 네트워크를 동시에 시작해서 캐시 응답을 즉시 반환하고, 네트워크 응답이 도착하면 캐시를 갱신해요.
+
+```js
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.open('runtime').then((cache) =>
+      cache.match(event.request).then((cached) => {
+        const fresh = fetch(event.request).then((response) => {
+          cache.put(event.request, response.clone());
+          return response;
+        });
+        return cached || fresh;
+      })
+    )
+  );
+});
+```
+
+여기서 보면 RFC 5861 디렉티브와 동작 결이 비슷해요. stale 응답을 즉시 반환하고 백그라운드에서 갱신하는 흐름. 같은 이름을 쓴 게 그래서고요. 다만 일하는 자리가 달라요. RFC 5861 은 응답 헤더 한 줄로 캐시가 알아서 처리하게 권한을 넘기는 쪽이고, SW 의 SWR 패턴은 자바스크립트로 그 흐름을 직접 짜는 쪽이에요. 한쪽은 선언적이고, 한쪽은 명령적인 거죠.
+
+두 레이어가 충돌하지는 않아요. 같은 응답이 SW 캐시에 들어가는 동시에 HTTP 캐시에도 들어갈 수 있어요. 다만 책임을 나눠 잡는 게 깔끔해요. 정적 자산에 긴 max-age 를 주고 SW 가 build hash 기반으로 영구 캐싱하는 식, 또는 자주 변하는 API 응답은 SW 를 거치지 않고 HTTP 캐시의 stale-while-revalidate 에 맡기는 식이에요.
+
+<FlowDiagram
+  height={360}
+  caption="두 SWR 이 사는 자리. 위 레이어는 명령형 (JS 코드), 아래 레이어는 선언형 (헤더 한 줄)"
+  nodes={[
+    { id: "page", title: "Page", description: "fetch 호출", x: 80, y: 0 },
+    {
+      id: "sw",
+      title: "Service Worker",
+      description: "JS 로 SWR 패턴",
+      x: 80,
+      y: 100,
+      kind: "accent",
+    },
+    {
+      id: "http",
+      title: "HTTP Cache",
+      description: "Browser · CDN. 헤더로 SWR 해석",
+      x: 80,
+      y: 200,
+      kind: "accent",
+    },
+    { id: "origin", title: "Origin", description: "원본 서버", x: 80, y: 300 },
+  ]}
+  edges={[
+    { from: "page", to: "sw", label: "fetch" },
+    { from: "sw", to: "http", label: "통과 시" },
+    { from: "http", to: "origin", label: "재검증" },
+  ]}
+/>
+
+처음 두 SWR 을 보고 헷갈렸던 건 두 메커니즘이 같은 이름을 쓴 데다 "stale 즉시, 갱신은 뒤로" 라는 결까지 공유했기 때문이에요. 이름이 가리키는 동작은 같지만 그 동작이 일어나는 위치는 응답 헤더 레이어와 자바스크립트 인터셉터 레이어로 갈려요. 두 자리를 나눠 보고 나면, 각각이 잘하는 자리에 맡기는 게 자연스러워져요.
+
+<References
+  items={[
+    {
+      id: "rfc-5861",
+      title: "RFC 5861 - HTTP Cache-Control Extensions for Stale Content",
+      href: "https://www.rfc-editor.org/rfc/rfc5861",
+      description: "stale-while-revalidate 디렉티브의 정의와 동작",
+    },
+    {
+      id: "rfc-9111",
+      title: "RFC 9111 - HTTP Caching",
+      href: "https://www.rfc-editor.org/rfc/rfc9111",
+      description: "freshness 와 validation 모델, max-age 의 의미",
+    },
+    {
+      id: "mdn-cache-control",
+      title: "MDN - Cache-Control 헤더",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control",
+      description: "디렉티브 종류와 실전 조합 예",
+    },
+    {
+      id: "mdn-service-worker",
+      title: "MDN - Service Worker API",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API",
+      description: "fetch 인터셉터로서의 Service Worker 정의와 라이프사이클",
+    },
+    {
+      id: "mdn-cache",
+      title: "MDN - Cache (Cache API)",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/Cache",
+      description: "Cache API 가 HTTP 캐싱 헤더를 따르지 않는다는 점",
+    },
+    {
+      id: "webdev-offline-cookbook",
+      title: "web.dev - The Offline Cookbook",
+      href: "https://web.dev/articles/offline-cookbook",
+      description: "Cache First, Network First, Stale-While-Revalidate 패턴",
+    },
+  ]}
+/>

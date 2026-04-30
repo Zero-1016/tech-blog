@@ -146,6 +146,7 @@ grep -c '^---$' <file>
 - `<References ... />` 같은 self-closing이 올바르게 `/>`로 닫혔는가?
 - `<CodePlayground ... />`, `<Cite id="..." />`, `<AnimatedStep ... />` 동일
 - `<VideoEmbed ... />` 동일
+- `<FlowDiagram ... />` 동일 (self-closing)
 
 **검출**: 각 컴포넌트에 대해 여는 태그 수와 닫는 태그 수 비교.
 
@@ -182,7 +183,7 @@ grep -n '—' <file>
 
 - 본문 단락 → 쉼표 또는 괄호로 치환
 - 코드 블록 안 주석 → `//` 뒤 쉼표 또는 콜론
-- JSX prop 값 (`AnimatedStep`, `References` 등) → 쉼표 또는 괄호
+- JSX prop 값 (`AnimatedStep`, `References`, `FlowDiagram` 등) → 쉼표 또는 괄호
 - frontmatter → 자연스러운 한국어 구로 재작성
 
 **자동 수정**: 쉼표 치환은 95% 케이스에서 안전. 쉼표로 우선 자동 수정하고,

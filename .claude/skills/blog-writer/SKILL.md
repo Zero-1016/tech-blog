@@ -164,7 +164,8 @@ H2 하나씩 순차적으로 채웁니다.
 
 **MDX 컴포넌트 활용** (`§MDX-COMPONENTS` 참조):
 
-- 개념 단계 분해 → `<AnimatedStep>`
+- 시간 순서 단계 → `<AnimatedStep>`
+- 정적 구조·분기·다층 → `<FlowDiagram>` (`§MDX-FLOWDIAGRAM` 참조)
 - 실행 예제 → `<CodePlayground>`
 - 팁/경고/주의사항 → `<Callout variant="tip|warning|info|error">`
 - 외부 영상 참조 → `<VideoEmbed>`
@@ -235,7 +236,7 @@ H2 하나씩 순차적으로 채웁니다.
 1. **em-dash** — 방금 쓴 섹션에 `—` 가 있는지. 있으면 **즉시 쉼표로 치환**.
    `§RULE-EMDASH` 적용 범위 전부 포함 (본문/주석/prop/코드 블록).
 
-2. **JSX prop 값 안 `**`** — `<AnimatedStep>`, `<CodePlayground>`, `<References>`같은 컴포넌트의 prop 값 안에`**text**`를 쓰지 않았는지. 있으면 즉시 제거 또는`"..."` 로 감싸기. (§RULE-BOLD-WHERE, 확정 에러)
+2. **JSX prop 값 안 `**`** — `<AnimatedStep>`, `<CodePlayground>`, `<References>`, `<FlowDiagram>`같은 컴포넌트의 prop 값 안에`**text**`를 쓰지 않았는지. 있으면 즉시 제거 또는`"..."` 로 감싸기. (§RULE-BOLD-WHERE, 확정 에러)
 
 3. **bare 마크다운 리스트** — 본문 레벨에 `- 항목` / `1. 항목` 을 쓰지 않았는지.
    있으면 즉시 문단으로 풀거나 `<AnimatedStep>` / `<Callout>` 으로 변환.
@@ -386,6 +387,7 @@ Step 4 미니 체크에서 이미 기계적 항목(em-dash, JSX prop `**`, bare 
 - `<Callout>` 내부
 - `<CodePlayground>` code/css prop
 - `<AnimatedStep>` title/content/code
+- `<FlowDiagram>` caption / nodes title·description / edges label
 - 코드 블록 주석
 - 인라인 코드
 - JSX prop 전부
@@ -411,6 +413,7 @@ Step 4 미니 체크에서 이미 기계적 항목(em-dash, JSX prop `**`, bare 
 - `<References items={[{ title: "...", description: "..." }]}>` 의 title/description
 - `<CodePlayground code={`...`} css={`...`}>` 의 code/css
 - `<VideoEmbed title="..." />`
+- `<FlowDiagram caption="..." nodes={[{ title: "...", description: "..." }]} edges={[{ label: "..." }]} />` 의 caption/nodes/edges 안 문자열
 - frontmatter `title`, `description`
 
 있으면 `"..."`로 감싸거나 그냥 빼기.
