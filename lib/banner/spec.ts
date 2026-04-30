@@ -21,6 +21,7 @@ export type MotifKey =
   | "network"
   | "event-loop"
   | "html"
+  | "cache"
   | "default";
 
 export interface BannerPalette {
@@ -62,6 +63,7 @@ const TAG_TO_MOTIF: Array<[RegExp, MotifKey]> = [
   [/^(텍스트|제어)$/i, "typography"],
   [/^(data URL|인라인 자산|Base64|임베드)$/i, "data-url"],
   [/^(DOM 측정|offsetWidth|offsetHeight|측정|리플로우|reflow|DOM)$/i, "measurement"],
+  [/^(캐시|캐싱|cache|caching|CDN|edge|TTL|Cache-Control|ETag)$/i, "cache"],
   [/^(네트워크|HTTP|HTTP\/1\.1|HTTP\/2|HTTP\/3|QUIC|TCP|multiplexing)$/i, "network"],
   [/^(이벤트 루프|event loop|microtask|마이크로태스크|task queue|scheduler)$/i, "event-loop"],
   [/^HTML$/i, "html"],
@@ -87,6 +89,7 @@ const MOTIF_PRIORITY: MotifKey[] = [
   "typography",
   "data-url",
   "measurement",
+  "cache",
   "network",
   "event-loop",
   "html",
@@ -251,6 +254,13 @@ const PALETTES: Record<MotifKey, BannerPalette> = {
     primary: "#e34c26",
     accent: "#fbbf24",
     text: "#fde68a",
+  },
+  cache: {
+    bg: "#0a1f2a",
+    bgAccent: "#133547",
+    primary: "#34d399",
+    accent: "#fbbf24",
+    text: "#d1fae5",
   },
   default: {
     bg: "#0a1428",
