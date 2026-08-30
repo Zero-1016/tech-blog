@@ -1,0 +1,216 @@
+---
+title: "가드를 컴포넌트에 걸면 늦어요"
+description: "로그인 검사를 컴포넌트에서 하면 자식 로더가 이미 다 돌고 난 뒤예요"
+date: 2026-08-30
+tags: ["React", "TanStack Router", "라우팅", "타입 안전성", "TypeScript"]
+series: "TanStack Router 실전"
+seriesOrder: 2
+published: true
+---
+
+보호된 페이지를 만들면서 컴포넌트 첫 줄에 로그인 여부를 검사하고 로그인 화면으로 보냈어요. 화면은 잘 튕겨나가는데 네트워크 탭을 열어보니 그 페이지의 데이터 요청이 그대로 찍혀 있더라고요. 접근 제어를 `beforeLoad` 로 올려야 그 아래 라우트가 로드를 시도조차 하지 않아요.
+
+## 화면은 튕겼는데 요청은 이미 나갔어요
+
+컴포넌트 안에서 막는 코드는 대충 이렇게 생겼죠.
+
+```tsx
+function DashboardPage() {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" />;
+  return <DashboardView />;
+}
+```
+
+문제는 이 `if` 문이 실행되는 시점이에요. 라우터는 이미 이 라우트로 가기로 결정했고, [지난 편에서 본 loader](/posts/tanstack-router-loader-deps) 도 이미 돌았어요. 대시보드 통계를 받아오는 요청, 알림 목록을 받아오는 요청이 전부 나간 다음에야 컴포넌트가 렌더되면서 "아 로그인 안 했네" 하고 되돌리는 거예요. 서버가 401 을 잘 돌려준다면 데이터가 새지는 않지만, 요청은 요청대로 나가고 로그인 화면은 한 박자 늦게 뜹니다.
+
+`beforeLoad` 는 그 앞자리예요. 이름 그대로 라우트가 로드되기 전에 불리는 훅이고, 여기서 예외를 던지면 그 아래로는 아무것도 진행되지 않아요.<Cite id="tsr-auth" />
+
+<Callout variant="info">
+"If you throw an error in `beforeLoad`, none of its children will attempt to load." - TanStack Router 문서
+
+`beforeLoad` 에서 예외를 던지면 자식 라우트들은 로드를 시도조차 안 한다는 뜻이에요. 자식의 `loader` 가 아예 실행되지 않아요.
+
+</Callout>
+
+<AnimatedStep
+  steps={[
+    {
+      title: "라우트 매치",
+      content:
+        "URL 을 보고 어느 라우트들이 매칭될지 먼저 정해요. 부모부터 자식까지 한 줄로 늘어서요.",
+    },
+    {
+      title: "부모부터 beforeLoad",
+      content:
+        "매칭된 순서대로 위에서 아래로 beforeLoad 가 실행돼요. 부모가 먼저입니다.",
+    },
+    {
+      title: "여기서 redirect 던지기",
+      content:
+        "로그인이 없으면 이 자리에서 redirect 를 throw 해요. 아래 라우트는 여기서 멈춰요.",
+    },
+    {
+      title: "통과했을 때만 loader",
+      content:
+        "가드를 지난 경우에만 자식의 loader 와 컴포넌트에 도달해요. 요청이 새어나가지 않아요.",
+    },
+  ]}
+/>
+
+## beforeLoad에서 redirect를 던져요
+
+공식 패턴은 `redirect()` 를 반환하는 게 아니라 던지는 거예요. 보호할 페이지마다 같은 코드를 붙이는 대신, 경로에 흔적을 남기지 않는 레이아웃 라우트 하나를 만들어서 그 밑에 몰아넣는 방식이 편해요. 파일 이름을 `_authenticated.tsx` 처럼 밑줄로 시작하면 URL 에는 안 드러나면서 부모 노릇만 하는 라우트가 됩니다.
+
+```tsx
+// src/routes/_authenticated.tsx
+export const Route = createFileRoute("/_authenticated")({
+  beforeLoad: ({ context, location }) => {
+    if (!context.auth.isAuthenticated) {
+      throw redirect({
+        to: "/login",
+        search: { redirect: location.href },
+      });
+    }
+  },
+});
+```
+
+`location.href` 를 `redirect` 라는 쿼리에 담아 보내는 게 포인트예요. 로그인이 끝난 뒤 그 값으로 되돌려보내면 사용자가 원래 보려던 화면으로 이어집니다.
+
+```tsx
+// 로그인 성공 직후
+await auth.login(form);
+router.history.push(search.redirect ?? "/");
+```
+
+리다이렉트 없이 막고 싶을 때도 있어요. 그럴 땐 자식을 그려낼 `<Outlet />` 자리에 로그인 폼을 대신 렌더하면 됩니다. URL 은 그대로 두고 화면만 바꿔치기하는 거라, 로그인하자마자 보던 자리로 자연스럽게 이어져요. [OAuth 로 로그인 흐름을 태우는 경우](/posts/oauth2-frontend-pkce) 라면 이 자리에서 인가 서버로 넘기게 되고요.
+
+## try/catch가 redirect를 삼킬 때
+
+여기서 한 번 걸려 넘어졌어요. `beforeLoad` 안에서 사용자 정보를 불러오다가 실패할 수 있어서 `try/catch` 로 감쌌거든요.
+
+```tsx
+beforeLoad: async ({ context }) => {
+  try {
+    const me = await context.api.fetchMe();
+    if (!me) throw redirect({ to: "/login" });
+    return { me };
+  } catch (error) {
+    throw notFound();
+  }
+};
+```
+
+`redirect()` 도 예외로 던져지니까 바로 아래 `catch` 가 그걸 받아버려요. 로그인 화면으로 가야 할 상황이 404 로 둔갑하죠. 그래서 `catch` 블록 첫 줄에서 리다이렉트인지 먼저 확인하고 다시 던져야 해요.
+
+```tsx
+} catch (error) {
+  if (isRedirect(error)) throw error; // 리다이렉트는 삼키지 않고 다시 던져요
+  throw notFound();
+}
+```
+
+`isRedirect` 는 `@tanstack/react-router` 가 내보내는 헬퍼예요. 던져진 값이 라우터의 리다이렉트 신호인지 판별해줍니다. 같은 자리에서 `notFound()` 를 던진 경우를 가려내는 `isNotFound` 도 짝으로 있고요.
+
+## context는 아래로 흐르며 합쳐져요
+
+위 코드에서 `context.auth` 와 `context.api` 를 아무렇지 않게 꺼내 썼는데, 이게 어디서 오는지 짚고 갈게요. 라우터 컨텍스트는 루트에서 타입을 선언하고 실행 시점에 값을 주입하는 구조예요.
+
+타입 선언은 `createRootRouteWithContext` 로 합니다. 여기가 함정 하나예요. 이건 라우트를 만드는 함수가 아니라 라우트를 만드는 함수를 만드는 팩토리라서 괄호를 두 번 열어야 해요.
+
+```tsx
+interface RouterContext {
+  auth: AuthState;
+  queryClient: QueryClient;
+}
+
+// 첫 번째 괄호는 타입, 두 번째 괄호가 라우트 옵션이에요
+export const Route = createRootRouteWithContext<RouterContext>()({
+  component: RootLayout,
+});
+```
+
+괄호 한 쌍으로 `createRootRouteWithContext<RouterContext>({ component })` 라고 쓰면 라우트 옵션을 팩토리한테 준 셈이 돼서 타입이 어긋나요. 저는 이 오류 메시지를 한참 들여다봤어요.
+
+값은 두 갈래로 넣어요. 앱이 뜰 때 이미 정해진 값은 `createRouter` 의 `context` 에 넣고, 리액트 훅에서 나오는 살아 있는 값은 `RouterProvider` 의 `context` prop 으로 흘려보냅니다.
+
+```tsx
+const router = createRouter({ routeTree, context: { queryClient, auth: undefined! } });
+
+function App() {
+  const auth = useAuth(); // 로그인 상태가 바뀌면 다시 렌더돼요
+  return <RouterProvider router={router} context={{ auth }} />;
+}
+```
+
+이렇게 두면 로그인 상태가 바뀔 때마다 라우터 인스턴스를 새로 만들지 않아도 돼요. 그리고 이 컨텍스트는 위에서 아래로 내려가면서 각 라우트의 `beforeLoad` 반환값과 합쳐집니다.<Cite id="tsr-context" /> 아까 `_authenticated` 에서 `return { me }` 를 했다면, 그 아래 라우트들의 `loader` 에서는 `context.me` 를 그대로 꺼내 쓸 수 있어요. 인증 가드가 곧 의존성 주입 자리가 되는 셈이에요.
+
+## 없는 페이지와 터진 페이지
+
+접근을 막는 것과 결이 다른 두 가지가 남아요. 자원이 없는 경우와 코드가 터진 경우요.
+
+없는 경우는 `notFound()` 를 던져요. 그냥 던지면 그 라우트의 `notFoundComponent` 가 받는데, 어느 상위 라우트가 받을지 지정할 수도 있어요.
+
+```tsx
+loader: async ({ params }) => {
+  const post = await fetchPost(params.postId);
+  if (!post) throw notFound({ routeId: "/_appLayout" });
+  return post;
+};
+```
+
+`routeId` 를 주면 그 라우트의 `notFoundComponent` 가 처리해요. 사이드바와 헤더는 남겨둔 채 본문 영역만 없는 페이지로 바꾸고 싶을 때 쓰는 방식이에요. 등록된 라우터 덕분에 이 `routeId` 도 자동완성이 뜨고요.<Cite id="tsr-notfound" /> 대신 이때는 예외를 던진 라우트 자신의 `notFoundComponent` 는 렌더되지 않아요.
+
+터진 경우는 `errorComponent` 가 받아요. 여기서 재시도 버튼을 다는 방법이 두 갈래인데, 저는 처음에 잘못된 쪽을 골랐어요.
+
+```tsx
+errorComponent: ({ error, reset }) => {
+  const router = useRouter();
+  return (
+    <div>
+      <p>{error.message}</p>
+      <button onClick={() => router.invalidate()}>다시 시도</button>
+    </div>
+  );
+};
+```
+
+`reset()` 은 에러를 붙잡고 있는 경계만 초기화해서 정상 화면을 다시 그려보게 해요. 그런데 에러가 `loader` 에서 났다면 로더는 다시 돌지 않으니 같은 화면에서 같은 에러가 또 납니다. 로더를 실제로 다시 돌리려면 `router.invalidate()` 를 불러야 하고, 이건 재로드와 경계 초기화를 함께 처리해줘요.<Cite id="tsr-data-loading" /> [쿼리 에러가 바운더리에 안 잡히던 이야기](/posts/tanstack-query-error-boundary-reset) 와 헷갈리기 쉬운 자리인데, 여기서는 던지느냐가 아니라 무엇을 되돌리느냐가 갈림길이에요.
+
+## 다음 편으로
+
+가드는 컴포넌트가 아니라 `beforeLoad` 에, 리다이렉트는 반환이 아니라 던지기로, `try/catch` 안에서는 `isRedirect` 로 다시 던지기. 여기까지가 요청이 새어나가지 않게 막는 최소 세트예요. 컨텍스트는 그 과정에서 자연스럽게 아래로 흐르고요.
+
+다음 편은 번들 이야기예요. 자동 코드 분할을 켰는데 번들 크기가 그대로였던 이유, 그리고 잘린 파일에서 타입을 어떻게 되찾는지 다뤄볼게요.
+
+<References
+  items={[
+    {
+      id: "tsr-auth",
+      title: "TanStack Router - Authenticated Routes",
+      href: "https://tanstack.com/router/latest/docs/framework/react/guide/authenticated-routes",
+      description:
+        "beforeLoad 에서 redirect 를 던지는 공식 패턴과 자식 로드 차단 동작",
+    },
+    {
+      id: "tsr-context",
+      title: "TanStack Router - Router Context",
+      href: "https://tanstack.com/router/latest/docs/framework/react/guide/router-context",
+      description:
+        "createRootRouteWithContext 팩토리 이중 호출, RouterProvider context prop 주입, 아래로 병합되는 컨텍스트",
+    },
+    {
+      id: "tsr-notfound",
+      title: "TanStack Router - Not Found Errors",
+      href: "https://tanstack.com/router/latest/docs/framework/react/guide/not-found-errors",
+      description: "notFound 의 routeId 지정과 isRedirect 재throw 패턴",
+    },
+    {
+      id: "tsr-data-loading",
+      title: "TanStack Router - Data Loading",
+      href: "https://tanstack.com/router/latest/docs/framework/react/guide/data-loading",
+      description: "errorComponent 의 reset 과 router.invalidate 차이",
+    },
+  ]}
+/>

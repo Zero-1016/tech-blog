@@ -1,0 +1,246 @@
+---
+title: "export 한 줄이 번들을 부풀려요"
+description: "자동 코드 분할을 켰는데 초기 번들이 그대로였던 이유를 찾아봐요"
+date: 2026-08-30
+tags: ["React", "TanStack Router", "라우팅", "타입 안전성", "TypeScript"]
+series: "TanStack Router 실전"
+seriesOrder: 3
+published: true
+---
+
+플러그인 설정에 `autoCodeSplitting: true` 한 줄을 넣고 빌드를 다시 돌렸어요. 그런데 초기 번들 크기가 거의 그대로더라고요. 라우트 파일에서 컴포넌트를 `export` 로 내보내고 있으면 그 심볼은 분할 대상에서 빠져 메인 번들에 그대로 실려요.
+
+## 분할을 켰는데 번들이 그대로예요
+
+설정 자체는 간단해요. [Vite](https://vite.dev) 를 쓴다면 플러그인에 옵션 하나를 켜면 돼요.
+
+```ts
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
+
+export default defineConfig({
+  plugins: [tanstackRouter({ autoCodeSplitting: true }), react()],
+});
+```
+
+여기서 전제가 하나 있어요. 자동 분할은 파일 기반 라우팅과 이 플러그인을 지원하는 번들러가 있어야 동작해요. 코드로 라우트 트리를 직접 조립하는 방식이나 CLI 만 쓰는 환경에서는 켜도 아무 일이 일어나지 않아요.
+
+전제를 다 갖췄는데도 번들이 안 줄었다면 라우트 파일 안쪽을 봐야 해요. 그전에 라우터가 라우트 파일을 어떻게 두 덩어리로 나누는지부터 보죠.
+
+## 무엇이 잘리고 무엇이 안 잘리나
+
+라우트의 모든 설정이 나중에 로드돼도 되는 건 아니에요. URL 이 들어왔을 때 어느 라우트로 갈지 정하려면 경로 규칙이 그 자리에 있어야 하고, 쿼리를 검증하고 데이터를 미리 받아오려면 `validateSearch` 와 `loader` 도 이미 손에 있어야 하거든요. 그래서 라우터는 이것들을 반드시 먼저 있어야 하는 쪽으로 묶어둡니다.<Cite id="tsr-code-splitting" />
+
+<FlowDiagram
+  height={340}
+  caption="라우트 파일 하나가 미리 필요한 쪽과 나중에 받아도 되는 쪽으로 갈려요"
+  nodes={[
+    {
+      id: "route",
+      title: "라우트 파일",
+      description: "posts.$postId.tsx",
+      x: 0,
+      y: 80,
+      kind: "accent",
+    },
+    {
+      id: "critical",
+      title: "미리 필요한 쪽",
+      description: "경로, validateSearch, beforeLoad, loader",
+      x: 250,
+      y: 0,
+    },
+    {
+      id: "noncritical",
+      title: "나중에 받아도 되는 쪽",
+      description: "component, errorComponent, pendingComponent, notFoundComponent",
+      x: 250,
+      y: 160,
+    },
+    {
+      id: "main",
+      title: "메인 번들",
+      description: "처음부터 실려 있어요",
+      x: 560,
+      y: 0,
+      kind: "success",
+    },
+    {
+      id: "ondemand",
+      title: "따로 잘린 청크",
+      description: "그 라우트에 들어갈 때 받아와요",
+      x: 560,
+      y: 160,
+      kind: "warning",
+    },
+  ]}
+  edges={[
+    { from: "route", to: "critical" },
+    { from: "route", to: "noncritical" },
+    { from: "critical", to: "main" },
+    { from: "noncritical", to: "ondemand", animated: true },
+  ]}
+/>
+
+잘려나갈 수 있는 건 화면을 그리는 네 가지예요. 정상 화면인 `component`, 터졌을 때의 `errorComponent`, 기다리는 동안의 `pendingComponent`, 없을 때의 `notFoundComponent`. 자동 분할을 켜면 플러그인이 이 넷을 알아서 떼어내고, 수동으로 하고 싶으면 `.lazy.tsx` 파일을 만들어 `createLazyFileRoute` 에 넘기면 돼요. 이 lazy 파일에서는 방금 말한 네 가지 말고 다른 옵션은 못 씁니다.
+
+```tsx
+// src/routes/posts.$postId.lazy.tsx
+export const Route = createLazyFileRoute("/posts/$postId")({
+  component: PostDetail,
+});
+```
+
+떼어내고 나서 원래 파일이 텅 비면 그 파일은 지워도 돼요. 라우트 트리에 자리만 잡아주는 라우트가 자동으로 생겨서 lazy 파일이 붙을 곳을 만들어주거든요.
+
+## export 한 줄이 분할을 깨요
+
+이제 본론이에요. 자동 분할을 켰을 때 지켜야 하는 조건은 하나예요. 라우트 파일 안의 컴포넌트를 밖으로 내보내지 않는 것.
+
+```tsx
+// ❌ export 가 붙으면 이 함수는 메인 번들에 남아요
+export function PostDetail() {
+  return <article>...</article>;
+}
+
+// ✅ 파일 안에서만 쓰이면 플러그인이 떼어낼 수 있어요
+function PostDetail() {
+  return <article>...</article>;
+}
+
+export const Route = createFileRoute("/posts/$postId")({
+  component: PostDetail,
+});
+```
+
+문서도 같은 이야기를 `notFoundComponent` 예시로 짚어둡니다.<Cite id="tsr-auto-splitting" />
+
+<Callout variant="warning">
+"Exporting the notFoundComponent will prevent it from being code-split and will be included in the main bundle." - TanStack Router 문서
+
+내보낸 컴포넌트는 분할되지 않고 메인 번들에 들어간다는 뜻이에요. 다른 파일이 그 심볼을 가져다 쓸 수 있는 이상, 번들러는 그걸 함부로 떼어낼 수 없으니까요.
+
+</Callout>
+
+이게 조용히 새는 이유가 여기 있어요. `export` 를 붙여도 빌드는 통과하고 화면도 잘 뜹니다. 경고 한 줄 없이 번들만 무거워지는 거예요. 테스트에서 컴포넌트를 직접 부르려고 `export` 를 붙였다가 그대로 남겨두는 경우가 흔한데, 컴포넌트를 옆 파일로 옮기고 라우트 파일에서는 그걸 가져다 `component` 에 꽂는 편이 안전해요.
+
+같은 맥락에서 자동 분할을 켠 채로 `lazyRouteComponent(() => import(...))` 를 손으로 또 감싸는 것도 잘못된 조합이에요. 플러그인이 이미 하는 일을 한 번 더 하는 셈이라 오히려 꼬여요.
+
+## 잘린 파일에서 타입을 되찾기
+
+컴포넌트를 다른 파일로 옮기고 나면 새 문제가 생겨요. `Route` 객체를 import 해서 `Route.useLoaderData()` 를 쓰던 습관이 안 통하거든요. 그 import 한 줄을 따라 라우트 정의와 거기 딸린 것들까지 lazy 청크로 끌려 들어가거든요.
+
+이럴 때 쓰는 게 `getRouteApi` 예요. 라우트 객체를 가져오지 않고 경로 문자열만으로 그 라우트의 훅을 타입이 붙은 채로 꺼내옵니다.
+
+```tsx
+import { getRouteApi } from "@tanstack/react-router";
+
+const route = getRouteApi("/posts/$postId");
+
+function PostDetail() {
+  const post = route.useLoaderData(); // 타입이 그대로 붙어요
+  const { postId } = route.useParams();
+  return <article>{post.title}</article>;
+}
+```
+
+경로 문자열 하나로 타입이 따라오는 건 [입문 시리즈에서 등록했던 `Register` 선언](/posts/tanstack-router-basics) 덕분이에요. 라우터 타입이 전역에 한 번 등록돼 있으니 문자열만 보고도 그 라우트의 로더 반환 타입을 찾아낼 수 있는 거죠.
+
+같은 이유로 `useSearch` 나 `useParams` 를 직접 쓸 때는 `from` 을 주는 게 좋아요.
+
+```tsx
+const { page } = useSearch({ from: "/posts" });
+```
+
+`from` 은 필수가 아니에요. 안 줘도 컴파일은 됩니다. 다만 그때 받는 타입이 달라져요.<Cite id="tsr-type-safety" />
+
+<Callout variant="info">
+"The `from` property is optional, which means if you don't pass it, you'll get the router's best guess on what types will be available." - TanStack Router 문서
+
+`from` 을 빼면 라우터가 어림짐작한 타입을 받게 된다는 얘기예요. 어느 라우트에서 불렸는지 모르니 가능한 후보를 전부 합친 넓은 타입이 나와요.
+
+</Callout>
+
+여러 라우트에서 공유되는 컴포넌트라면 `from` 을 특정할 수가 없죠. 그럴 때는 `strict: false` 를 주면 돼요. 느슨하지만 실제와 맞는 타입을 받게 되고, 어느 라우트에서 불렸든 런타임 오류 없이 동작해요. 값이 있을 수도 없을 수도 있는 형태로 오니까 꺼내 쓸 때 확인만 한 번 하면 되고요.
+
+## 속성 순서가 타입을 바꿔요
+
+마지막 하나는 처음 보면 좀 황당한 규칙이에요. `createFileRoute` 에 넘기는 객체의 속성 순서가 타입 추론에 영향을 줍니다.<Cite id="tsr-eslint" />
+
+<Callout variant="warning">
+"The property order of the passed in object matters due to type inference." - TanStack ESLint Plugin Router 문서
+
+객체 리터럴에 적는 순서가 타입 추론 때문에 의미를 갖는다는 거예요. 뒤에 오는 속성이 앞선 속성의 추론 결과에 기대고 있어서 그래요.
+
+</Callout>
+
+`beforeLoad` 가 돌려준 값은 컨텍스트에 합쳐져서 `loader` 의 인자로 들어가요. 그러니 `loader` 를 `beforeLoad` 보다 위에 적으면 아직 정해지지 않은 타입을 참조하게 되고, 추론이 거기서 끊깁니다. 지난 편에서 `_authenticated` 가 `return { me }` 를 하면 아래 로더에서 `context.me` 를 꺼내 쓸 수 있다고 했는데, 순서를 뒤집으면 바로 그 연결이 안 잡혀요.
+
+지켜야 할 순서는 `params` 와 `validateSearch` 가 먼저, 그다음 `loaderDeps`, 그다음 `context`, `beforeLoad`, `loader`, 그리고 나머지 훅들이에요. 외울 필요는 없어요. 공식 ESLint 플러그인에 이걸 잡아주는 규칙이 있고, 자동 수정까지 됩니다.
+
+```js
+// eslint.config.js
+import pluginRouter from "@tanstack/eslint-plugin-router";
+
+export default [...pluginRouter.configs["flat/recommended"]];
+```
+
+`@tanstack/router/create-route-property-order` 규칙이 켜지면 순서가 뒤집힌 자리를 잡아내고 `--fix` 로 알아서 재배치해줘요. [지난 편에서 다룬 가드](/posts/tanstack-router-guards-and-errors) 처럼 타입이 위에서 아래로 흐르는 구조라, 순서가 곧 계약인 셈이에요.
+
+## 시리즈를 지나며
+
+세 편을 지나면서 만진 건 전부 같은 성격의 문제였어요. 재요청이 새거나, 인증 검사가 늦거나, 번들이 안 줄거나. 셋 다 빌드는 통과하고 화면도 뜨는데 조용히 비용만 늘어나는 자리들이었죠.
+
+라우터가 이걸 막는 방식도 한 줄로 모여요. 개발자가 한 번 명시해두면 나머지는 도구가 알아서 처리해요. `loaderDeps` 에 무엇에 기대는지 적어두면 라우터가 재요청 시점을 판단하고, `export` 만 빼두면 번들러가 컴포넌트를 떼어내는 식이에요.
+
+[입문 시리즈에서 짚었던 세 자리](/posts/why-tanstack-router) 가 타입 추론과 URL 상태와 데이터 로딩이었는데, 실전에서 걸려 넘어지는 지점도 결국 그 연장선이더라고요. 타입은 `from` 과 속성 순서로 좁히면 되고, URL 상태는 `loaderDeps` 라는 문턱 하나로 걸러져요.
+
+<FAQ
+  items={[
+    {
+      question: "React Router 를 쓰던 프로젝트를 옮길 만한가요?",
+      answer:
+        "라우팅에 타입이 안 붙어서 매번 손으로 적고 있었다면 얻는 게 큽니다. 다만 라우트 정의 방식과 데이터 로딩 계약이 통째로 달라서 파일 단위로 조금씩 옮기기는 어려워요. 공식 문서에 React Router 마이그레이션 가이드가 따로 있으니 그걸 먼저 훑어보고 규모를 가늠하는 걸 권해요.",
+    },
+    {
+      question: "자동 코드 분할이 잘 됐는지 어떻게 확인하나요?",
+      answer:
+        "빌드 결과에서 라우트별 청크가 따로 생겼는지 보면 됩니다. 번들 분석 도구로 메인 번들 안에 페이지 컴포넌트가 남아 있는지 확인하는 게 가장 확실해요. 라우트 파일에 export 가 붙은 컴포넌트가 있다면 거기가 범인일 가능성이 높아요.",
+    },
+    {
+      question: "getRouteApi 와 from 중에 뭘 써야 하나요?",
+      answer:
+        "한 파일에서 같은 라우트의 훅을 여러 번 쓴다면 getRouteApi 로 한 번 만들어두는 게 깔끔해요. 훅 한두 개만 쓰는 자리라면 from 옵션으로 충분합니다. 둘 다 하는 일은 같아요.",
+    },
+  ]}
+/>
+
+<References
+  items={[
+    {
+      id: "tsr-code-splitting",
+      title: "TanStack Router - Code Splitting",
+      href: "https://tanstack.com/router/latest/docs/framework/react/guide/code-splitting",
+      description:
+        "미리 필요한 설정과 나중에 받아도 되는 컴포넌트의 구분, createLazyFileRoute 와 getRouteApi",
+    },
+    {
+      id: "tsr-auto-splitting",
+      title: "TanStack Router - Automatic Code Splitting",
+      href: "https://tanstack.com/router/latest/docs/framework/react/guide/automatic-code-splitting",
+      description:
+        "autoCodeSplitting 옵션의 전제 조건과 라우트 파일에서 컴포넌트를 내보내면 안 되는 이유",
+    },
+    {
+      id: "tsr-type-safety",
+      title: "TanStack Router - Type Safety",
+      href: "https://tanstack.com/router/latest/docs/framework/react/guide/type-safety",
+      description: "from 옵션의 타입 좁히기와 strict false 의 느슨한 타입",
+    },
+    {
+      id: "tsr-eslint",
+      title: "TanStack ESLint Plugin Router - create-route-property-order",
+      href: "https://tanstack.com/router/latest/docs/framework/react/eslint/create-route-property-order",
+      description: "속성 순서가 타입 추론에 영향을 주는 이유와 자동 수정 규칙",
+    },
+  ]}
+/>

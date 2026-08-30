@@ -1,0 +1,249 @@
+---
+title: "loader가 다시 도는 순간"
+description: "정렬만 바꿨을 뿐인데 목록을 통째로 다시 받아오는 이유를 풀어요"
+date: 2026-08-30
+updated: 2026-08-30
+tags: ["React", "TanStack Router", "라우팅", "타입 안전성", "TypeScript"]
+series: "TanStack Router 실전"
+seriesOrder: 1
+published: true
+---
+
+목록 페이지에 정렬 옵션을 하나 붙였더니 정렬만 바꿔도 목록 데이터를 통째로 다시 받아오더라고요. 캐시가 안 켜진 줄 알고 `staleTime` 부터 올려봤는데 소용이 없었어요. loader 를 다시 돌릴지 말지는 `staleTime` 이 아니라 `loaderDeps` 가 돌려준 객체가 정하거든요.
+
+## 정렬만 바꿨는데 목록을 다시 받아와요
+
+[입문 시리즈의 두 번째 편](/posts/tanstack-router-basics) 에서 `loader` 로 데이터를 미리 싣는 데까지 봤어요. 거기서는 라우트에 `loader` 하나만 달아두면 됐죠. 근데 목록 화면처럼 URL 쿼리에 `offset`, `limit`, `sort`, `view` 가 줄줄이 붙는 자리로 오면 이야기가 달라져요.
+
+처음엔 이렇게 썼어요.
+
+```tsx
+export const Route = createFileRoute("/posts")({
+  validateSearch: postsSearchSchema,
+  loaderDeps: ({ search }) => search,
+  loader: ({ deps }) => fetchPosts({ offset: deps.offset, limit: deps.limit }),
+  component: PostsPage,
+});
+```
+
+`loaderDeps` 에 `search` 를 통째로 넘겼죠. 그랬더니 `sort` 를 최신순에서 오래된순으로 바꾸는 순간에도 로더가 다시 돌아요. 로더는 `sort` 를 쳐다보지도 않는데 말이에요. 그리드 보기와 리스트 보기를 오가는 `view` 도 마찬가지고요. 화면에서 클릭 한 번이 네트워크 요청 한 번이 되는 셈이라, 목록이 클수록 체감이 커져요.
+
+## loader는 무엇을, loaderDeps는 언제
+
+두 옵션이 답하는 질문이 달라요. `loader` 는 무엇을 가져올지를 적는 자리고, `loaderDeps` 는 언제 다시 가져올지를 적는 자리예요. 공식 문서는 이 둘 사이에 문턱을 하나 세워둔 이유를 이렇게 설명해요.<Cite id="tsr-data-loading" />
+
+<Callout variant="info">
+"Placing a threshold between search parameters and the loader function allows the router to understand your dependencies." - TanStack Router 문서
+
+URL 쿼리와 로더 사이에 문턱을 하나 두면, 라우터가 이 로더는 무엇에 기대고 있는지 알아볼 수 있게 된다는 얘기예요.
+
+</Callout>
+
+라우터 입장에서 생각해보면 자연스러워요. URL 이 바뀔 때마다 로더를 다시 돌릴지 판단해야 하는데, 로더 함수 본문을 뜯어볼 수는 없잖아요. 그래서 개발자가 직접 "이 로더는 이것들에 기대고 있어요" 라고 객체 하나로 신고하게 만든 거예요. 그 객체가 이전과 다르면 다시 돌고, 같으면 캐시를 그대로 씁니다.
+
+<FlowDiagram
+  height={340}
+  caption="loaderDeps 가 돌려준 객체를 이전 값과 비교하는 자리에서 재실행 여부가 갈려요"
+  nodes={[
+    { id: "url", title: "URL 쿼리 변경", description: "sort=oldest", x: 0, y: 60 },
+    {
+      id: "deps",
+      title: "loaderDeps 계산",
+      description: "의존성 객체를 만들어요",
+      x: 210,
+      y: 60,
+      kind: "accent",
+    },
+    {
+      id: "compare",
+      title: "이전 값과 비교",
+      description: "얕은 비교로 확인해요",
+      x: 420,
+      y: 60,
+    },
+    {
+      id: "cache",
+      title: "캐시 그대로",
+      description: "네트워크 요청 없음",
+      x: 640,
+      y: 0,
+      kind: "success",
+    },
+    {
+      id: "refetch",
+      title: "loader 재실행",
+      description: "새로 받아와요",
+      x: 640,
+      y: 130,
+      kind: "warning",
+    },
+  ]}
+  edges={[
+    { from: "url", to: "deps" },
+    { from: "deps", to: "compare" },
+    { from: "compare", to: "cache", label: "값이 같으면" },
+    { from: "compare", to: "refetch", label: "값이 다르면", animated: true },
+  ]}
+/>
+
+이 비교는 `staleTime` 을 보기 전에 일어나요. `loaderDeps` 가 다른 값을 내놓으면 아무리 신선한 캐시가 있어도 라우트는 다시 로드돼요. 그래서 `staleTime` 을 올리는 걸로는 아까 그 문제가 안 풀렸던 거고요.
+
+그런데 `({ deps })` 처럼 구조 분해로 꺼내 쓰다 보면 이게 어디서 오는 건지 흐릿해져요. `loader` 는 인자를 여러 개 받는 게 아니라 객체 하나를 받고, 그 안에 아홉 개가 들어 있어요.<Cite id="tsr-data-loading" />
+
+| 인자                 | 무엇이 들어오나요                                        |
+| -------------------- | -------------------------------------------------------- |
+| `deps`               | `loaderDeps` 가 돌려준 객체. 안 쓰면 빈 객체예요         |
+| `params`             | 경로 파라미터. `/posts/$postId` 면 `{ postId }` 가 와요  |
+| `context`            | 부모에서 내려온 컨텍스트에 이 라우트 것이 합쳐진 값      |
+| `location`           | 지금 위치                                                |
+| `cause`              | 이번 매치가 `enter` 인지 `preload` 인지 `stay` 인지      |
+| `preload`            | 미리 받아오는 중인지 아닌지                              |
+| `abortController`    | 이 호출이 낡으면 취소되는 컨트롤러                       |
+| `route`              | 라우트 자신                                              |
+| `parentMatchPromise` | 부모 매치의 Promise. 루트 라우트에는 없어요              |
+
+앞의 네 개는 거의 매번 쓰게 되고, 뒤의 것들은 필요할 때만 꺼내요. `abortController` 는 그중 실제로 손이 자주 가는 편이에요. 사용자가 목록을 빠르게 넘기면 앞선 요청은 쓸모가 없어지는데, 그 신호를 `fetch` 에 그대로 넘기면 낡은 요청이 알아서 끊깁니다.
+
+```tsx
+loader: ({ deps, abortController }) =>
+  fetch(`/api/posts?offset=${deps.offset}`, { signal: abortController.signal }),
+```
+
+`cause` 도 은근히 쓸모가 있어요. `preload` 로 들어온 호출에서는 무거운 작업을 건너뛰고 실제 진입일 때만 다 하는 식으로 갈라놓을 수 있거든요.
+
+## 전체 search를 넘기면 생기는 일
+
+그러니까 `loaderDeps: ({ search }) => search` 는 라우터한테 "나는 이 URL 의 모든 쿼리에 기대고 있어요" 라고 신고한 꼴이에요. 문서도 여기에 대고 한 줄로 못을 박아둡니다.<Cite id="tsr-data-loading" />
+
+<Callout variant="warning">
+"Only include dependencies you actually use in the loader." - TanStack Router 문서
+
+로더가 실제로 꺼내 쓰는 값만 넣으라는 뜻이에요. 안 쓰는 값이 섞이면 그 값이 바뀔 때마다 캐시가 통째로 날아가요.
+
+</Callout>
+
+고치는 건 한 줄이에요. 로더가 읽는 값만 골라서 돌려주면 돼요.
+
+```tsx
+export const Route = createFileRoute("/posts")({
+  validateSearch: postsSearchSchema,
+  loaderDeps: ({ search: { offset, limit } }) => ({ offset, limit }),
+  loader: ({ deps: { offset, limit } }) => fetchPosts({ offset, limit }),
+  component: PostsPage,
+});
+```
+
+이제 `sort` 나 `view` 를 바꿔도 로더는 가만히 있어요. 반대로 페이지를 넘겨서 `offset` 이 바뀌면 그때는 제대로 다시 받아오고요.
+
+여기서 기준은 화면이 아니라 로더예요. 위 예시는 정렬을 클라이언트에서 처리하고 보기 방식은 CSS 만 바꾸는 경우라 로더가 두 값을 안 봐도 됐던 거고요. 서버에 `sort` 를 같이 넘겨서 정렬된 결과를 받아오는 구조라면 `sort` 도 `loaderDeps` 에 들어가야 맞아요. 페이지네이션과 함께 쓸 때는 더 그렇죠. 받아온 한 페이지만 컴포넌트에서 뒤집어봐야 전체 정렬이 아니니까요. 그래서 이 목록은 화면 설계를 보고 정해야 하고, 로더 코드를 열어서 어떤 값을 실제로 읽는지 따라가는 게 가장 확실해요.
+
+한 가지 더 있어요. `loaderDeps` 가 돌려주는 값은 직렬화가 되는 형태여야 해요. 라우터가 이 객체를 캐시 키로 쓰거든요. 함수나 클래스 인스턴스를 담으면 비교가 매번 어긋나서 결국 항상 다시 도는 상태가 됩니다.
+
+## 신선도와 보존은 다른 축이에요
+
+`loaderDeps` 로 재실행 조건을 정리하고 나면 그다음 질문이 와요. 같은 조건으로 다시 들어왔을 때는 어떻게 되나요. 여기서 캐시 옵션 세 개가 등장하는데, 이름이 비슷해서 저도 한동안 헷갈렸어요. 세 개가 서로 다른 질문에 답한다고 보면 정리가 됩니다.
+
+| 옵션               | 기본값 | 답하는 질문                                  |
+| ------------------ | ------ | -------------------------------------------- |
+| `staleTime`        | 0ms    | 받아둔 값을 로더 없이 그대로 써도 되나요     |
+| `preloadStaleTime` | 30초   | 미리 받아둔 값을 로더 없이 재사용해도 되나요 |
+| `gcTime`           | 5분    | 안 쓰는 값을 언제 정리 대상으로 볼까요       |
+
+`staleTime` 기본값이 0ms 라는 게 포인트예요. 성공한 데이터도 받자마자 오래된 값 취급이라, 그 라우트로 다시 들어오면 화면은 캐시로 즉시 그리면서 뒤에서 조용히 다시 받아와요.<Cite id="tsr-data-loading" /> 오래된 값을 먼저 보여주고 뒤에서 갱신하는 이 방식이 stale-while-revalidate, 줄여서 SWR 이에요. [TanStack Query 의 손잡이들](/posts/tanstack-query-practical-handles) 을 만져본 적 있다면 `staleTime` 과 `gcTime` 이 나뉘어 있는 이유가 낯익을 거예요.
+
+`preloadStaleTime` 은 링크에 마우스를 얹었을 때 미리 받아두는 preload 전용 축이에요. 기본 30초라, 마우스를 스쳤다가 실제로 클릭하기까지의 짧은 사이에 같은 요청을 두 번 보내지 않게 막아줘요. 공식 문서는 이 두 축을 한 문장으로 갈라둡니다.<Cite id="tsr-preloading" />
+
+<Callout variant="tip">
+"Freshness and retention are separate." - TanStack Router 문서
+
+얼마나 오래 신선하다고 볼지와 얼마나 오래 들고 있을지는 다른 질문이라는 거예요. 앞의 둘이 신선도고, `gcTime` 이 보존이에요.
+
+</Callout>
+
+`gcTime` 의 5분이 지난다고 값이 그 자리에서 삭제되지는 않아요. 정리 대상으로 표시됐다가 이후 캐시 정리 시점에 치워집니다. 그래서 5분 1초에 다시 들어갔더니 캐시가 살아 있더라는 상황도 정상이에요.
+
+[TanStack Query 를 이미 쓰고 있다면](/posts/swr-vs-tanstack-query-philosophy) 여기서 질문이 하나 붙어요. 캐시가 둘이니 라우터 쪽은 빼도 되지 않냐는 거죠. 저도 그렇게 들었는데, 문서는 라우터를 대체재가 아니라 조율자로 놓습니다.<Cite id="tsr-external-data" />
+
+<Callout variant="info">
+"Router is designed to be a perfect coordinator for external data fetching and caching libraries." - TanStack Router 문서
+
+라우터가 캐시를 대신하는 게 아니라, 외부 캐시가 언제 일할지를 잡아주는 자리라는 뜻이에요.
+
+</Callout>
+
+그래서 `loader` 는 그대로 남아요. 안에서 직접 받아오는 대신 Query 캐시를 미리 채워두고, 컴포넌트는 그 캐시를 읽죠.
+
+```tsx
+loader: ({ context, deps }) => context.queryClient.ensureQueryData(postsQuery(deps)),
+```
+
+빠지는 건 캐시 전체가 아니라 신선도 판단이에요. `defaultPreloadStaleTime` 을 0 으로 두면 preload 로 받아둔 값이 라우터 입장에서는 곧바로 오래된 값이 돼서, 다시 쓸지를 Query 의 `staleTime` 이 정하게 됩니다. 더 밀어붙이면 `gcTime: 0` 과 `shouldReload: false` 로 내장 캐시를 사실상 무력화할 수도 있고요. 그래도 라우터가 하는 일이 없어지지는 않아요. 언제 로드할지 잡는 것도, 같은 로더로 몰린 요청을 하나로 묶는 것도 여전히 라우터 쪽이거든요.
+
+## 데이터가 바뀌었으면 무효화해요
+
+글을 하나 쓰고 목록으로 돌아왔는데 방금 쓴 글이 안 보이는 경우가 있어요. 캐시가 아직 유효하다고 판단한 거죠. 이럴 때 쓰는 게 `router.invalidate()` 예요.
+
+```tsx
+const router = useRouter();
+
+async function createPost(input: PostInput) {
+  await api.createPost(input);
+  await router.invalidate();
+}
+```
+
+`invalidate()` 는 커밋된 캐시와 아직 날아가는 중인 요청까지 무효화 대상으로 잡고, 켜져 있던 preload 결과도 버려요. 화면에 떠 있는 활성 라우트는 곧바로 다시 로드되고, 뒤에 남아 있던 비활성 캐시는 오래된 값으로 표시만 해뒀다가 다음에 그 라우트로 들어갈 때 다시 받아옵니다.<Cite id="tsr-data-loading" /> 기본은 백그라운드 재검증이라, 새 데이터가 도착할 때까지 기다렸다가 다음 줄을 실행하고 싶으면 `router.invalidate({ sync: true })` 로 부르면 돼요.
+
+`staleTime` 을 0 으로 두면 알아서 되지 않냐고 물을 수 있는데, 그건 그 라우트로 다시 들어갈 때의 이야기예요. 이미 화면에 떠 있는 목록을 지금 갱신하려면 무효화를 직접 불러야 합니다.
+
+## 다음 편으로
+
+정리하면 재실행 조건은 `loaderDeps` 가 잡고, 재사용 여부는 `staleTime` 과 `preloadStaleTime` 이 잡고, 언제 버릴지는 `gcTime` 이 잡아요. 그리고 지금 당장 다시 받아와야 하는 순간에는 `router.invalidate()` 가 있고요. 제가 헤맸던 지점은 이 네 개를 전부 같은 캐시 손잡이로 봤던 데 있었어요.
+
+다음 편에서는 데이터를 받아오기 전 단계로 올라가요. 로그인하지 않은 사용자를 어디서 막아야 하는지, 왜 컴포넌트 안에서 막으면 이미 늦는지를 `beforeLoad` 로 풀어볼게요.
+
+<FAQ
+  items={[
+    {
+      question: "loaderDeps 를 아예 안 쓰면 어떻게 되나요?",
+      answer:
+        "URL 쿼리에 기대지 않는 로더라면 안 써도 됩니다. 경로 파라미터가 바뀌면 라우트 매치 자체가 달라져서 로더는 어차피 다시 돌아요. loaderDeps 는 같은 라우트 안에서 쿼리만 바뀌는 경우를 위한 장치예요.",
+    },
+    {
+      question: "staleTime 을 무한대로 두면 캐시가 영원히 유지되나요?",
+      answer:
+        "신선하다고 보는 기간만 늘어나요. gcTime 이 지나면 정리 대상이 되고, loaderDeps 가 다른 값을 내놓거나 router.invalidate() 를 부르면 그때는 다시 로드됩니다.",
+    },
+    {
+      question: "loaderDeps 로도 재실행 조건을 못 잡는 경우가 있나요?",
+      answer:
+        "있어요. 그럴 때는 shouldReload 옵션에 함수를 주면 됩니다. beforeLoad 와 같은 인자를 받아서 다시 로드할지를 불리언으로 직접 판단하는 탈출구예요.",
+    },
+  ]}
+/>
+
+<References
+  items={[
+    {
+      id: "tsr-data-loading",
+      title: "TanStack Router - Data Loading",
+      href: "https://tanstack.com/router/latest/docs/framework/react/guide/data-loading",
+      description:
+        "loader 와 loaderDeps 의 역할 분리, staleTime 기본값, router.invalidate 의 무효화 범위",
+    },
+    {
+      id: "tsr-external-data",
+      title: "TanStack Router - External Data Loading",
+      href: "https://tanstack.com/router/latest/docs/framework/react/guide/external-data-loading",
+      description:
+        "라우터를 외부 캐시의 조율자로 두는 설계, loader 안에서 ensureQueryData 로 Query 캐시를 채우는 조합",
+    },
+    {
+      id: "tsr-preloading",
+      title: "TanStack Router - Preloading",
+      href: "https://tanstack.com/router/latest/docs/framework/react/guide/preloading",
+      description:
+        "preloadStaleTime 과 preloadGcTime 기본값, 신선도와 보존을 나누는 기준",
+    },
+  ]}
+/>
