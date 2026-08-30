@@ -87,7 +87,14 @@ function buildRobots(): string {
   // /og 는 막지 않는다. og:image 가 ${SITE_URL}/og/<slug> 라서,
   // Disallow 를 걸면 크롤러가 미리보기 이미지를 못 가져온다.
   // /settings 는 noindex 메타로 처리한다. robots 로 막으면 그 메타를 못 읽는다.
-  return `User-agent: *\nAllow: /\n\nDisallow: /api\n\nSitemap: ${SITE_URL}/sitemap.xml\n`;
+  //
+  // *_rsc= 는 next/link 프리페치가 붙이는 RSC 페이로드 쿼리다. RSC 헤더 없이
+  // 요청하면 원본과 같은 HTML 이 그대로 나와서, 크롤러가 태그/글 페이지마다
+  // 중복 URL 을 하나씩 더 본다. 2026-08 크롤링 통계 기준 전체 요청 14,561 건 중
+  // 10,100 건(69%)이 여기로 샜고, 그 사이 글 165 개가 "발견됨 - 색인 미생성"
+  // 상태로 한 번도 크롤되지 않았다. 프리페치는 브라우저 탐색용이라 막아도
+  // 초기 렌더에는 영향이 없다. 첫 파라미터가 아닐 수도 있어서 `?` 는 안 붙인다.
+  return `User-agent: *\nAllow: /\n\nDisallow: /api\nDisallow: /*_rsc=\n\nSitemap: ${SITE_URL}/sitemap.xml\n`;
 }
 
 function buildLlmsTxt(posts: PostMeta[]): string {
