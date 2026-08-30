@@ -1,0 +1,233 @@
+---
+title: "구글이 내 글을 안 읽어간 이유"
+description: "글이 색인이 안 될 때 콘텐츠부터 의심하게 되는데, 예산이 딴 데로 새고 있었어요."
+date: 2026-08-30
+tags: ["SEO", "Next.js", "App Router", "RSC", "크롤링"]
+published: true
+---
+
+Search Console 을 열었더니 글 165개가 "발견됨, 현재 색인이 생성되지 않음" 에 묶여 있었어요. 최종 크롤링 열은 하나같이 "해당사항 없음" 이었고요. 글이 부실한가 싶어 한참 문장을 들여다봤는데, 범인은 콘텐츠도 서버 속도도 아니었어요. **화면 전환을 빠르게 하려고 프레임워크가 만든 내부용 주소가 크롤링 예산의 69%를 먹고 있었거든요.**
+
+## 발견만 되고 크롤은 안 됐어요
+
+색인이 안 된 페이지가 201개, 사유는 7가지로 갈려 있었어요. 리디렉션이 7개, 표준 태그가 있는 대체 페이지가 7개, 404가 3개. 이런 잔챙이들 사이에서 하나가 유독 튀었죠. "발견됨, 현재 색인이 생성되지 않음" 이 165개였어요.
+
+목록을 열어보고 좀 당황했어요. 165개가 전부 실제 글이었거든요. 그리고 최종 크롤링 열이 전부 비어 있었어요.
+
+이 상태가 정확히 뭘 뜻하는지는 구글 고객센터가 직접 정의해두고 있어요.<Cite id="gsc-page-indexing" />
+
+<Callout variant="info">
+"The page was found by Google, but not crawled yet. Typically, Google wanted to crawl the URL but this was expected to overload the site; therefore Google rescheduled the crawl." - Google Search Console 고객센터
+
+주소는 알아냈는데 아직 가지러 오지 않았다는 뜻이에요. 긁고 싶긴 했는데 사이트에 부담이 될 것 같아서 일정을 미뤘다고 구글이 밝히고 있고요.
+
+</Callout>
+
+여기가 진단의 갈림길이에요. 비슷하게 생긴 "크롤링됨, 현재 색인이 생성되지 않음" 과는 원인이 완전히 다르거든요.
+
+| 상태 | 크롤 여부 | 흔한 원인 |
+| --- | --- | --- |
+| 발견됨, 현재 색인이 생성되지 않음 | 아직 안 가져감 | 크롤 일정 밀림, 과부하 우려 |
+| 크롤링됨, 현재 색인이 생성되지 않음 | 가져갔음 | 콘텐츠 쪽 판단 |
+
+제 경우 뒤쪽은 3개뿐이었어요. 글이 얇아서 밀린 거라면 저 숫자가 커야 하는데 그렇지 않았죠. 그러니까 이건 품질 문제가 아니라 순서 문제였어요.
+
+## 속도도 콘텐츠도 범인이 아니었어요
+
+"과부하가 우려돼서 미뤘다" 는 문구를 보고 제일 먼저 서버를 의심했어요. 크롤링 통계를 열었죠.
+
+석 달간 크롤 요청이 14,561건, 평균 응답 시간이 137밀리초, 응답 기준으로 성공이 99%, 호스트 상태는 "문제 없음". 어디를 봐도 서버가 헐떡이는 그림이 아니었어요. 그럼 왜 미룬 걸까요.
+
+크롤링 예산이라는 말의 정의로 돌아가 봤어요.<Cite id="google-crawl-budget" />
+
+<Callout variant="info">
+"Taking crawl capacity and crawl demand together, Google defines a site's crawl budget as the set of URLs that Google can and wants to crawl." - Google Search Central
+
+긁을 수 있는 양과 긁고 싶은 양을 겹친 자리가 예산이라는 거예요. 앞쪽은 서버가 버티느냐고, 뒤쪽은 가져갈 값어치가 있다고 보느냐죠.
+
+</Callout>
+
+앞쪽이 멀쩡하다는 건 방금 확인했으니, 남은 건 뒤쪽이었어요. 구글이 그 14,561번을 대체 어디에 쓰고 있었느냐는 질문이요.
+
+## 예산은 `?_rsc=` 로 샜어요
+
+크롤링 통계에는 요청을 파일 형식별로 쪼개주는 표가 있어요. 그 표가 좀 이상했어요.
+
+| 파일 형식 | 비율 |
+| --- | --- |
+| 다른 파일 형식 | 69% |
+| HTML | 12% |
+| 자바스크립트 | 12% |
+| 이미지 | 5% |
+| JSON | 2% |
+
+블로그인데 HTML 이 12%예요. 정체불명의 69%를 눌러봤더니 이런 게 987행 나왔어요.
+
+```text
+/tags/Popover API?_rsc=3hm2d      성공(200)
+/tags/Web Worker?_rsc=3hm2d       성공(200)
+/tags/stacking-context?_rsc=3hm2d 성공(200)
+```
+
+전체 14,561건 중 10,100건이 여기였어요. 궁금해서 그 주소를 직접 때려봤는데, 응답이 예상 밖이었어요.
+
+```text
+GET /tags/Zod?_rsc=3hm2d
+200  content-type: text/html  30,049 bytes
+
+GET /tags/Zod
+200  content-type: text/html  30,038 bytes
+```
+
+11바이트 차이. 사실상 같은 페이지가 주소만 바꿔 달고 한 벌 더 있는 셈이었어요. 크롤러 입장에선 태그마다 페이지가 두 개씩 있는 거죠.
+
+구글은 이 모양을 이미 알고 있고, 문서까지 따로 두고 있어요.<Cite id="google-faceted-nav" />
+
+<Callout variant="warning">
+"Its most common implementation, which is based on URL parameters, can generate infinite URL spaces which harms the website... Because the URLs created for the faceted navigation seem to be novel and crawlers can't determine whether the URLs are going to be useful without crawling first, the crawlers will typically access a very large number of them." - Google Search Central
+
+파라미터로 주소를 찍어내면 크롤러 눈에는 계속 처음 보는 주소로 보여요. 열어보기 전에는 쓸모가 있는지 알 수 없으니, 일단 가져다 보고 판단하는 거죠.
+
+원래는 쇼핑몰 필터 얘기인데, 제 블로그에서 벌어진 일이 정확히 이거였어요.
+
+</Callout>
+
+같은 통계에 "목적 기준" 이라는 항목이 하나 더 있어요. 새로고침이 99%, 검색이 1%. 예산의 99%를 이미 아는 주소를 다시 보는 데 쓰고, 새 주소를 찾는 데는 1%만 쓰고 있었어요. 글 165개가 순서를 못 받은 이유가 여기 다 있었죠.
+
+## 그 주소는 프리페치가 남긴 캐시 키예요
+
+`?_rsc=` 를 붙인 게 누구냐면 `<Link>` 예요. Next.js 는 사용자가 링크를 누르기 전에 다음 화면을 미리 받아둬요. 눌렀을 때 기다림 없이 뜨게 하려고요.<Cite id="nextjs-optimizing-prefetching" />
+
+<Callout variant="info">
+"Prefetching downloads a route's JavaScript, CSS, and RSC payload before the user navigates to it, so the router can render the next route without waiting for a round trip." - Next.js 공식 문서
+
+다음 화면에 필요한 자바스크립트와 CSS, 그리고 RSC 페이로드를 미리 받아둔다는 거예요. RSC 페이로드는 서버 컴포넌트 트리를 직렬화한 데이터인데, [HTML 과는 다른 층의 결과물](/posts/ssr-vs-rsc-different-layers)이에요.
+
+</Callout>
+
+여기서 제가 잘못 알고 있던 게 하나 드러났어요. 저는 프리페치가 마우스를 올렸을 때 도는 줄 알았거든요. 실제 트리거는 **링크가 화면에 보이는 순간** 이에요. 그리고 개발 서버에서는 아예 안 돌고 프로덕션에서만 돌아요.<Cite id="nextjs-link" /> 로컬에서 아무리 봐도 안 보였던 이유죠.
+
+그럼 뒤에 붙는 해시는 뭘까요.<Cite id="nextjs-cdn-caching" />
+
+<Callout variant="info">
+"Next.js addresses this with the `_rsc` search parameter: a hash of the relevant request header values that acts as a cache-key, ensuring different response variants get different cache keys." - Next.js 공식 문서
+
+같은 주소라도 HTML 을 달라는 요청과 RSC 페이로드를 달라는 요청은 응답이 다르잖아요. 그 둘이 캐시에서 섞이지 않게 헤더 값을 해시로 뭉쳐 주소 뒤에 붙이는 거예요.
+
+</Callout>
+
+즉 `?_rsc=` 는 캐시가 헷갈리지 말라고 붙인 꼬리표지, 사람이 방문하라고 만든 주소가 아니에요. 문제는 크롤러가 그 사정을 모른다는 거고요.
+
+증폭 요인도 하나 있었어요. 제 태그 목록 페이지는 태그 153개를 전부 링크하는데, 그중 90개는 글이 한 편뿐이라 색인 대상에서 빼둔 페이지였어요. 색인도 안 될 페이지들이 화면에 보인다는 이유로 프리페치되고, 그렇게 만들어진 주소가 크롤 목록에 얹히고 있었던 거예요.
+
+## robots.txt 한 줄로 막았어요
+
+고친 건 결국 한 줄이에요.
+
+```text
+User-agent: *
+Allow: /
+
+Disallow: /api
+Disallow: /*_rsc=
+
+Sitemap: https://frontend.run/sitemap.xml
+```
+
+여기 함정이 두 개 있어요. 하나는 `?` 를 붙이고 싶은 유혹이에요. `/*?_rsc=` 라고 쓰면 `_rsc` 가 첫 파라미터일 때만 걸려요. 다른 파라미터 뒤에 붙어 오면 그냥 통과하죠. 그래서 물음표는 뺐어요.
+
+다른 하나는 `$` 예요. 규칙 끝에 `$` 를 붙이면 주소의 끝을 의미하는데, 쿼리스트링이 뒤에 남아 있으면 매칭이 깨져요. 구글 명세가 `/*.php$` 는 `/filename.php?parameters` 를 잡지 못한다고 예시까지 들어 설명하고 있어요.<Cite id="google-robots-spec" /> 지금 우리가 잡으려는 게 바로 그 쿼리스트링이니, `$` 는 쓰면 안 되는 자리예요.
+
+와일드카드 자체가 원래 표준은 아니라는 것도 알아둘 만해요.
+
+<Callout variant="warning">
+"Google, Bing, and other major search engines support a limited form of wildcards for path values." - Google Search Central
+
+주요 검색엔진이 지원하는 확장이지 robots.txt 표준에 들어 있는 문법은 아니에요. 마이너한 크롤러까지 막힌다고 기대하진 마세요.
+
+</Callout>
+
+그러면 [meta 태그로 noindex](/posts/html-meta-tags-overview) 를 걸면 되지 않냐고 물을 수 있는데, 이 경우엔 답이 아니에요. 구글 문서가 직접 기각하고 있거든요.<Cite id="google-crawl-budget" />
+
+<Callout variant="error">
+"Don't use `noindex`, as Google will still request, but then drop the page when it sees a `noindex` `meta` tag or header in the HTTP response, wasting crawling time." - Google Search Central
+
+noindex 는 색인을 막지 크롤을 막지 못해요. 태그를 읽으려면 일단 가져와야 하니까요. 예산은 똑같이 나가고 페이지만 버려지는 거죠.
+
+</Callout>
+
+예산을 아끼는 게 목적이라면 애초에 요청이 오지 않게 해야 하고, 그 자리는 robots.txt 예요.
+
+## 아직 한 가지 남았어요
+
+이 글을 쓰는 시점에 숙제가 하나 더 남아 있어요. 제 사이트는 모든 응답이 `private, no-cache, no-store, max-age=0, must-revalidate` 로 나가고 있어요. Next.js 문서를 보면 이 조합은 [동적으로 렌더되는 페이지](/posts/rendering-strategies-map)의 기본값이에요.<Cite id="nextjs-cdn-caching" /> 정적이면 `s-maxage=31536000` 이 붙었을 자리죠.
+
+원인은 헤더 컴포넌트에서 단축키 라벨을 정하려고 `headers()` 로 접속자 정보를 읽은 한 줄이었어요. 그 한 줄이 루트 레이아웃을 타고 사이트 전체를 동적으로 끌어내렸고요. 캐시가 안 걸리니 재크롤 비용이 계속 최대로 유지되고, 아까 본 "새로고침 99%" 가 풀리지 않는 구조였던 거예요.
+
+재밌게도 `_rsc` 자체가 영구적인 물건은 아니에요. Next.js 팀은 이걸 쿼리 파라미터에서 빼고 `/my/page.rsc` 같은 경로 기반 캐시 키로 옮기는 방향을 설계하고 있다고 문서에 적어뒀어요. 그때가 오면 이 글의 처방도 유효기간이 끝나겠죠.
+
+색인이 밀릴 때 저는 늘 글을 먼저 의심했어요. 이번엔 아니었어요. 크롤링 통계의 파일 형식 내역을 한 번 열어보는 것만으로 방향이 갈렸거든요. 혹시 비슷한 증상을 겪고 있다면, 글을 고치기 전에 그 표부터 열어보시길 권해요.
+
+<FAQ
+  items={[
+    {
+      question: "robots.txt 로 막으면 사이트 화면 전환이 느려지나요?",
+      answer: "아니에요. robots.txt 는 크롤러에게만 적용돼요. 실제 사용자의 브라우저는 그 파일을 읽지 않으니 프리페치는 그대로 동작하고, 링크를 눌렀을 때의 속도도 달라지지 않아요."
+    },
+    {
+      question: "차단하면 Search Console 에 'robots.txt 에 의해 차단됨' 이 늘어나지 않나요?",
+      answer: "늘어날 수 있어요. 다만 그건 의도한 결과예요. 색인시킬 생각이 없던 주소가 색인 대상에서 빠졌다는 보고일 뿐이고, 실제 글 주소는 그대로 크롤됩니다. 예산이 글 쪽으로 돌아오는 게 목적이니까요."
+    },
+    {
+      question: "prefetch 를 꺼버리면 더 간단하지 않나요?",
+      answer: "`<Link prefetch={false}>` 로 끌 수는 있어요. 다만 그건 사용자가 체감하는 화면 전환 속도를 대가로 내는 선택이에요. robots.txt 는 크롤러만 막고 사용자 경험은 건드리지 않으니 먼저 시도해볼 만한 쪽이에요."
+    }
+  ]}
+/>
+
+<References
+  items={[
+    {
+      id: "gsc-page-indexing",
+      title: "Google Search Console 고객센터 - 페이지 색인 생성 보고서",
+      href: "https://support.google.com/webmasters/answer/7440203",
+      description: "발견됨과 크롤링됨 두 상태의 정의와 크롤 일정이 밀리는 조건"
+    },
+    {
+      id: "google-crawl-budget",
+      title: "Google Search Central - Crawl Budget Management for Large Sites",
+      href: "https://developers.google.com/search/docs/crawling-indexing/large-site-managing-crawl-budget",
+      description: "크롤 용량과 크롤 수요로 예산을 정의하는 문장, noindex 가 대안이 아닌 이유"
+    },
+    {
+      id: "google-faceted-nav",
+      title: "Google Search Central - Faceted Navigation URLs",
+      href: "https://developers.google.com/crawling/docs/faceted-navigation",
+      description: "URL 파라미터가 무한한 주소 공간을 만들어 과다 크롤을 부르는 구조"
+    },
+    {
+      id: "google-robots-spec",
+      title: "Google Search Central - robots.txt Specifications",
+      href: "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+      description: "와일드카드 지원 범위와 달러 기호를 쓰면 쿼리스트링 매칭이 깨지는 예시"
+    },
+    {
+      id: "nextjs-cdn-caching",
+      title: "Next.js 공식 - Using a CDN with Next.js",
+      href: "https://nextjs.org/docs/app/guides/cdn-caching",
+      description: "_rsc 가 요청 헤더 해시라는 정의와 렌더링 전략별 Cache-Control 값"
+    },
+    {
+      id: "nextjs-optimizing-prefetching",
+      title: "Next.js 공식 - Optimizing Prefetching",
+      href: "https://nextjs.org/docs/app/guides/optimizing-prefetching",
+      description: "프리페치가 자바스크립트와 CSS, RSC 페이로드를 미리 받는다는 설명"
+    },
+    {
+      id: "nextjs-link",
+      title: "Next.js 공식 - Link 컴포넌트",
+      href: "https://nextjs.org/docs/app/api-reference/components/link",
+      description: "뷰포트 진입이 프리페치 트리거이고 프로덕션에서만 동작한다는 조건"
+    }
+  ]}
+/>
