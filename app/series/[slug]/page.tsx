@@ -29,15 +29,16 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const seriesPosts = getSeriesPosts(slug);
+  const decoded = decodeURIComponent(slug);
+  const seriesPosts = getSeriesPosts(decoded);
   if (seriesPosts.length === 0) return {};
 
-  const title = `${slug} 시리즈`;
-  const description = `${slug}에 관한 ${seriesPosts.length}편의 글 모음 — ${seriesPosts
+  const title = `${decoded} 시리즈`;
+  const description = `${decoded}에 관한 ${seriesPosts.length}편의 글 모음 — ${seriesPosts
     .slice(0, 3)
     .map((p) => p.title)
     .join(", ")}${seriesPosts.length > 3 ? " 외" : ""}.`;
-  const canonical = `/series/${encodeURIComponent(slug)}`;
+  const canonical = `/series/${encodeURIComponent(decoded)}`;
   const ogUrl = `/og?title=${encodeURIComponent(title)}&description=${encodeURIComponent(description)}`;
 
   return {
@@ -64,12 +65,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function SeriesPage({ params }: Props) {
   const { slug } = await params;
-  const seriesPosts = getSeriesPosts(slug);
+  const decoded = decodeURIComponent(slug);
+  const seriesPosts = getSeriesPosts(decoded);
   if (seriesPosts.length === 0) notFound();
 
-  const pageUrl = `${SITE_URL}/series/${encodeURIComponent(slug)}`;
-  const pageTitle = `${slug} 시리즈`;
-  const pageDescription = `${slug}에 관한 ${seriesPosts.length}편의 글 모음 — ${siteConfig.name}`;
+  const pageUrl = `${SITE_URL}/series/${encodeURIComponent(decoded)}`;
+  const pageTitle = `${decoded} 시리즈`;
+  const pageDescription = `${decoded}에 관한 ${seriesPosts.length}편의 글 모음 — ${siteConfig.name}`;
 
   const collectionJsonLd = {
     "@context": "https://schema.org",
@@ -78,7 +80,7 @@ export default async function SeriesPage({ params }: Props) {
     description: pageDescription,
     url: pageUrl,
     inLanguage: "ko-KR",
-    articleSection: slug,
+    articleSection: decoded,
     isPartOf: {
       "@type": "WebSite",
       name: siteConfig.name,
@@ -127,7 +129,7 @@ export default async function SeriesPage({ params }: Props) {
       <div className="mx-auto max-w-3xl px-6 py-16">
         <header className="mb-10">
           <p className="text-xs font-medium uppercase tracking-wider text-secondary">시리즈</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">{slug}</h1>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight">{decoded}</h1>
           <p className="mt-2 text-secondary">{seriesPosts.length}편</p>
         </header>
         <div className="flex flex-col gap-1">
