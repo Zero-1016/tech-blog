@@ -1,0 +1,237 @@
+---
+title: "onLoad로 만든 상태는 어디서 새나"
+description: "이미지 로딩 상태를 useState로 들고 다니는데 자꾸 어긋난다면 이유가 세 갈래예요."
+date: 2026-09-06
+tags: ["React", "이미지", "Suspense", "에러 처리"]
+series: "선언적으로 다루는 이미지 로딩"
+seriesOrder: 1
+published: true
+---
+
+이미지가 뜨기 전에 스켈레톤을 보여주려고 `useState` 하나를 만들었어요. 잘 도는 것 같았는데 어느 순간부터 스켈레톤이 안 사라지거나, 깨진 이미지에 실패 표시가 안 뜨더라고요. 코드를 아무리 봐도 로직은 맞았고요. **로딩을 이벤트로 따라잡으려는 순간, 이미 끝난 이미지와 에러 경계 두 곳에서 상태가 새기 시작해요.**
+
+## img는 로딩 중인지 알려주지 않아요
+
+`<img>` 가 주는 신호는 `load` 와 `error` 두 개뿐이에요. 둘 다 **끝났을 때** 한 번 울리는 종이지, "지금 받는 중" 이라는 상태를 들고 있지 않아요. 그러니까 로딩 중인지 아닌지는 개발자가 따로 기억해야 해요. 여기서 `useState` 가 등장하죠.
+
+`error` 쪽은 조건이 생각보다 넓어요. MDN 이 발화 조건을 나열해두는데, 네트워크가 실패했을 때만이 아니라 `src` 가 빈 문자열이거나 지금 페이지 주소와 같을 때, 데이터가 손상돼 치수를 못 구할 때, 브라우저가 모르는 포맷일 때도 전부 같은 `error` 하나로 들어와요.<Cite id="mdn-img" /> 원인은 여럿인데 신호는 하나라, 왜 실패했는지는 이벤트만 봐서 알 수 없어요. 재시도를 해야 할 상황인지 포기해야 할 상황인지 구분이 안 되는 거죠.
+
+React 가 알아서 기다려주지도 않아요. Suspense 문서가 직접 밝히고 있거든요.<Cite id="react-suspense" />
+
+<Callout variant="info">
+"Suspense doesn't wait for images by default." - React 공식 문서
+
+Suspense 는 이미지를 기다려주지 않는다는 뜻이에요. 같은 문단에 `ViewTransition` 중에는 기다린다는 예외가 붙어 있긴 한데, 이건 Canary 표시가 달린 실험 기능이라 지금 프로덕션에서 기대할 물건은 아니에요.
+
+</Callout>
+
+그래서 이미지 로딩만큼은 [선언적으로 짜던 코드](/posts/declarative-readable-code)를 잠시 내려놓고, 상태를 직접 굴리는 자리로 돌아가게 돼요. 문제는 그 상태가 생각보다 자주 어긋난다는 거고요.
+
+## 그래서 useState로 상태를 만들죠
+
+거의 모두가 같은 모양을 씁니다. 상태 하나를 두고 `onLoad` 에서 성공으로, `onError` 에서 실패로 바꾸는 거예요.
+
+아래 데모에서 직접 눌러보세요. 아래쪽 버튼으로 `img` 엘리먼트의 속성을 그대로 찍어볼 수 있어요.
+
+<CodePlayground
+  template="react"
+  code={`function ImperativeImage() {
+    const [src, setSrc] = React.useState(
+      "https://picsum.photos/seed/start/240/160"
+    );
+    const [status, setStatus] = React.useState("loading");
+    const [probe, setProbe] = React.useState(null);
+    const ref = React.useRef(null);
+
+    const load = (next) => {
+      setStatus("loading");
+      setProbe(null);
+      setSrc(next);
+    };
+
+    const probeNow = () => {
+      const el = ref.current;
+      if (!el) return;
+      setProbe({ complete: String(el.complete), natural: el.naturalWidth });
+    };
+
+    return (
+      <div className="wrap">
+        <div className="row">
+          <button
+            className="btn"
+            onClick={() =>
+              load("https://picsum.photos/seed/" + Date.now() + "/240/160")
+            }
+          >
+            새 이미지
+          </button>
+          <button
+            className="btn"
+            onClick={() => load("https://example.com/not-here.png")}
+          >
+            깨진 이미지
+          </button>
+        </div>
+
+        <div className="stage">
+          {status === "loading" && <div className="note">불러오는 중</div>}
+          {status === "error" && <div className="note note--bad">실패했어요</div>}
+          <img
+            ref={ref}
+            className={status === "ok" ? "shot" : "shot shot--off"}
+            src={src}
+            alt=""
+            onLoad={() => setStatus("ok")}
+            onError={() => setStatus("error")}
+          />
+        </div>
+
+        <button className="btn btn--ghost" onClick={probeNow}>
+          img 속성 찍어보기
+        </button>
+
+        {probe && (
+          <p className="probe">
+            complete: {probe.complete} / naturalWidth: {probe.natural}
+          </p>
+        )}
+      </div>
+    );
+  }`}
+  css={`.wrap {
+    font-family: system-ui, sans-serif;
+    background: #ffffff;
+    color: #1a1a1a;
+    padding: 20px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn {
+    border: 1px solid #d4d4d8;
+    background: #f4f4f5;
+    color: #1a1a1a;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .btn--ghost {
+    background: #ffffff;
+  }
+
+  .stage {
+    width: 240px;
+    height: 160px;
+    border: 1px solid #e4e4e7;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fafafa;
+    overflow: hidden;
+  }
+
+  .note {
+    font-size: 13px;
+    color: #71717a;
+  }
+
+  .note--bad {
+    color: #b91c1c;
+  }
+
+  .shot {
+    width: 240px;
+    height: 160px;
+    object-fit: cover;
+  }
+
+  .shot--off {
+    display: none;
+  }
+
+  .probe {
+    font-family: ui-monospace, monospace;
+    font-size: 13px;
+    color: #3f3f46;
+    margin: 0;
+  }`}
+/>
+
+동작은 해요. 저도 오래 이렇게 썼고, 대부분의 화면에서는 별 탈이 없어요. 다만 이 코드가 조용히 기대는 전제가 하나 있습니다. **핸들러를 붙인 시점 이후에 이벤트가 울린다** 는 전제요.
+
+이미지 하나를 그릴 때는 그 전제가 잘 맞아요. 문제는 목록이에요. 카드 스무 개를 그리면 스무 개의 상태와 스무 쌍의 핸들러가 생기고, 그중 일부는 이미 캐시에 있고 일부는 실패해요. 전제가 깨지는 자리가 두 군데인데, 항목이 늘어날수록 둘 다 확률이 올라가죠.
+
+## 이미 끝난 이미지는 종을 다시 울리지 않아요
+
+이벤트는 한 번 지나가면 끝이에요. 이미 받아둔 이미지를 다시 그리면 브라우저는 네트워크를 타지 않고 바로 완료 상태로 가는데, 그 사이에 핸들러를 붙이지 못했다면 `load` 는 이미 지나간 뒤예요. 하이드레이션 직후나 `ref` 로 나중에 핸들러를 붙이는 코드에서 스켈레톤이 안 사라지는 게 대개 이 경우예요.
+
+그래서 "이벤트를 기다리지 말고 지금 상태를 물어보자" 는 생각을 하게 돼요. `complete` 속성이 딱 그 용도로 보이거든요. 근데 여기에 두 번째 함정이 있어요.<Cite id="mdn-complete" />
+
+<Callout variant="warning">
+"The image is \"broken;\" that is, the image failed to load due to an error or because image loading is disabled." - MDN
+
+MDN 이 `complete` 가 `true` 가 되는 조건을 나열하는데, 그중 하나가 이거예요. 깨진 이미지도 `complete` 는 `true` 라는 뜻이죠. 로딩이 끝났느냐만 알려주지, 잘 끝났느냐는 안 알려줘요.
+
+</Callout>
+
+위 데모에서 깨진 이미지를 띄운 다음 속성을 찍어보면 바로 보여요. `complete` 는 `true` 인데 `naturalWidth` 는 `0` 이에요. 그래서 실전에서는 `complete` 하나로 못 끝내고 `naturalWidth` 까지 같이 봐야 하죠. 조건 하나 물어보려고 두 속성을 조합하는 시점에서, 이미 코드가 브라우저 내부 사정을 너무 많이 알고 있는 거예요.
+
+## onError는 에러 경계가 못 잡아요
+
+여기가 진짜 결정타예요. 앞의 두 가지는 조건을 더 붙여서 어떻게든 막을 수 있는데, 이건 구조 자체가 막혀 있어요.
+
+React 에서 실패를 다루는 정식 도구는 에러 경계, 그러니까 Error Boundary 예요. 그런데 공식 문서가 에러 경계로 **잡지 못하는 것** 을 명시적으로 열거해요.<Cite id="react-component" />
+
+<Callout variant="error">
+"Error boundaries do not catch errors for: Event handlers ... Asynchronous code (e.g. `setTimeout` or `requestAnimationFrame` callbacks)" - React 공식 문서
+
+이벤트 핸들러 안에서 난 에러와 비동기 콜백 안에서 난 에러는 에러 경계가 못 잡아요. `onError` 는 정확히 첫 번째 항목이고요.
+
+</Callout>
+
+무슨 뜻이냐면, 이미지 실패는 **다른 실패들과 같은 길로 흐르지 못한다** 는 거예요. 데이터 요청이 실패하면 가까운 에러 경계가 받아서 폴백을 그리는데, 이미지 실패만 그 흐름에서 빠져요. 컴포넌트마다 `status === "error"` 분기를 손으로 심어야 하고, 재시도 버튼도 그 자리마다 따로 만들어야 해요. 실패 처리를 한 곳에 모으려고 에러 경계를 세워뒀는데 이미지만 밖에서 도는 셈이죠.
+
+정리하면 이래요. 상태를 직접 들고 있어서 이미 끝난 이미지를 놓치고, 끝났는지만 알려주는 속성 때문에 성공과 실패를 구분하려면 속성을 두 개 봐야 하고, 실패가 에러 경계로 흐르지 않아요. 셋 다 원인이 하나예요. 로딩이라는 **시간의 문제** 를 상태라는 **값의 문제** 로 바꿔 풀고 있거든요.
+
+시간을 값으로 바꾸지 않고 시간 그대로 다루는 도구가 자바스크립트에 이미 있어요. Promise 요. 그리고 `img` 에는 Promise 를 돌려주는 메서드가 하나 숨어 있고요. 다음 편에서 그걸 꺼내서 Suspense 와 에러 경계에 태워볼게요.
+
+<References
+  items={[
+    {
+      id: "react-suspense",
+      title: "React 공식 - Suspense",
+      href: "https://react.dev/reference/react/Suspense",
+      description: "Suspense 가 기본적으로 이미지를 기다리지 않는다는 서술과 활성화 조건 목록"
+    },
+    {
+      id: "react-component",
+      title: "React 공식 - Component",
+      href: "https://react.dev/reference/react/Component",
+      description: "에러 경계가 이벤트 핸들러와 비동기 콜백의 에러를 잡지 못한다는 목록"
+    },
+    {
+      id: "mdn-complete",
+      title: "MDN - HTMLImageElement.complete",
+      href: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/complete",
+      description: "깨진 이미지에서도 complete 가 true 가 되는 조건"
+    },
+    {
+      id: "mdn-img",
+      title: "MDN - img 요소",
+      href: "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/img",
+      description: "load 와 error 이벤트의 발화 조건, loading 과 decoding 속성의 정의"
+    }
+  ]}
+/>
